@@ -446,6 +446,26 @@ actual current state of the work.
 - [x] (2026-10-27) CodeRabbit round seven on `41b1aa9`: zero findings across
       all 30 reviewed files. The deterministic gates were green before the
       review was requested, so this clears the review requirement.
+- [x] (2026-10-27) CodeScene, three remediation rounds. The first two check
+      runs failed `Enforce critical code health rules`, which led to four
+      commits: `e278e93` split `run_files` around a `Tally` value to clear
+      Bumpy Road Ahead, `e6faf3b` and `0f6414f` replaced nested entry tests in
+      the dependency-contract walk with a `Step` classification and a `Visit`
+      result to clear Deep Nested Complexity, and `13661a6` extracted
+      `assert_clean_success`. All critical rules then passed. The two remaining
+      `Code Duplication` advisories were literal repetition — three assertions
+      restated per failing case and a four-line environment build repeated five
+      times — so `51ad48b` added `assert_failure` and `Fixture::selecting`, and
+      CodeScene now reports no duplication. What survives on `51ad48b` is two
+      `String Heavy Function Arguments` advisories, both in test support
+      (`src/config_test_support.rs`, `tests/support/cli_config_fixture.rs`),
+      scoring 9.69. That rule describes a module whose *arguments* are mostly
+      strings rather than a defect in any one call, and both modules are
+      fixtures whose whole job is to spell paths and file contents; the
+      alternative is a newtype per fixture method, which would make a test read
+      as a type exercise instead of as a case. They are advisory, `main` has no
+      protection rule and `main-required-checks` requires only `build-test`, so
+      they are recorded here as accepted rather than chased.
 
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
