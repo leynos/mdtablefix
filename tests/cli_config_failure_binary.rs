@@ -13,7 +13,7 @@
 #[path = "support/cli_config_fixture.rs"]
 mod fixture;
 
-use fixture::{Fixture, RAGGED};
+use fixture::{Fixture, RAGGED, assert_clean_success};
 
 /// A selected file that is absent is an error on standard error, exit 2.
 #[test]
@@ -104,9 +104,7 @@ fn a_valid_project_file_beside_a_valid_user_file_is_quiet() {
 
     let run = fixture.run(&[], "a...b\n");
 
-    assert_eq!(run.status, 0, "stderr: {}", run.stderr);
-    assert_eq!(run.stdout, "a…b\n");
-    assert!(run.stderr.is_empty(), "stderr: {}", run.stderr);
+    assert_clean_success(&run, "a…b\n");
 }
 
 /// An environment value the merge cannot type is an error, exit 2.

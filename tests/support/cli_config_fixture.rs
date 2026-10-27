@@ -174,3 +174,14 @@ impl Fixture {
         )
     }
 }
+
+/// Asserts that `run` succeeded and printed `expected` with nothing on stderr.
+///
+/// Every successful case in the process-level suites makes the same three
+/// claims, and stating them once keeps each test down to what it is actually
+/// about: which configuration source supplied the setting.
+pub fn assert_clean_success(run: &Run, expected: &str) {
+    assert_eq!(run.status, 0, "stderr: {}", run.stderr);
+    assert_eq!(run.stdout, expected);
+    assert!(run.stderr.is_empty(), "stderr: {}", run.stderr);
+}

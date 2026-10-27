@@ -16,7 +16,7 @@
 #[path = "support/cli_config_fixture.rs"]
 mod fixture;
 
-use fixture::{Fixture, RAGGED};
+use fixture::{Fixture, RAGGED, assert_clean_success};
 
 /// The ragged table above, already aligned: what a formatting run must produce.
 ///
@@ -36,9 +36,7 @@ fn a_run_with_no_configuration_formats_as_it_always_did() {
 
     let run = fixture.run_selected(&empty, &[], RAGGED);
 
-    assert_eq!(run.status, 0, "stderr: {}", run.stderr);
-    assert_eq!(run.stdout, CLEAN);
-    assert!(run.stderr.is_empty(), "stderr: {}", run.stderr);
+    assert_clean_success(&run, CLEAN);
 }
 
 /// A discovered file can switch a transformation on, and nothing else changes.
@@ -49,9 +47,7 @@ fn a_discovered_file_supplies_a_setting() {
 
     let run = fixture.run(&[], "a...b\n");
 
-    assert_eq!(run.status, 0, "stderr: {}", run.stderr);
-    assert_eq!(run.stdout, "a…b\n");
-    assert!(run.stderr.is_empty(), "stderr: {}", run.stderr);
+    assert_clean_success(&run, "a…b\n");
 }
 
 /// A selected file can switch a transformation on, and nothing else changes.
@@ -62,9 +58,7 @@ fn a_selected_file_supplies_a_setting() {
 
     let run = fixture.run_selected(&config, &[], "a...b\n");
 
-    assert_eq!(run.status, 0, "stderr: {}", run.stderr);
-    assert_eq!(run.stdout, "a…b\n");
-    assert!(run.stderr.is_empty(), "stderr: {}", run.stderr);
+    assert_clean_success(&run, "a…b\n");
 }
 
 /// A reporting mode keeps its split: findings on stdout, summary on stderr.
@@ -119,9 +113,7 @@ fn a_configured_extension_list_is_not_a_typed_flag() {
 
     let run = fixture.run_selected(&config, &[], RAGGED);
 
-    assert_eq!(run.status, 0, "stderr: {}", run.stderr);
-    assert_eq!(run.stdout, CLEAN);
-    assert!(run.stderr.is_empty(), "stderr: {}", run.stderr);
+    assert_clean_success(&run, CLEAN);
 }
 
 /// A configured `git` drives selection on a bare invocation.
@@ -198,9 +190,7 @@ fn a_project_file_outranks_a_user_file() {
 
     let run = fixture.run(&[], "a...b\n");
 
-    assert_eq!(run.status, 0, "stderr: {}", run.stderr);
-    assert_eq!(run.stdout, "a...b\n", "the project file must win");
-    assert!(run.stderr.is_empty(), "stderr: {}", run.stderr);
+    assert_clean_success(&run, "a...b\n");
 }
 
 /// The help rendering gains no configuration surface.
