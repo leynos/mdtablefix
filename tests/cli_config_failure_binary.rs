@@ -13,7 +13,7 @@
 #[path = "support/cli_config_fixture.rs"]
 mod fixture;
 
-use fixture::{Fixture, RAGGED, assert_clean_success};
+use fixture::{Fixture, RAGGED, assert_clean_success, assert_failure};
 
 /// A selected file that is absent is an error on standard error, exit 2.
 #[test]
@@ -23,13 +23,7 @@ fn a_missing_selected_file_exits_two_with_no_standard_output() {
 
     let run = fixture.run_selected(&missing, &["--check", "drift.md"], "");
 
-    assert_eq!(run.status, 2);
-    assert_eq!(run.stdout, "", "the diagnostic belongs on stderr");
-    assert!(
-        run.stderr.contains("required configuration file not found"),
-        "stderr: {}",
-        run.stderr
-    );
+    assert_failure(&run, 2, "required configuration file not found");
 }
 
 /// A selected file that is not valid TOML is an error, exit 2.
@@ -125,13 +119,7 @@ fn an_untypable_environment_value_exits_two() {
             .args(["--git", "--list-files"]),
     );
 
-    assert_eq!(run.status, 2);
-    assert!(run.stdout.is_empty(), "stdout: {}", run.stdout);
-    assert!(
-        run.stderr.contains("expected a sequence"),
-        "stderr: {}",
-        run.stderr
-    );
+    assert_failure(&run, 2, "expected a sequence");
 }
 
 /// A value the extension parser rejects names its key, exit 2.
@@ -154,12 +142,5 @@ fn a_rejected_extension_names_its_key() {
 
     let run = fixture.run_selected(&config, &["notes.md"], "");
 
-    assert_eq!(run.status, 2);
-    assert!(run.stdout.is_empty(), "stdout: {}", run.stdout);
-    assert!(
-        run.stderr
-            .contains("invalid configuration value for md_exts"),
-        "stderr: {}",
-        run.stderr
-    );
+    assert_failure(&run, 2, "invalid configuration value for md_exts");
 }

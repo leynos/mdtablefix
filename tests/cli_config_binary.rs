@@ -16,7 +16,7 @@
 #[path = "support/cli_config_fixture.rs"]
 mod fixture;
 
-use fixture::{Fixture, RAGGED, assert_clean_success};
+use fixture::{Fixture, RAGGED, assert_clean_success, assert_failure};
 
 /// The ragged table above, already aligned: what a formatting run must produce.
 ///
@@ -90,13 +90,7 @@ fn a_typed_extension_list_without_git_exits_two() {
 
     let run = fixture.run_selected(&empty, &["--md-exts", "toml"], "");
 
-    assert_eq!(run.status, 2);
-    assert!(run.stdout.is_empty());
-    assert!(
-        run.stderr.contains("--md-exts requires --git"),
-        "stderr: {}",
-        run.stderr
-    );
+    assert_failure(&run, 2, "--md-exts requires --git");
 }
 
 /// A configured extension list is not a typed flag, so it needs no `--git`.
@@ -129,13 +123,7 @@ fn a_configured_git_selection_runs_without_the_flag() {
 
     let run = fixture.run_selected(&config, &[], RAGGED);
 
-    assert_eq!(run.status, 2);
-    assert!(run.stdout.is_empty());
-    assert!(
-        run.stderr.contains("git ls-files"),
-        "stderr: {}",
-        run.stderr
-    );
+    assert_failure(&run, 2, "git ls-files");
 }
 
 /// A configured `git` does not satisfy clap's `inputs` group.
@@ -150,13 +138,7 @@ fn a_configured_git_selection_does_not_satisfy_the_inputs_group() {
 
     let run = fixture.run_selected(&config, &["--list-files"], "");
 
-    assert_eq!(run.status, 2);
-    assert!(run.stdout.is_empty());
-    assert!(
-        run.stderr.contains("required arguments were not provided"),
-        "stderr: {}",
-        run.stderr
-    );
+    assert_failure(&run, 2, "required arguments were not provided");
 }
 
 /// A positional path outranks a configured `git`, and no repository is touched.

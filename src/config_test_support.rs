@@ -89,6 +89,23 @@ impl Fixture {
 
         path
     }
+
+    /// The environment of a run whose selector names a file holding `contents`.
+    ///
+    /// The three steps that build it — the fixed base map, a file to name, and
+    /// the variable that names it — are the same in every case that drives a
+    /// failure through the selector, so they are written once here rather than
+    /// four lines at a time in each test.
+    ///
+    /// A case that needs the selector to name something other than a file it can
+    /// write, such as an absent path or the empty string, builds its environment
+    /// directly instead: neither is a *contents* a test can pass here.
+    pub(super) fn selecting(&self, contents: &str) -> MapEnv {
+        let mut environment = self.environment();
+        environment.insert("MDTABLEFIX_CONFIG_PATH", self.select(contents));
+
+        environment
+    }
 }
 
 /// Writes `contents` to `path`, creating its parent directories.

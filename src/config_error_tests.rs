@@ -34,8 +34,7 @@ fn a_missing_selected_file_is_an_error() {
 #[test]
 fn a_malformed_selected_file_is_an_error() {
     let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select("wrap = \n"));
+    let environment = fixture.selecting("wrap = \n");
 
     let error = resolve(&["mdtablefix"], &environment).expect_err("the file is malformed");
 
@@ -94,11 +93,7 @@ fn an_absent_discovered_candidate_is_not_an_error() {
 #[test]
 fn a_value_of_the_wrong_type_is_an_error() {
     let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert(
-        "MDTABLEFIX_CONFIG_PATH",
-        fixture.select("wrap = \"notabool\"\n"),
-    );
+    let environment = fixture.selecting("wrap = \"notabool\"\n");
 
     let error = resolve(&["mdtablefix"], &environment).expect_err("the value is not a boolean");
 
@@ -112,11 +107,7 @@ fn a_value_of_the_wrong_type_is_an_error() {
 #[test]
 fn an_extension_the_parser_rejects_names_its_key() {
     let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert(
-        "MDTABLEFIX_CONFIG_PATH",
-        fixture.select("md_exts = [\"a.b\"]\n"),
-    );
+    let environment = fixture.selecting("md_exts = [\"a.b\"]\n");
 
     let error = resolve(&["mdtablefix"], &environment).expect_err("the extension is invalid");
 
@@ -134,11 +125,7 @@ fn an_extension_the_parser_rejects_names_its_key() {
 #[test]
 fn an_unknown_key_is_ignored() {
     let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert(
-        "MDTABLEFIX_CONFIG_PATH",
-        fixture.select("unknown = 1\nwrap = true\n"),
-    );
+    let environment = fixture.selecting("unknown = 1\nwrap = true\n");
 
     let settings = resolve(&["mdtablefix"], &environment).expect("the file resolves");
 
@@ -166,8 +153,7 @@ fn an_empty_selector_value_leaves_discovery_in_charge() {
 #[test]
 fn a_positional_path_outranks_a_configured_git_selection() {
     let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select("git = true\n"));
+    let environment = fixture.selecting("git = true\n");
 
     let settings = resolve(&["mdtablefix", "notes.md"], &environment).expect("the layers resolve");
 

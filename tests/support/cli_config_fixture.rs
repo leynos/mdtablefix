@@ -185,3 +185,20 @@ pub fn assert_clean_success(run: &Run, expected: &str) {
     assert_eq!(run.stdout, expected);
     assert!(run.stderr.is_empty(), "stderr: {}", run.stderr);
 }
+
+/// Asserts that `run` failed with `status`, naming `needle` on standard error.
+///
+/// A failing run is three claims at once: the status a script branches on, that
+/// standard output stayed empty, and that the diagnostic says what went wrong.
+/// The empty standard output is not decoration — a diagnostic printed there
+/// would corrupt the document a pipeline is reading — so the three are stated
+/// together rather than left to each test to remember.
+///
+/// `needle` is a fragment rather than the whole message because the framework's
+/// own text is not this crate's to pin; what a test asserts is that this tool
+/// passed the failure on rather than swallowing it.
+pub fn assert_failure(run: &Run, status: i32, needle: &str) {
+    assert_eq!(run.status, status, "stderr: {}", run.stderr);
+    assert!(run.stdout.is_empty(), "stdout: {}", run.stdout);
+    assert!(run.stderr.contains(needle), "stderr: {}", run.stderr);
+}
