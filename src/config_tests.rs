@@ -18,112 +18,20 @@
 //! One residual dependency: `ortho_config` always resolves a Project root from
 //! the process working directory, and the builder method that would substitute
 //! one is crate-private upstream. A cell asserting a compiled-in default
-//! therefore also relies on this repository having no `.mdtablefix.toml` and no
-//! `mdtablefix/config.toml` at its root — and would fail loudly, not silently,
-//! if one appeared.
+//! therefore also relies on this repository having no `.mdtablefix.toml` at its
+//! root — and would fail loudly, not silently, if one appeared. Only the
+//! dotfile is a Project candidate; a `mdtablefix/config.toml` there is not a
+//! candidate at all, so its presence would change nothing.
+//!
+//! The error surface lives in `super::error_tests`, so this module
+//! stays the precedence table it is named for.
 
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-
-use clap::{ArgMatches, CommandFactory, FromArgMatches};
-use ortho_config::{EnvSource, MapEnv, ScanEnvSource};
 use rstest::rstest;
-use tempfile::TempDir;
 
-use super::{ConfigError, Settings};
-use crate::command::Cli;
-
-/// A temporary tree holding every directory discovery consults.
-struct Fixture {
-    /// Deleted when the test ends.
-    directory: TempDir,
-}
-
-impl Fixture {
-    /// Creates the empty directory tree discovery will search.
-    fn new() -> Self {
-        let directory = tempfile::tempdir().expect("create a temporary directory");
-        let fixture = Self { directory };
-        for name in ["home", "xdg", "dirs", "appdata", "local"] {
-            std::fs::create_dir_all(fixture.base(name)).expect("create a fixture directory");
-        }
-
-        fixture
-    }
-
-    /// The tree this fixture owns.
-    fn root(&self) -> &Path { self.directory.path() }
-
-    /// A named directory inside the tree.
-    fn base(&self, name: &str) -> PathBuf { self.root().join(name) }
-
-    /// The environment discovery reads, with every base directory pointing into
-    /// the tree so the host's own configuration cannot be reached.
-    ///
-    /// `XDG_CONFIG_DIRS` is set rather than omitted: an absent or all-empty
-    /// list falls back to `/etc/xdg`, which is the host's business, not a
-    /// test's.
-    fn environment(&self) -> MapEnv {
-        MapEnv::new()
-            .with_var("HOME", self.base("home"))
-            .with_var("USERPROFILE", self.base("home"))
-            .with_var("XDG_CONFIG_HOME", self.base("xdg"))
-            .with_var("XDG_CONFIG_DIRS", self.base("dirs"))
-            .with_var("APPDATA", self.base("appdata"))
-            .with_var("LOCALAPPDATA", self.base("local"))
-    }
-
-    /// Writes `contents` where automatic discovery finds it as a user file.
-    fn discover(&self, contents: &str) {
-        let path = self.base("xdg").join("mdtablefix").join("config.toml");
-        write(&path, contents);
-    }
-
-    /// Writes `contents` to a free-standing file for the selector to name.
-    fn select(&self, contents: &str) -> PathBuf {
-        let path = self.root().join("selected.toml");
-        write(&path, contents);
-
-        path
-    }
-}
-
-/// Writes `contents` to `path`, creating its parent directories.
-fn write(path: &Path, contents: &str) {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("create the file's parent directory");
-    }
-    std::fs::write(path, contents).expect("write a configuration file");
-}
-
-/// Parses `argv` without consulting the process environment.
-///
-/// [`Cli::parse_validated`] is deliberately not used: it reads the real
-/// environment's arguments and terminates the process on error. The two steps
-/// it performs are repeated here so a test can supply its own argument vector.
-fn parse(argv: &[&str]) -> (Cli, ArgMatches) {
-    let matches = Cli::command()
-        .try_get_matches_from(argv)
-        .expect("the arguments parse");
-    let cli = Cli::from_arg_matches(&matches).expect("the arguments convert");
-
-    (cli, matches)
-}
-
-/// Resolves the settings against one fixed environment map.
-///
-/// The same map is cloned into both shared sources, which is the arrangement
-/// `ortho_config` documents for a caller that wants discovery and the merge
-/// layer to agree without touching the process environment.
-fn resolve(argv: &[&str], environment: &MapEnv) -> Result<Settings, ConfigError> {
-    let (cli, matches) = parse(argv);
-    let lookup: Arc<dyn EnvSource> = Arc::new(environment.clone());
-    let scan: Arc<dyn ScanEnvSource> = Arc::new(environment.clone());
-
-    Settings::resolve_with_sources(&cli, &matches, lookup, scan)
-}
+use super::{
+    Settings,
+    test_support::{Fixture, resolve},
+};
 
 /// The settings keys the precedence table covers.
 #[derive(Debug, Clone, Copy)]
@@ -285,119 +193,30 @@ fn a_key_resolves_to_the_most_preferred_layer_that_states_it(
     assert_eq!(observed(key, &settings), expected(key, scenario));
 }
 
-/// A positional path outranks a configured `git` selection.
+/// Scopes stack in precedence order, so a user file outranks a system one.
 ///
-/// The user's own statement of what to act on cannot be overridden by a file:
-/// a configured `git = true` beside a typed path would otherwise silently
-/// reformat a tree the user did not name.
-#[test]
-fn a_positional_path_outranks_a_configured_git_selection() {
+/// The precedence table above exercises the candidate list within one scope;
+/// this states the other ordering, which `AutomaticMode::StackScopes` adds.
+/// The two run in opposite directions, so a run that got one right can still
+/// have the other inverted.
+#[rstest]
+#[case("ellipsis = true\n", "ellipsis = false\n", "a...b\n")]
+#[case("ellipsis = false\n", "ellipsis = true\n", "a…b\n")]
+fn a_user_file_outranks_a_system_file(
+    #[case] system: &str,
+    #[case] user: &str,
+    #[case] expected: &str,
+) {
     let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select("git = true\n"));
+    fixture.discover_system(system);
+    fixture.discover(user);
 
-    let settings = resolve(&["mdtablefix", "notes.md"], &environment).expect("the layers resolve");
+    let settings = resolve(&["mdtablefix"], &fixture.environment()).expect("the layers resolve");
 
-    assert!(!settings.git);
-    assert_eq!(settings.files, vec![PathBuf::from("notes.md")]);
-}
-
-/// A selected file that does not exist is an error, not a silent skip.
-#[test]
-fn a_missing_selected_file_is_an_error() {
-    let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.root().join("absent.toml"));
-
-    let error = resolve(&["mdtablefix"], &environment).expect_err("the file is absent");
-
-    assert!(
-        error
-            .to_string()
-            .contains("required configuration file not found"),
-        "{error}"
-    );
-}
-
-/// A selected file that is not valid TOML is reported as a configuration error.
-#[test]
-fn a_malformed_selected_file_is_an_error() {
-    let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select("wrap = \n"));
-
-    let error = resolve(&["mdtablefix"], &environment).expect_err("the file is malformed");
-
-    assert!(
-        error.to_string().contains("cannot resolve configuration"),
-        "{error}"
-    );
-}
-
-/// A value of the wrong type is rejected rather than coerced.
-#[test]
-fn a_value_of_the_wrong_type_is_an_error() {
-    let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert(
-        "MDTABLEFIX_CONFIG_PATH",
-        fixture.select("wrap = \"notabool\"\n"),
-    );
-
-    let error = resolve(&["mdtablefix"], &environment).expect_err("the value is not a boolean");
-
-    assert!(error.to_string().contains("expected a boolean"), "{error}");
-}
-
-/// An extension the parser would reject names the key it came from.
-///
-/// A configured list did not pass through clap's `value_parser`, so this is the
-/// only place the user learns which setting to fix.
-#[test]
-fn an_extension_the_parser_rejects_names_its_key() {
-    let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert(
-        "MDTABLEFIX_CONFIG_PATH",
-        fixture.select("md_exts = [\"a.b\"]\n"),
-    );
-
-    let error = resolve(&["mdtablefix"], &environment).expect_err("the extension is invalid");
-
-    assert!(
-        matches!(&error, ConfigError::InvalidValue { key, .. } if key == "md_exts"),
-        "{error:?}"
-    );
-    assert_eq!(
-        error.to_string(),
-        "invalid configuration value for md_exts: extension \"a.b\" contains a dot"
-    );
-}
-
-/// A key the schema does not know is ignored, so a newer file still loads.
-#[test]
-fn an_unknown_key_is_ignored() {
-    let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    environment.insert(
-        "MDTABLEFIX_CONFIG_PATH",
-        fixture.select("unknown = 1\nwrap = true\n"),
-    );
-
-    let settings = resolve(&["mdtablefix"], &environment).expect("the file resolves");
-
-    assert!(settings.opts.wrap);
-}
-
-/// An empty selector value is unset, so automatic discovery still runs.
-#[test]
-fn an_empty_selector_value_leaves_discovery_in_charge() {
-    let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    fixture.discover("wrap = true\n");
-    environment.insert("MDTABLEFIX_CONFIG_PATH", "");
-
-    let settings = resolve(&["mdtablefix"], &environment).expect("the file is discovered");
-
-    assert!(settings.opts.wrap);
+    let rendered = if settings.opts.ellipsis {
+        "a…b\n"
+    } else {
+        "a...b\n"
+    };
+    assert_eq!(rendered, expected);
 }

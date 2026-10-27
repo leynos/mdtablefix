@@ -26,9 +26,16 @@ const FRAMEWORK: &str = "ortho_config";
 
 /// The source files allowed to name [`FRAMEWORK`], written with `/`.
 ///
-/// Both are declared from `src/main.rs` and from nowhere else: `config_tests`
-/// is a `#[path]` module of `config`, so it follows that file's ownership.
-const BINARY_ONLY: [&str; 2] = ["src/config.rs", "src/config_tests.rs"];
+/// Every one is declared from `src/main.rs` and from nowhere else. The test
+/// modules are `#[path]` modules of `config`, so they follow that file's
+/// ownership and cannot be reached from the library either.
+const BINARY_ONLY: [&str; 5] = [
+    "src/config.rs",
+    "src/config_schema.rs",
+    "src/config_error_tests.rs",
+    "src/config_test_support.rs",
+    "src/config_tests.rs",
+];
 
 /// The repository root, as the test binary was compiled against it.
 fn repository_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
