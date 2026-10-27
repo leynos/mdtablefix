@@ -282,8 +282,26 @@ actual current state of the work.
       `cargo tree --invert ortho_config --depth 0` prints
       `ortho_config v0.10.0` and nothing else, so the root package is its sole
       consumer.
-- [ ] EP-M4: the test suite — precedence tiers, injected sources, unhappy
-      paths, and the no-configuration regression proof. Not started.
+- [x] EP-M4: the test suite — precedence tiers, injected sources, unhappy
+      paths, and the no-configuration regression proof. Done 2026-10-27, in
+      three files rather than the one the plan named; the placement is
+      deviation `a` in `Decision log`.
+      `src/config_tests.rs` (395 lines, declared by a `#[path]` module on
+      `src/config.rs`'s foot) holds the in-process tables: **57 tests**, being
+      the 50-cell precedence table (5 keys by 5 source combinations by 2 file
+      supplies) and seven named unhappy paths. `tests/cli_config_binary.rs`
+      (422 lines) holds the process-level contracts: **14 tests**, pinning
+      the no-configuration output character for character, the `--check`
+      stream split, and every exit-2 configuration failure.
+      `tests/cli_config_dependency_contract.rs` (189 lines) holds INV-LIB:
+      **4 tests**. Both negative controls fired and were reverted; see
+      `Surprises & discoveries`. Gate evidence on the final tree, all four
+      run in this worktree: `cargo fmt --all` clean,
+      `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+      exit 0, `make check-fmt` exit 0 (47 files unchanged), and
+      `cargo test --workspace` exit 0 with every suite green — the binary's
+      1,173 tests, 280 integration tests, 42 doctests, and the remainder of
+      the matrix.
 - [ ] EP-M5: user's and developer's guide updates, all gates green, draft pull
       request. Not started.
 
@@ -412,6 +430,73 @@ Document with evidence so future work benefits.
   returns reportable errors even when layers loaded. Impact: choosing
   `RequiredExclusive` for `MDTABLEFIX_CONFIG_PATH` is what makes a broken named
   file fatal, and the ADR states that as the reason a user would name the file.
+- Observation: the command line can enable a switch but not disable one, so
+  the precedence order is observable in both directions only by mixing an
+  environment `false` with a file `true`. Evidence: `mdtablefix --breaks=false`
+  fails clap with
+  `unexpected value 'false' for '--breaks' found; no more were expected`,
+  because every switch is declared `#[arg(long = "...")]` with no value
+  placeholder. Impact: a configured `true` is overridden by
+  `MDTABLEFIX_<KEY>=false` and not by any typed flag; the precedence table
+  carries that polarity for `wrap`, `renumber`, and `git` and the opposite for
+  `headings`, whose file value is `false`. The plan's own acceptance text
+  claimed a typed `--breaks=false` would override a variable, which was wrong
+  and is corrected under `Validation and acceptance`.
+- Observation: `MapEnv` is a usable injection seam for both halves of
+  resolution, and one map can be shared between them. Evidence: the `EnvSource`
+  and `ScanEnvSource` impls at `ortho_config/src/env_source.rs` around the
+  `MapEnv` definition; `src/config_tests.rs::resolve` clones one `MapEnv` into
+  an `Arc<dyn EnvSource>` and an `Arc<dyn ScanEnvSource>` and every precedence
+  cell resolves. Impact: no test process environment is read or mutated, which
+  is what ADR 0012's taxonomy requires and what the workspace's `clippy.toml`
+  enforces.
+- Observation: `ConfigDiscovery::builder` always resolves a Project root from
+  `std::env::current_dir()`, and `with_project_root_resolver` is
+  `#[cfg(test)] pub(crate)` upstream, so no consumer can substitute one.
+  Evidence: the builder's field list and the method's visibility; the first
+  draft of `src/config_tests.rs` carried an `environment.insert("PWD", ...)`
+  that had no effect. Impact: an in-process cell asserting a compiled-in
+  default also relies on this worktree's root holding no `.mdtablefix.toml` and
+  no `mdtablefix/config.toml`. The test module's doc comment states that
+  dependency, and a file appearing there would fail the cell loudly rather than
+  silently. This is the one residual dependency EP-M4 could not remove.
+- Observation: `CsvEnv::prefixed` takes its prefix literally, so the trailing
+  underscore is part of the argument. Evidence: `ortho_config/src/env.rs`'s
+  `prefixed` constructor stores the string unmodified, and a draft that passed
+  `"MDTABLEFIX"` matched nothing. Impact: `ENV_PREFIX` in `src/config.rs` holds
+  `"MDTABLEFIX_"` and its doc comment says why, since the `prefix` attribute
+  beside it spells the bare name.
+- Observation: the environment value dialect is not uniform, and the failure
+  mode for a list written without brackets is a type error rather than a parse
+  error. Measured: `[txt,xml]`, `[md]`, and `["txt"]` all parse as list-literal
+  strings, and a bare `rst,xml` also becomes a sequence; but `rst xml` is a
+  plain string, which fails `Vec<String>` with
+  `invalid type: string "rst xml", expected a sequence` and exit status 2.
+  `[true]` and `true,false` fail a boolean the same way. Evidence:
+  `tests/cli_config_binary.rs::an_untypable_environment_value_exits_two`, which
+  pins both the status and the phrase. Impact: no extra validation is needed
+  for the common spellings, and the diagnostic a user sees for the common
+  mistake already says what is wrong.
+- Observation: clap answers `--version` and `--help` before `Settings::resolve`
+  is ever reached. Evidence: two draft tests in `tests/cli_config_binary.rs`
+  drove `--version` to avoid needing a positional file, and both passed with
+  exit 0 even though the configuration they supplied was invalid. Impact: every
+  test asserting a configuration-resolution outcome now runs a real formatting
+  job, which is why `an_extension_the_parser_rejects_names_its_key` and
+  `a_configured_extension_list_is_not_a_typed_flag` feed `RAGGED` on standard
+  input. Both doc comments state the reasoning, so the vacuous spelling is not
+  reintroduced.
+- Observation: the one `MapEnv` seam made both negative controls cheap, and
+  both fired. Reversing the layer order in `merged_config` — pushing the
+  environment before `policy.resolve_layers()` — failed exactly the ten
+  `FileAndEnv` cells of the precedence table and no others (47 passed, 10
+  failed), which is the shape a real precedence defect would take. Appending
+  `const _PROBE: &str = "ortho_config";` to `src/wrap.rs` failed
+  `no_library_source_names_the_framework` with
+  `src/wrap.rs names ortho_config but is not one of the binary-only sources` (3
+  passed, 1 failed). Both edits were reverted and `git diff` confirmed clean.
+  Impact: the suites are proved to detect the defects they exist for, which is
+  the non-vacuity evidence the Verification plan asks for.
 
 ## Decision log
 
@@ -603,6 +688,40 @@ plan status to `BLOCKED` until the deviation is accepted.
   `git: config.git.unwrap_or(cli.selects_from_git()) && cli.files.is_empty()`
   states it once, so `select_inputs` in `src/main.rs` has no second copy of the
   rule to drift from. Date/Author: 2026-10-27, implementation agent.
+- Decision (EP-M4 deviation `a`, recorded as required by the plan's deviation
+  rule): the in-process precedence and typed-flag tables live in
+  `src/config_tests.rs`, declared from `src/config.rs` by
+  `#[cfg(test)] #[path = "config_tests.rs"] mod tests;`, rather than in the
+  `tests/cli_config.rs` the Verification plan's `Artefact` fields name.
+  Affected identifiers: INV-PRECEDENCE and INV-TYPED, and the `Artefact`
+  columns of their obligations. Rationale: `mod config` is declared only from
+  `src/main.rs`, so `Settings::resolve_with_sources` is reachable from a binary
+  unit test and from nowhere a `tests/*.rs` target can see — an integration
+  test links `src/lib.rs`, which by design never names the module. The options
+  were to promote the module into the library (which INV-LIB forbids), to
+  duplicate the resolver in a test-only crate (which would test a copy), or to
+  put the tests where the code lives. The third is the only one that exercises
+  production code, and it costs exactly one `#[path]` declaration on
+  `src/config.rs`'s foot. Impacts: none on requirements or on architecture;
+  `docs/architecture.md` already states that the configuration module belongs
+  to the binary. No upstream document change is required, so the plan stays
+  `ACTIVE` rather than `BLOCKED`. Date/Author: 2026-10-27, implementation agent.
+- Decision (EP-M4 deviation `b`): the process-level contracts live in
+  `tests/cli_config_binary.rs` rather than in a `src/main_tests.rs` case.
+  Rationale: exit status and stream split are observable only from a child
+  process, and an in-process test would share the harness's environment,
+  including `assert_cmd`'s own setting of the working directory. The file spawns
+  `Command::cargo_bin("mdtablefix")`, so it drives the same binary a user
+  runs. Date/Author: 2026-10-27, implementation agent.
+- Decision (EP-M4 deviation `c`): INV-LIB is checked textually by
+  `tests/cli_config_dependency_contract.rs` rather than by a Cargo feature or a
+  module-graph assertion. Rationale: `ortho_config` is a normal dependency of
+  the package, so Cargo cannot separate the two targets; the boundary that
+  survives is that no file reachable from `src/lib.rs` names the framework. The
+  test walks `src/`, reports any file containing `ortho_config`, and asserts
+  every such file is one of `src/config.rs` and `src/config_tests.rs`. A
+  textual check also covers an `include!` target and a path spelled inside a
+  macro. Date/Author: 2026-10-27, implementation agent.
 
 ## Outcomes & retrospective
 
@@ -818,7 +937,8 @@ TOR-REQ-666-5   Keep reusable library crates free of OrthoConfig.
                              modules only; src/lib.rs unchanged
 TOR-REQ-666-6   Test every precedence tier with injected sources and prove the
                 no-configuration path is unchanged.
-                -> EP-M4 -> tests/cli_config*.rs
+                -> EP-M4 -> src/config_tests.rs; tests/cli_config_binary.rs;
+                             tests/cli_config_dependency_contract.rs
 TOR-REQ-666-7   Document the user-facing configuration surface and the internal
                 integration boundary.
                 -> EP-M5 -> docs/users-guide.md; docs/developers-guide.md
@@ -889,23 +1009,28 @@ invariants to the required behaviour.
 ### Obligations
 
 - Obligation: INV-NOCONFIG.
-  Method: parameterized test over the existing CLI suite plus a new
-  differential case. Rationale: the existing suite already pins the observable
-  behaviour of every mode; adding a new case that runs one representative
-  invocation through both the base binary and the candidate binary, with an
-  explicitly empty injected environment, catches a regression the per-feature
-  tests might miss. Domain: the four file modes, `--git` selection with and
-  without `--include-untracked`, `--md-exts` typed and defaulted, `--help`, and
-  `--version`, in a temporary directory with no configuration file. Artefact:
-  `tests/cli_config.rs`, plus the unchanged
-  `tests/snapshots/cli_git_help.snap`. Evidence: `make test` passes with the
-  snapshot unmodified; reverting the wiring makes the new differential case
-  fail. Non-vacuity: the differential case asserts a non-empty standard output
-  and a specific exit status for each invocation, so an empty-output run cannot
-  pass by accident. The negative control is the base binary, which the test
-  builds from `HEAD`'s tree only if the harness supports it; otherwise the
-  control is the pre-change snapshot and the pre-change test suite, both of
-  which must be unchanged.
+  Method: a child-process case pinning the whole observable result, plus the
+  unchanged existing suites. Rationale: the existing suite already pins the
+  observable behaviour of every mode, and the one case the configuration module
+  could disturb is the invocation that supplies nothing at all. Domain: the
+  default file mode reading standard input, in a temporary directory whose
+  configuration base directories all point into a temporary tree, with an
+  explicitly empty selected file so discovery cannot reach the host's own
+  configuration. Artefact: `tests/cli_config_binary.rs`'s
+  `a_run_with_no_configuration_formats_as_it_always_did`, plus the unchanged
+  `tests/snapshots/cli_git_help.snap` and the unchanged existing suites.
+  Evidence: `cargo test --workspace` passes with the snapshot unmodified; the
+  case asserts standard output equal to the expected rendering character for
+  character, empty standard error, and exit status 0. Non-vacuity: the expected
+  output is the aligned three-line table `CLEAN`, the input is the ragged
+  three-line table `RAGGED`, and the two differ in every cell, so a run that
+  echoed its input, produced nothing, or aligned differently would fail.
+  Reverting the wiring is not a meaningful control here — the module is what
+  supplies the merge — so the control is the pre-change output, recorded in the
+  test as the constant `CLEAN`. Deviation from the planned differential case:
+  the base binary is not built, because the case pins the exact bytes instead,
+  which is the same claim without a second compilation. Recorded in
+  `Decision log` deviation `a`.
 - Obligation: INV-PRECEDENCE.
   Method: parameterized `rstest` table over source combinations, using injected
   sources only. Rationale: the partition is finite and small; a table makes
@@ -914,24 +1039,32 @@ invariants to the required behaviour.
   source combinations (defaults only, file only, environment only, file and
   environment, all three including the command line), with the file supplied
   both through discovery and through an explicit `MDTABLEFIX_CONFIG_PATH`.
-  Artefact: `tests/cli_config.rs` with a `MapEnv` and a temporary TOML file.
-  Evidence: the table fails before the wiring lands, because the configuration
-  module does not exist; after the wiring, every cell passes. Non-vacuity: each
-  cell asserts the *resolved* value, not merely that parsing succeeded, and the
-  file-only and environment-only cells differ in value from each other and from
-  the default so a layer silently dropped would change an assertion.
+  Artefact: `src/config_tests.rs` with a `MapEnv` and a temporary TOML file —
+  not `tests/cli_config.rs`, because `mod config` is binary-only; see
+  `Decision log` deviation `a`. Evidence: the table fails before the wiring
+  lands, because the configuration module does not exist; after the wiring, all
+  50 cells pass. Non-vacuity: each cell asserts the *resolved* value, not
+  merely that parsing succeeded, and the file-only and environment-only cells
+  differ in value from each other and from the default so a layer silently
+  dropped would change an assertion. Both controls were run: reversing the
+  layer order in `merged_config` failed exactly the ten `FileAndEnv` cells and
+  no others, and a probe naming the framework in `src/wrap.rs` failed INV-LIB's
+  detector; both were reverted.
 - Obligation: INV-TYPED.
-  Method: parameterized test plus a child-process check. Rationale: the
+  Method: parameterized test plus child-process checks. Rationale: the
   interesting cases are exactly two — a config-supplied `md_exts` with no typed
   `--md-exts`, and a typed `--md-exts` with no configuration — and both are
   cheap to enumerate. Domain: `--git` present and absent, crossed with
-  `md_exts` supplied by configuration or by argv. Artefact:
-  `tests/cli_config.rs`, with the child-process half in a
+  `md_exts` supplied by configuration or by argv. Artefact: the in-process half
+  in `src/config_tests.rs`, the child-process half in
   `tests/cli_config_binary.rs` using `assert_cmd`. Evidence: the
   config-supplied case succeeds without `--git`; the typed case exits 2 with a
   message naming `--md-exts` and `--git`. Non-vacuity: the typed case asserts
   both the exit status and the message fragment, so a run that ignored the flag
-  entirely would fail.
+  entirely would fail. Both child-process cases deliberately format standard
+  input rather than asking for `--version`, because clap answers a version
+  request before `Settings::resolve` is reached and that spelling would pass
+  whether or not the rule were correct.
 - Obligation: INV-EXIT and INV-STREAM.
   Method: child-process checks in `assert_cmd`. Rationale: the exit status and
   the stream split are process-level contracts; no in-process test can observe
@@ -1088,11 +1221,15 @@ accessor, `typed_flags()`, returning the set of flags the user typed, so
 This edit must keep `src/main.rs` under 400 lines. If it cannot, the `run()`
 decomposition moves to `src/driver/`, not to a longer `main.rs`.
 
-EP-M4, the tests. Add `tests/cli_config.rs` for the in-process precedence and
+EP-M4, the tests. Add `src/config_tests.rs` for the in-process precedence and
 typed-flag tables, `tests/cli_config_binary.rs` for the process-level exit and
 stream contracts, and `tests/cli_config_dependency_contract.rs` for INV-LIB.
 Add no new `#[allow]` and no new `#[expect]` beyond what ADR 0012 already
-permits at the composition root.
+permits at the composition root. (As built, the in-process tables went to
+`src/config_tests.rs`, declared by a `#[path]` module on `src/config.rs`,
+rather than to `tests/cli_config.rs`: `mod config` is binary-only, so a
+`tests/` target cannot reach `Settings::resolve_with_sources`. See
+`Decision log` deviation `a`.)
 
 EP-M5, the documentation and delivery. Add a "Configuration" section to
 `docs/users-guide.md`, placed after "Selecting files from Git" and before "Exit
@@ -1196,16 +1333,20 @@ interfaces. For each milestone record:
 - Identifier and outcome: EP-M4, the test suite, with every obligation
   discharged.
 - Requirements and gaps: TOR-REQ-666-6, TOR-CON-666-1.
-- Acceptance evidence: the test count rises by the added cases, every one
-  passes, and every negative control named in `Verification plan` is
-  demonstrated once and recorded under `Artefacts and notes`.
+- Acceptance evidence: 75 tests added — 57 in `src/config_tests.rs`, 14 in
+  `tests/cli_config_binary.rs`, 4 in
+  `tests/cli_config_dependency_contract.rs` — every one passing, with both
+  negative controls demonstrated once and recorded under
+  `Surprises & discoveries`.
 - Conformance check:
   - Requirements satisfied: TOR-REQ-666-6.
   - Design still followed: the tests exercise the ADR's precedence order.
   - Upstream assumptions still valid: AXIOM-CLAP-SOURCE holds under test.
   - No unapproved interface or dependency change: none.
-  - No unapproved trust boundary: none.
-  - Trace links current: yes.
+  - No unapproved trust boundary: the tests read only temporary trees the
+    fixture creates, and no process environment.
+  - Trace links current: the two obligations that named `tests/cli_config.rs`
+    now name `src/config_tests.rs`; see `Decision log` deviation `a`.
 - Recovery: the tests are additive; reverting them cannot break the tree.
 - Remaining gaps: documentation and delivery.
 - Compatibility decision: none.
@@ -1326,8 +1467,20 @@ renumber = true
 
 can run `mdtablefix --in-place` and see paragraphs wrapped and ordered lists
 renumbered without typing either flag. Adding `MDTABLEFIX_BREAKS=true` to the
-environment also normalises thematic breaks; typing `--breaks=false` on the
-command line overrides the variable and leaves them alone.
+environment also normalises thematic breaks.
+
+Measured on 2026-10-27, the override direction is asymmetric, and this plan
+originally overstated it. Every switch this tool declares is a bare presence
+flag, so the command line can say `true` and cannot say `false`:
+`--breaks=false` is a clap parse error,
+`unexpected value 'false' for '--breaks' found; no more were expected`, exit
+status 2. A file or variable that enables a transformation is therefore turned
+*off* at the environment layer, which can express `false` —
+`MDTABLEFIX_BREAKS=false` beside `breaks = true` resolves to `false`, which is
+the `FileAndEnv` cell of the precedence table for the three switches of that
+polarity — and not from the command line. This is a property of the existing
+flag shape, not of the adoption: the flags were presence flags before this
+change and the issue requires that they stay so.
 
 A user with `MDTABLEFIX_CONFIG_PATH=/nonexistent/config.toml` sees
 
