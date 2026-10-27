@@ -452,20 +452,47 @@ actual current state of the work.
       Bumpy Road Ahead, `e6faf3b` and `0f6414f` replaced nested entry tests in
       the dependency-contract walk with a `Step` classification and a `Visit`
       result to clear Deep Nested Complexity, and `13661a6` extracted
-      `assert_clean_success`. All critical rules then passed. The two remaining
-      `Code Duplication` advisories were literal repetition — three assertions
-      restated per failing case and a four-line environment build repeated five
-      times — so `51ad48b` added `assert_failure` and `Fixture::selecting`, and
-      CodeScene now reports no duplication. What survives on `51ad48b` is two
-      `String Heavy Function Arguments` advisories, both in test support
+      `assert_clean_success`. The two remaining `Code Duplication` advisories
+      were literal repetition — three assertions restated per failing case and
+      a four-line environment build repeated five times — so `51ad48b` added
+      `assert_failure` and `Fixture::selecting`, and CodeScene now reports no
+      duplication. What survives on `51ad48b` is two
+      `String Heavy Function Arguments` findings, both in test support
       (`src/config_test_support.rs`, `tests/support/cli_config_fixture.rs`),
       scoring 9.69. That rule describes a module whose *arguments* are mostly
       strings rather than a defect in any one call, and both modules are
       fixtures whose whole job is to spell paths and file contents; the
       alternative is a newtype per fixture method, which would make a test read
-      as a type exercise instead of as a case. They are advisory, `main` has no
-      protection rule and `main-required-checks` requires only `build-test`, so
-      they are recorded here as accepted rather than chased.
+      as a type exercise instead of as a case. The original version of this
+      entry said "all critical rules then passed" and called the two findings
+      advisory. Both claims were wrong, and the check-run summary on every head
+      since `0f6414f` disproves them. This profile is "Pay Down Tech Debt",
+      whose `New code is healthy` gate requires **every** new or changed file to
+      score at least 10.00; that gate is critical, and it is failing with the
+      same two files listed under it. `Enforce advisory code health rules` fails
+      as well, for the same two findings. Six of the eight gates pass, among
+      them `Enforce critical code health rules`, which is a *different* gate
+      about named rules; the earlier wording mistook that one passing for a
+      clean run. What is true is narrower: the only thing between this branch
+      and a green CodeScene run is the string-heavy ratio in two test-support
+      modules.  Whether it can be cleared is a separate question from whether it
+      was cleared, and the plan does not claim it was. The rule fires when more
+      than 40 per cent of a module's function arguments are primitives, counted
+      across every function in the file, so clearing it means reshaping nearly
+      every signature in those two fixtures rather than editing the calls the
+      ratio happens to expose. Those fixtures exist to spell paths, file
+      contents and environment names; a newtype for each would put a conversion
+      step inside every test that uses them, which is the trade AGENTS.md warns
+      about when it asks for clarity over cleverness. They are **accepted, not
+      cleared**, and this plan does not claim CodeScene is green.  The merge
+      consequence was re-verified on 2026-10-27 rather than carried over: `main`
+      has no branch protection (`404 Branch not protected`), and the only active
+      ruleset, `main-required-checks` (id 19842937, condition
+      `~DEFAULT_BRANCH`), requires exactly one status check, `build-test`, with
+      `strict_required_status_checks_policy: false`. CodeScene is not among
+      them, so it does not block landing this pull request — but that is a
+      statement about the ruleset, not about the gate result, and the two must
+      not be conflated again.
 - [x] (2026-10-27) CodeRabbit round eight on `899873d`, after two rate-limit
       windows (the CLI reported `0 of 10` remaining and a rolling-hour reset).
       Three findings, one of them reported twice, all documentation: the
