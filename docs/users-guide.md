@@ -184,8 +184,15 @@ mode or the file arguments, which stay the invocation's own business. The
 configurable keys are the eight transformation switches, `md_exts`, and the
 three Git selection switches.
 
+A configured `git = true` is a setting, not a typed flag, so it does not
+satisfy the input requirement that every mode carries. `--check`, `--diff`, and
+`--in-place` still need either a typed `--git` or at least one file argument,
+and `--list-files` still needs a typed `--git`, because a file argument cannot
+stand in for that flag. A bare `mdtablefix` with a configured `git = true` does
+select from the repository, which is the case configuration exists to serve.
+
 A file supplies a key the same way the flag does. This file formats paragraphs,
-renumbers lists, and normalises thematic breaks without any flag being typed:
+renumbers lists, and normalizes thematic breaks without any flag being typed:
 
 ```toml
 wrap = true
@@ -228,7 +235,7 @@ and a list may be written with brackets (`[rst,xml]`), as a quoted list
 spaces but no commas (`rst xml`) is a single string, which is not a list, so
 the run fails rather than silently narrowing the selection.
 
-Four failures are worth recognising, all of which exit `2` with the diagnostic
+Four failures are worth recognizing, all of which exit `2` with the diagnostic
 on standard error and nothing on standard output:
 
 - `MDTABLEFIX_CONFIG_PATH` names a file that does not exist. A named file is

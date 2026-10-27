@@ -6,13 +6,17 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS — 2026-10-26, on branch
+Status: IN PROGRESS — 2026-10-27, on branch
 `issue-666-adopt-ortho-config-v0-10-0-for-the-mdtablefix-cli`, whose base
 commit is `4a9bdf0e7b061d772ba4d11668e935e1c38e8300` ("Chore(deps): bump rstest
 from 0.27.0 to 0.28.0 (#667)"). Stages 1 and 2 (import the authoritative
 documentation; inventory and baseline) are discharged below, and so are EP-M0
-(the lint spike) and EP-M1 (the document import). Stage 3 (record the
-configuration design) is the next milestone, EP-M2.
+(the lint spike), EP-M1 (the document import), EP-M2 (the configuration
+design), EP-M3 (the wiring), and EP-M4 (the test suite). EP-M5 — the
+documentation and the draft pull request — is in progress: the documentation
+half landed in `0d12ec2`, and the pull request is open as a draft. The plan
+closes when the CodeRabbit review round is clear; it is never merged under this
+plan.
 
 The issue that governs this plan is
 [leynos/mdtablefix#666](https://github.com/leynos/mdtablefix/issues/666): adopt
@@ -103,7 +107,7 @@ of autonomous action, not quality criteria.
 - Interface: if any public library signature must change, stop and escalate.
   The library's surface is out of scope for this task.
 - Dependencies: `ortho_config = "0.10.0"` and a direct `serde` dependency are
-  authorised by the issue. Any further new dependency stops and escalates.
+  authorized by the issue. Any further new dependency stops and escalates.
 - Iterations: if a gate still fails after three fix attempts for the same
   defect, stop and escalate with the captured log.
 - Time: no wall-clock limit is imposed. A milestone that stalls for more than
@@ -179,7 +183,7 @@ mitigation or contingency.
   `nightly-2026-03-26`. Severity: low. Likelihood: low. Mitigation: no bump is
   expected. If the dependency's own manifest requires a newer compiler, the
   application crate's MSRV may rise and the dated-nightly pin may move; both
-  are explicitly authorised by the issue.
+  are explicitly authorized by the issue.
 
 ## Progress
 
@@ -190,7 +194,7 @@ actual current state of the work.
 
 - [x] (2026-10-25 21:10Z) Verified issue #666's text against the GitHub API as
       `leynos`, confirming the six mandated stages, the behaviour-preservation
-      clause, the MSRV authorisation, the draft-PR delivery, and the
+      clause, the MSRV authorization, the draft-PR delivery, and the
       prohibition on merging and releasing.
 - [x] (2026-10-25 22:40Z) Renamed the branch from `session/e8de3267` to
       `issue-666-adopt-ortho-config-v0-10-0-for-the-mdtablefix-cli` and set it
@@ -357,7 +361,7 @@ Document with evidence so future work benefits.
 - Observation: `ortho_config`'s struct and field attribute parsers silently
   discard unknown keys (`discard_unknown`). Evidence:
   `ortho_config_macros/src/derive/parse/struct_attrs.rs` and `field_attrs.rs`
-  accept and ignore unrecognised attribute arguments. Impact: a typo in
+  accept and ignore unrecognized attribute arguments. Impact: a typo in
   `#[ortho_config(...)]` fails silently rather than at compile time. ADR 0014
   records the lenient policy, and the test suite keeps a compile-fail or a
   comment-level witness that a mistyped key is not caught.
@@ -424,12 +428,12 @@ Document with evidence so future work benefits.
   on the boolean placeholder change, not on a new help line; the ADR states the
   hidden flag is accepted-but-undocumented.
 - Observation: the compiled-in empty configuration does not reach the
-  deserialiser as `Null`. Evidence: the derive's `finish_tokens` normalises a
+  deserializer as `Null`. Evidence: the derive's `finish_tokens` normalizes a
   `Null` accumulator to `{}` with a doc comment naming exactly this case — "A
   layer list that supplied no values at all — which a prefixed, all-optional
   struct reaches whenever no environment variable is set and no configuration
   file exists". Impact: INV-NOCONFIG is preserved by the framework's own code
-  path rather than by an empty-layer special case of ours.
+  path rather than by an empty-layer special case in this repository.
 - Observation: a malformed file and an environment-layer failure both surface
   as `ConfigError::Merge`, not as a bespoke "invalid value" error. Evidence:
   `from_value_merge` is
@@ -671,7 +675,7 @@ plan status to `BLOCKED` until the deviation is accepted.
   `src/driver/run.rs`, declared as `mod run` from `src/driver.rs`. Rationale:
   `src/main.rs` was 390 lines against a 400-line cap, and the configuration
   wiring adds an import, a resolution step, and error mapping. The plan
-  authorises exactly this move ("the `run()` decomposition moves to
+  authorizes exactly this move ("the `run()` decomposition moves to
   `src/driver/`, not to a longer `main.rs`"). `src/main.rs` is now 219 lines
   and holds only the composition root: `failed_run`, selection, `run`, and
   `main`. `failed_run` stays at the crate root because
@@ -782,6 +786,28 @@ the location of the imported guides' provenance: a header inside each file
 would have broken the byte-identity the same plan demanded, so the note lives
 beside them. That is recorded in `Decision log`.
 
+EP-M2 to EP-M4 are complete, and together they retire the plan's central
+assumption: the framework can be adopted without its generated parser.
+`MergeComposer` plus the derive-emitted `merge_from_layers` gives the layer
+composition the design wanted, and the command line keeps
+`Cli::parse_validated` as its only parser, so the `--help` snapshot is
+byte-identical to the base commit. Three adjustments were needed and all three
+are in `Decision log`: `parse_validated` returns the `ArgMatches` beside the
+`Cli` (adjustment `a`), `FormatOpts` gains three derives so settings compare as
+values (adjustment `b`), and the execution half of `run()` moves to
+`src/driver/run.rs` to stay under the 400-line cap (adjustment `c`). EP-M4 then
+found one deviation worth naming: the in-process tables had to live in
+`src/config_tests.rs`, declared by a `#[path]` module from the binary-only
+`src/config.rs`, because `mod config` is never declared from `src/lib.rs` and a
+`tests/` target could not reach it (deviation `a`). What would be done
+differently: the discovery probe should have rebuilt its tree per case from the
+start, and every claim about a diagnostic should have been produced by running
+the binary before it was written down — both are recorded under
+`Surprises & discoveries` because both cost a false pass.
+
+EP-M5 is in progress. The guides are written and their claims measured; the
+draft pull request is open. The outstanding work is the CodeRabbit round.
+
 ## Context and orientation
 
 `mdtablefix` is a Rust 2024 workspace with two packages: the root package,
@@ -873,7 +899,7 @@ usage line `Usage: mdtablefix [OPTIONS] [FILES]...`, the `[FILES]...` argument
 description, every option from `--in-place` through `--headings`, `-h, --help`,
 `-V, --version`, and the `--md-exts <EXT>` default rendering
 `[default: md,mdc,markdown]`. `tests/cli_git.rs` around line 340 produces it by
-running the built binary with `--help`, normalising `mdtablefix.exe` to
+running the built binary with `--help`, normalizing `mdtablefix.exe` to
 `mdtablefix`, and asserting with `insta`.
 
 ### Every caller of the command line
@@ -1275,7 +1301,7 @@ EP-M5, the documentation and delivery. As built on 2026-10-27 (`0d12ec2`), the
 from Git" and before "Exit status" and covers what may be configured (settings,
 never the mode or the file arguments), a TOML example, an ordered discovery
 table, the precedence order with the layering rule, the twelve `MDTABLEFIX_*`
-variables, the value dialect, the four failures worth recognising, unknown-key
+variables, the value dialect, the four failures worth recognizing, unknown-key
 tolerance, and the enable-but-not-disable asymmetry. It covers four failures
 rather than the three the plan named, because measurement found a fourth: a
 value of the wrong type is reported by the merge, after the file has been read,
@@ -1372,7 +1398,7 @@ interfaces. For each milestone record:
   - Design still followed: ADR 0014's decisions are what the code implements.
   - Upstream assumptions still valid: `merge_from_layers` behaves as its
     documentation says.
-  - No unapproved interface or dependency change: the two authorised
+  - No unapproved interface or dependency change: the two authorized
     dependencies are the only additions; the library's surface is unchanged.
   - No unapproved trust boundary: the environment layer is injected, and the
     file layer reads only the locations ADR 0014 names.
@@ -1534,7 +1560,7 @@ renumber = true
 
 can run `mdtablefix --in-place` and see paragraphs wrapped and ordered lists
 renumbered without typing either flag. Adding `MDTABLEFIX_BREAKS=true` to the
-environment also normalises thematic breaks.
+environment also normalizes thematic breaks.
 
 Measured on 2026-10-27, the override direction is asymmetric, and this plan
 originally overstated it. Every switch this tool declares is a bare presence
@@ -1575,7 +1601,7 @@ Quality criteria (what "done" means):
 - Security: `make lint`'s `clippy::disallowed_methods` proves no new process
   environment read; no credential or network surface is introduced.
 
-Quality method (how we check):
+Quality method (how it is checked):
 
 - `scrutineer` runs the five gates sequentially and returns the bounded
   report; failures cite a `/tmp` log.

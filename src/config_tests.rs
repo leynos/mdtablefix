@@ -8,11 +8,12 @@
 //! The precedence table splits the polarity of the boolean flags across keys,
 //! because a boolean switch can only be typed *true*. `wrap`, `renumber`, and
 //! `git` carry a file value of `true` and an environment value of `false`, so
-//! they witness the file applying, the environment overriding the file, and the
-//! command line overriding the environment. `headings` carries the opposite
-//! polarity, so it witnesses the environment applying on its own and overriding
-//! an explicit file `false`. No single key can witness every direction; the
-//! five together do, and [`expected`] states each cell's value.
+//! they witness the file applying, the environment overriding the file, and —
+//! in the `AllThree` cells, which write all three layers — the command line
+//! overriding the environment. `headings` carries the opposite polarity, so it
+//! witnesses the environment applying on its own and overriding an explicit
+//! file `false`. No single key can witness every direction; the five together
+//! do, and [`expected`] states each cell's value.
 //!
 //! One residual dependency: `ortho_config` always resolves a Project root from
 //! the process working directory, and the builder method that would substitute
@@ -253,7 +254,10 @@ fn a_key_resolves_to_the_most_preferred_layer_that_states_it(
     let fixture = Fixture::new();
     let mut environment = fixture.environment();
 
-    if matches!(scenario, Scenario::FileOnly | Scenario::FileAndEnv) {
+    if matches!(
+        scenario,
+        Scenario::FileOnly | Scenario::FileAndEnv | Scenario::AllThree
+    ) {
         let contents = file_contents(key);
         match supply {
             Supply::Discovery => fixture.discover(contents),

@@ -42,8 +42,8 @@ fn read(path: &Path) -> Result<String> {
 ///
 /// A breadth-first walk written against `std::path`, so it behaves the same way
 /// on every platform the CI matrix covers. A directory that cannot be read is
-/// skipped rather than fatal: the walk is looking for evidence, and an
-/// unreadable unrelated directory cannot supply it.
+/// fatal rather than skipped: an incomplete walk could miss a library source
+/// that names the framework, and so satisfy the invariant for the wrong reason.
 fn rust_sources(root: &Path) -> Result<Vec<PathBuf>> {
     let mut pending = vec![root.to_path_buf()];
     let mut found = Vec::new();

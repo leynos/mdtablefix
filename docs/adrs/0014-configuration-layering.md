@@ -144,7 +144,7 @@ The dependency is a caret requirement with default features, which supplies
 `serde_json` and `toml`. The `json5` and `yaml` features stay off, so those
 candidate spellings are never generated, and a selected file with a `.json5` or
 `.yaml` extension fails with a message saying the feature is disabled. A
-selected file with any other unrecognised extension is parsed as TOML, which is
+selected file with any other unrecognized extension is parsed as TOML, which is
 the format the documented `.toml` name implies.
 
 The reason for one format is that a configuration file a user cannot guess the
@@ -156,7 +156,7 @@ feature-flag change plus a documented extension, not a schema change.
 
 ### Spell the environment in the framework's own dialect
 
-The prefix is `MDTABLEFIX`, which the framework normalises to `MDTABLEFIX_`.
+The prefix is `MDTABLEFIX`, which the framework normalizes to `MDTABLEFIX_`.
 Matching is case-insensitive, `__` separates nested keys, and the provider is
 exactly `CsvEnv::prefixed("MDTABLEFIX_").uppercase(true).split("__")`, which is
 what the derive generates for that prefix. Declaring the same dialect in the
@@ -200,8 +200,8 @@ such a field, where it is a compile error — and it is the behaviour the
 precedence rule requires. A user who sets an extension list means that list.
 
 A schema whose every field is optional, merged from no layers at all, still
-deserialises: the framework normalises the empty accumulator to an empty object
-before deserialisation, so the absent case is all-`None` rather than an error.
+deserializes: the framework normalizes the empty accumulator to an empty object
+before deserialization, so the absent case is all-`None` rather than an error.
 That is what makes the no-configuration run identical to the run before this
 change.
 
@@ -231,7 +231,7 @@ default that could be mistaken for a typed value.
 
 A configuration key the schema does not declare is ignored. The framework's
 types carry no `deny_unknown_fields`, serde's default is to skip what it is not
-asked for, and the guide treats an unrecognised table the same way it treats
+asked for, and the guide treats an unrecognized table the same way it treats
 any other unknown key.
 
 The reason is compatibility across versions: a configuration file is checked
@@ -239,7 +239,7 @@ into a repository and read by whatever version of the tool a contributor
 happens to have, so a file that a newer release can read must not be rejected
 by an older one that does not yet know one of its keys. The cost is that a typo
 in a key is silent. A known key with a value of the wrong type is still an
-error, because deserialisation is typed.
+error, because deserialization is typed.
 
 ### Inject the environment at the composition root
 

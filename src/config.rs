@@ -106,7 +106,7 @@ const CONFIGURED_ARGUMENTS: [&str; 12] = [
 ///
 /// The type is never constructed from configuration directly; it is built once
 /// for the command-line layer in [`command_line_layer`], and otherwise only
-/// deserialised.
+/// deserialized.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize, ortho_config::OrthoConfig)]
 #[ortho_config(prefix = "MDTABLEFIX")]
 #[ortho_config(discovery(app_name = "mdtablefix"))]
@@ -123,7 +123,7 @@ pub struct ConfigFile {
     /// Whether `...` becomes the ellipsis character.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ellipsis: Option<bool>,
-    /// Whether fence delimiters are normalised to three backticks.
+    /// Whether fence delimiters are normalized to three backticks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fences: Option<bool>,
     /// Whether bare numeric references become footnote links.
