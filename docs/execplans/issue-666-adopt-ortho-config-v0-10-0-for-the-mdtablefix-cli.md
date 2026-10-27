@@ -426,6 +426,26 @@ actual current state of the work.
       `concat!()` with a named format argument, and the file is
       rustfmt-clean again. Remaining: `make lint`, `make test`, the commit,
       the push, and a further review round — all of which compile Rust.
+- [x] (2026-10-27) Admission returned, and the round-five work is committed,
+      pushed and reviewed. The single `cargo test --test
+      cli_config_dependency_contract` run passed all six tests, including
+      `the_walk_refuses_an_unanalysable_module_declaration`, so the macro rule
+      and its negative control compile and behave as designed. The full gate
+      set then passed on `6111626`: `make check-fmt`, `make lint`, `make test`
+      (72 test binaries, zero failures), `make markdownlint` and `make nixie`.
+- [x] (2026-10-27) CodeRabbit round six on `6111626`, four findings, all one
+      class: en-GB-oxendict requires `-ize`, and four lines this branch
+      authored said `recognise` or `recognisably`. Accepted and fixed in
+      `41b1aa9` — the dependency contract's doc comment, the developers' guide
+      paragraph on the walk, the ExecPlan observation it quotes, and the
+      provenance note on the two migration-guide names. The same spelling
+      survives on `main` in `Cargo.toml`, `docs/users-guide.md`,
+      `docs/architecture.md` and `docs/execplans/check-option.md`; those lines
+      are not this branch's, so rewriting them here would bury a four-line fix
+      in an unrelated sweep and they are left to a separate change.
+- [x] (2026-10-27) CodeRabbit round seven on `41b1aa9`: zero findings across
+      all 30 reviewed files. The deterministic gates were green before the
+      review was requested, so this clears the review requirement.
 
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
