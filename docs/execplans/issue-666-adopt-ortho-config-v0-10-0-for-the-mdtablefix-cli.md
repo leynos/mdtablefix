@@ -299,13 +299,40 @@ actual current state of the work.
       stream split, and every exit-2 configuration failure.
       `tests/cli_config_dependency_contract.rs` (189 lines) holds INV-LIB:
       **4 tests**. Both negative controls fired and were reverted; see
-      `Surprises & discoveries`. Gate evidence on the final tree, all four
-      run in this worktree: `cargo fmt --all` clean,
-      `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-      exit 0, `make check-fmt` exit 0 (47 files unchanged), and
-      `cargo test --workspace` exit 0 with every suite green — the binary's
-      1,173 tests, 280 integration tests, 42 doctests, and the remainder of
-      the matrix.
+      `Surprises & discoveries`.
+      **Later split (2026-10-27, CodeRabbit round two):** the single
+      `src/config_tests.rs` above no longer exists as one file. The precedence
+      table stays in `src/config_tests.rs` (217 lines), the failure cases moved
+      to `src/config_error_tests.rs` (176), and the shared fixture to
+      `src/config_test_support.rs` (127); `src/config.rs` itself is 336, with
+      the schema in `src/config_schema.rs` (115). On the process side,
+      `tests/cli_config_binary.rs` (210) now covers what a run formats and
+      `tests/cli_config_failure_binary.rs` (164) covers the failures, sharing
+      `tests/support/cli_config_fixture.rs` (156). The current test counts are
+      **284** binary unit tests, **11 + 6** process-level tests, and **4**
+      dependency-contract tests. No test was removed by the split.
+      Gate evidence on the split tree, all run in this worktree: `cargo fmt
+      --all` clean, `cargo clippy --workspace --all-targets --all-features --
+      -D warnings` exit 0, `make check-fmt` exit 0 (47 files unchanged),
+      `make markdownlint` 47 files 0 issues, `make nixie` all diagrams
+      validated, and `cargo test --workspace` exit 0 with every suite green —
+      **2,954 passed, 0 failed, 22 ignored** across 72 result lines, the
+      ignored being doctests only.
+- [x] (2026-10-27) CodeRabbit round one, addressed in `d17a309`.
+- [x] (2026-10-27) CodeRabbit round two, adjudicated. Accepted: the
+      malformed-discovered-file defect (fixed, with a process-level regression
+      guard and its negative control), and the users' guide's flat precedence
+      table (restated by scope). Rejected with reasons, all recorded in
+      `Decision log`: the ADR file rename, both vendored-guide link retargets,
+      and the `md_exts` validation deferral. Forced by the fix and the review:
+      four file splits to stay under the 400-line cap, and
+      `BINARY_ONLY` widened to five files. Documentation brought into line:
+      `docs/users-guide.md` (scope column and the malformed-file sentence),
+      `docs/developers-guide.md` (the five binary-only files and how the
+      contract holds them), `docs/architecture.md` (the discovered-file
+      failure), and `docs/adrs/0014-configuration-layering.md` (the promoted
+      discovery errors, and the uniform-validation wording for the Git-only
+      settings).
 - [~] EP-M5: user's and developer's guide updates, all gates green, draft pull
       request. Documentation half done 2026-10-27 in `0d12ec2`; delivery
       outstanding. `docs/users-guide.md` gains a "Configuration" section
@@ -472,10 +499,16 @@ Document with evidence so future work benefits.
   Evidence: the builder's field list and the method's visibility; the first
   draft of `src/config_tests.rs` carried an `environment.insert("PWD", ...)`
   that had no effect. Impact: an in-process cell asserting a compiled-in
-  default also relies on this worktree's root holding no `.mdtablefix.toml` and
-  no `mdtablefix/config.toml`. The test module's doc comment states that
-  dependency, and a file appearing there would fail the cell loudly rather than
-  silently. This is the one residual dependency EP-M4 could not remove.
+  default also relies on this worktree's root holding no `.mdtablefix.toml`,
+  which is the Project scope's only candidate. The test module's doc comment
+  states that dependency, and a file appearing there would fail the cell loudly
+  rather than silently. This is the one residual dependency EP-M4 could not
+  remove. Correction (2026-10-27, CodeRabbit round two): this entry originally
+  also named `mdtablefix/config.toml` at the root. `project_file_name` defaults
+  to the dotfile name, so the nested spelling is never a Project candidate;
+  measured with a valid file at `cwd/mdtablefix/config.toml` and nothing else,
+  the run emitted its unconfigured output, and a malformed file there was not
+  reported at all.
 - Observation: `CsvEnv::prefixed` takes its prefix literally, so the trailing
   underscore is part of the argument. Evidence: `ortho_config/src/env.rs`'s
   `prefixed` constructor stores the string unmodified, and a draft that passed
@@ -535,6 +568,30 @@ Document with evidence so future work benefits.
   the users' guide's discovery table rests on measurement rather than on
   reading the upstream candidate list, and the process suite's fixtures all
   point every base directory into a temporary tree for the same reason.
+- Observation (CodeRabbit round two): the framework's optional-candidate rule
+  hid a real defect, and the defect was invisible to every test written before
+  it because each test gave the broken file *alone*. A malformed automatic
+  candidate reports only when no layer loaded (`drain_errors` appends
+  `ignorable_errors` under `if self.layers.is_empty()`), so the pre-existing
+  error table proved the broken-alone case and never the broken-beside-a-good
+  one. Measured in isolated trees: `xdg/mdtablefix/config.toml` valid plus
+  `.mdtablefix.toml` broken exited 0 and formatted. Impact: the regression
+  guard has two halves — the failing case and a negative control proving a
+  promotion that reported every candidate would fail — and the users' guide and
+  ADR now state that a discovered malformed file is fatal.
+- Observation: `ortho_config`'s Project scope cannot be exercised in-process.
+  `ConfigDiscovery::builder` always resolves a Project root from
+  `std::env::current_dir()`, and `with_project_root_resolver` is
+  `#[cfg(test)] pub(crate)` upstream. Impact: every assertion about the project
+  scope — its precedence over the user scope, and the malformed-file case —
+  lives in a child-process test whose working directory is the fixture root.
+  The in-process tables name this dependency in their module documentation
+  rather than pretending it does not exist.
+- Observation: `--version` and `--help` never reach `Settings::resolve`; clap
+  answers them first. A test that used either to observe a configuration
+  outcome would pass whether or not the code under test were correct. Impact:
+  the configured-extension test formats a standard input instead, and its
+  documentation says why.
 
 ## Decision log
 
@@ -593,6 +650,12 @@ plan status to `BLOCKED` until the deviation is accepted.
   `.../candidates/mod.rs::candidate_set`, and the vendored guide at lines
   512-543, which states the same rationale upstream. Date/Author: 2026-10-27,
   implementation agent.
+- Amendment to the entry above (2026-10-27, CodeRabbit round two): only the
+  first of the two costs stays accepted. Several files contributing at once is
+  still the design. The second cost — an automatic candidate that fails to load
+  being reported only when no layer loaded — is refused, because it lets a
+  malformed project file fall back silently to the user file beneath it. See
+  the promoted-discovery-error decision below.
 - Decision: the environment prefix is `MDTABLEFIX_`, with `__` for nesting and
   comma-separated lists for vector-valued keys such as `MDTABLEFIX_MD_EXTS`.
   Rationale: this is what
@@ -760,6 +823,79 @@ plan status to `BLOCKED` until the deviation is accepted.
   every such file is one of `src/config.rs` and `src/config_tests.rs`. A
   textual check also covers an `include!` target and a path spelled inside a
   macro. Date/Author: 2026-10-27, implementation agent.
+- Decision (CodeRabbit round two, accepted): a discovered file that exists but
+  cannot be loaded is a fatal diagnostic even when another scope loaded.
+  Rationale: the framework classifies an automatic candidate as optional and
+  `drain_errors` appends `ignorable_errors` only when no layer loaded, so a
+  malformed project file beside a valid user file left a run silently
+  formatting under the user's rules. That contradicts the users' guide, this
+  plan's own stated behaviour
+  (`A malformed or unreadable configuration file
+  produces a clear diagnostic on standard error and exit status 2`),
+  and the ADR's purpose. Measured before the fix in an isolated tree: broken
+  `.mdtablefix.toml` beside a valid `xdg/mdtablefix/config.toml` exited 0 and
+  formatted. After: exit 2, `cannot resolve configuration` plus the TOML parse
+  diagnostic naming the file. Absent-candidate and valid-beside-valid runs are
+  unchanged, and a broken file alone still reports once rather than twice. The
+  fix is `promoted_discovery_errors` in `src/config.rs`, guarded by
+  `layers_are_empty()` so the all-empty case is not double-reported.
+  Date/Author: 2026-10-27, implementation agent.
+- Decision (CodeRabbit round two, accepted): the users' guide's location table
+  is presented by scope, not as a flat preference list. Rationale: the table
+  was labelled "most preferred first" with the working-directory file last,
+  which reads as if the project file were the least influential. Measured truth
+  is the reverse — with a user file setting `ellipsis = true` and a project
+  file setting `ellipsis = false`, the run emits `a...b`, so the project file
+  wins. The table now carries a scope column and the prose says the project
+  file is the most influential, which is also what ADR 0014 already stated.
+  Date/Author: 2026-10-27, implementation agent.
+- Decision (CodeRabbit round two, rejected): do not rename
+  `docs/adrs/0014-configuration-layering.md` to the style guide's
+  `adr-NNN-short-description.md` form. Rationale: ADR 0014 records the
+  deviation and its reason at lines 48-56 — every record in `docs/adrs/`
+  follows the local form, and "changing the convention is a repository-wide
+  decision and is not made here." Renaming one file would leave that paragraph
+  false and split the directory across two conventions mid-adoption.
+  Date/Author: 2026-10-27, implementation agent.
+- Decision (CodeRabbit round two, rejected twice): do not retarget the links
+  inside `docs/ortho-config-users-guide.md` or
+  `docs/ortho-config-v0-10-0-migration-guide.md`. Rationale:
+  `docs/ortho-config-v0-10-0-provenance.md` states the invariant — both files
+  are byte-for-byte copies of their tag blobs, with SHA-256 values recorded per
+  file, "this note is kept beside them rather than inside them, precisely so
+  they stay byte-identical." Editing a link is an edit to a vendored artefact,
+  and the provenance check would then fail. Date/Author: 2026-10-27,
+  implementation agent.
+- Decision (CodeRabbit round two, rejected): do not make `md_exts` uniquely
+  lenient when a positional path is present. Rationale: measured behaviour is
+  that every configured setting is validated regardless of the resolved mode,
+  and the four Git-only settings block a positional run uniformly — `wrap`,
+  `git`, `include_untracked`, and `md_exts` all behave alike. The two variants
+  of the finding (validate no non-Git setting, or validate nothing when a
+  positional path is given) contradict each other, so neither can be the
+  intended rule. ADR 0014 now records the uniform rule and its reason: a typo
+  should surface on every invocation, not only on some. Date/Author:
+  2026-10-27, implementation agent.
+- Decision (CodeRabbit round two, forced by the fix): the round-two work pushed
+  three files past the 400-line cap, so each was split along a seam rather than
+  trimmed. `src/config.rs` 435 → 336 by extracting `src/config_schema.rs` (115
+  lines: the constants and `ConfigFile`); `src/config_tests.rs` 403 → 217, with
+  the failure cases in `src/config_error_tests.rs` (176) and the shared fixture
+  in `src/config_test_support.rs` (127); `tests/cli_config_binary.rs` 422 →
+  210, with the failing cases in `tests/cli_config_failure_binary.rs` (164) and
+  the fixture in `tests/support/cli_config_fixture.rs` (156). No test was
+  dropped. The dependency contract's `BINARY_ONLY` list grew from two files to
+  five, and `docs/developers-guide.md` now names all five. Date/Author:
+  2026-10-27, implementation agent.
+- Decision: a shared test-support module may define only items every including
+  binary uses. Rationale: each `tests/*.rs` file compiles alone, so
+  `#[path = "support/x.rs"] mod x;` is recompiled per binary, and an item one
+  binary never touches is `dead_code` under `-D warnings`. `CLEAN` was defined
+  in `tests/support/cli_config_fixture.rs` and was dead in
+  `cli_config_failure_binary.rs`; it now lives in `cli_config_binary.rs`, its
+  only consumer. The rule is stated in the fixture's module documentation so
+  the next shared item is placed correctly. Date/Author: 2026-10-27,
+  implementation agent.
 
 ## Outcomes & retrospective
 
@@ -1132,12 +1268,14 @@ invariants to the required behaviour.
   the stream split are process-level contracts; no in-process test can observe
   them faithfully. Domain: a malformed configuration file, an unreadable one, a
   selected but missing one, a valid one that sets `wrap`, and no configuration
-  at all. Artefact: `tests/cli_config_binary.rs`. Evidence: the malformed and
-  unreadable cases exit 2 with the diagnostic on standard error and nothing on
-  standard output; the valid case exits 0 and formats as configured; the
-  no-configuration case exits 0 with the base output. Non-vacuity: every case
-  asserts standard output and standard error separately, so a diagnostic
-  printed to the wrong stream fails.
+  at all. Artefact: `tests/cli_config_failure_binary.rs` now holds the failing
+  cases and `tests/cli_config_binary.rs` the passing ones, split on 2026-10-27;
+  see the EP-M4 progress entry. Evidence: the malformed,
+  malformed-discovered-beside-a-valid-file, and unreadable cases exit 2 with
+  the diagnostic on standard error and nothing on standard output; the valid
+  case exits 0 and formats as configured; the no-configuration case exits 0
+  with the base output. Non-vacuity: every case asserts standard output and
+  standard error separately, so a diagnostic printed to the wrong stream fails.
 - Obligation: INV-ENV.
   Method: the existing `make lint` gate, which denies
   `clippy::disallowed_methods`, plus the existing

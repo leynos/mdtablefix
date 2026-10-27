@@ -1851,13 +1851,23 @@ deterministically.
 ## Configuration layering
 
 `src/config.rs` is a binary-only module: `src/main.rs` declares it and
-`src/lib.rs` does not, so the reusable library never names `ortho_config`.
+`src/lib.rs` does not, so the reusable library never names `ortho_config`. Four
+more files belong to it. `src/config_schema.rs` holds the schema and the
+constants, split out because the resolution logic and the type it folds over
+read better apart. Three `#[path]` modules follow their declaring file: the
+shared fixture `src/config_test_support.rs`, the resolution table in
+`src/config_tests.rs`, and the failure cases in `src/config_error_tests.rs`.
+
 `tests/cli_config_dependency_contract.rs` holds that boundary by scanning every
-file under `src/` for the framework's name and allowing it only in
-`src/config.rs` and `src/config_tests.rs`. A Cargo feature cannot express the
-boundary, because `ortho_config` is a normal dependency of the package and is
-therefore linked into the library as well as the binary; what keeps the library
-reusable is that no library source uses it.
+file under `src/` for the framework's name and allowing it only in those five
+files, so a new module that names the framework fails the suite until it is
+declared binary-only as well. The list is a constant in the test, and adding a
+file to it is a deliberate statement that the file cannot be reached from
+`src/lib.rs`; the second test asserts the reachability half directly rather
+than trusting the list. A Cargo feature cannot express the boundary, because
+`ortho_config` is a normal dependency of the package and is therefore linked
+into the library as well as the binary; what keeps the library reusable is that
+no library source uses it.
 
 The module resolves settings in one pass and hands the driver a plain
 `Settings` struct with no configuration types in its signature, so the code
@@ -1890,9 +1900,14 @@ One dependency is worth knowing about. `ortho_config`'s discovery builder
 always resolves a Project root from the process working directory, and the
 method that would substitute one is crate-private upstream. A test asserting a
 compiled-in default therefore also relies on the repository root holding no
-`.mdtablefix.toml` and no `mdtablefix/config.toml`. `src/config_tests.rs`
-states that in its module documentation; if such a file ever appears at the
-root, the affected cells fail loudly rather than passing for the wrong reason.
+`.mdtablefix.toml`; that dotfile is the Project scope's only candidate. A
+`mdtablefix/config.toml` at the root is not one, so it would change nothing.
+`src/config_tests.rs` states the dependency in its module documentation; if
+such a file ever appears at the root, the affected cells fail loudly rather
+than passing for the wrong reason. Because the root cannot be substituted,
+every claim about the Project scope — its precedence over the User scope, and
+the malformed-file diagnostic — is asserted from a child process whose working
+directory is the fixture root, not from the in-process tables.
 
 ## Coverage publication belongs to `main`
 

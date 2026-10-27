@@ -81,7 +81,11 @@ statement of what to act on, which a file cannot make on their behalf.
 tracked Markdown of this repository" is a property of the repository rather
 than of one invocation. It decides the input source only when the user names no
 files: a typed path always means a file run, since a positional argument
-outranks a setting, and the Git-only settings are then inert.
+outranks a setting. The other Git settings then select nothing, but they are
+still validated, because a configuration file that names an extension the tool
+cannot parse is wrong whether or not this particular run would have consulted
+it, and a validation that depended on the resolved mode would surface a typo on
+some invocations and not others.
 
 ### Discover `.mdtablefix.toml` through scopes
 
@@ -123,15 +127,28 @@ each is accepted deliberately:
 
 - Several files can contribute at once, so a system-wide file can provide a base
   that a project file refines key by key.
-- A candidate that fails to load is only reported when no layer loaded at all.
-  A project file with a typo therefore falls back silently to the user file
-  beneath it rather than failing the run; a run with no other configuration
-  does report the failure. A file named by `MDTABLEFIX_CONFIG_PATH` is fatal
-  either way, which is the reliable way to make a broken file visible.
+- A candidate that exists but cannot be loaded is fatal, even when another scope
+  loaded. The framework classifies an automatic candidate as *optional*,
+  because a location that holds no file is the normal case, and it withholds an
+  optional failure whenever any layer loaded — which would let a malformed
+  project file fall back silently to the user file beneath it. The integration
+  refuses that silence. Formatting under a rule set the user did not ask for,
+  taken from a file that is not the one they are editing, is the destructive
+  surprise this record exists to prevent. A candidate that is merely *absent*
+  still contributes nothing and is still not an error, so the promotion is
+  precise. A file named by `MDTABLEFIX_CONFIG_PATH` was already fatal either
+  way.
 - The project scope is the working directory and nothing else. There is no walk
   upward and no stop at a Git root, so a run from a subdirectory does not see
   the repository's file. An upward walk was rejected because it makes the same
   command behave differently depending on where in a tree it is typed.
+
+The promotion is a small function in `src/config.rs`, not a framework setting.
+It asks `FileLayerOutcome::layers_are_empty()` first and, only when a layer did
+load, reports the outcome's `ignorable_errors()`. Promoting unconditionally
+would report each error twice in the all-empty case, because the framework
+already returns them itself when nothing loaded. Both accessors are public
+upstream for exactly this kind of consumer check.
 
 The loader also honours an `extends` key, resolving a relative parent against
 the declaring file and applying parents before children. This is inherited
@@ -302,10 +319,9 @@ is `MDTABLEFIX_CONFIG_PATH` alone, which keeps `--help` byte-identical.
   rule they mean.
 - Behaviour becomes a function of the working directory, and only of the working
   directory: a run from a subdirectory does not read the parent's file.
-- A broken automatic candidate is silent whenever some other layer loaded, so a
-  typo in a project file falls back to the user file instead of failing. Naming
-  the file with `MDTABLEFIX_CONFIG_PATH` is the way to make the failure fatal,
-  and the users' guide says so.
+- A malformed automatic candidate fails the run even beside another scope that
+  loaded, so a typo in a project file is reported instead of silently falling
+  back to the user file. An absent candidate is still not an error.
 - Configuration failures exit with status 2 and write to standard error, so the
   exit-status and stream contracts are unchanged in kind.
 - Because scopes stack, the resolved outcome reports which scopes contributed a

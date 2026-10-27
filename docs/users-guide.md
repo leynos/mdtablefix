@@ -201,28 +201,41 @@ breaks = true
 ```
 
 The file is TOML. Its name is `config.toml` inside a `mdtablefix` directory, or
-`.mdtablefix.toml`, and discovery reads it from these locations, most preferred
-first:
+`.mdtablefix.toml`, and discovery reads it from the locations in the table
+below. The scope column says which layer a location belongs to; within one
+scope, an earlier row is preferred to a later one.
 
-| Order | Location                                                              |
-| ----- | --------------------------------------------------------------------- |
-| 1     | The path named by `MDTABLEFIX_CONFIG_PATH`, when set and non-empty.   |
-| 2     | `$XDG_CONFIG_HOME/mdtablefix/config.toml`, then the dotfile beside    |
-|       | it.                                                                   |
-| 3     | The same pair under each `XDG_CONFIG_DIRS` entry, or under `/etc/xdg` |
-|       | when the variable is unset or names no usable directory.              |
-| 4     | The same pair under `%APPDATA%`, then under `%LOCALAPPDATA%`.         |
-| 5     | `$HOME/.config/mdtablefix/config.toml`, then                          |
-|       | `$HOME/.config/.mdtablefix.toml`, then `$HOME/.mdtablefix.toml`.      |
-| 6     | `.mdtablefix.toml` in the working directory.                          |
+| Order | Scope    | Location                                                              |
+| ----- | -------- | --------------------------------------------------------------------- |
+| 1     | Selected | The path named by `MDTABLEFIX_CONFIG_PATH`, when set and non-empty.   |
+| 2     | User     | `$XDG_CONFIG_HOME/mdtablefix/config.toml`, then the dotfile beside    |
+|       |          | it.                                                                   |
+| 3     | System   | The same pair under each `XDG_CONFIG_DIRS` entry, or under `/etc/xdg` |
+|       |          | when the variable is unset or names no usable directory.              |
+| 4     | User     | The same pair under `%APPDATA%`, then under `%LOCALAPPDATA%`.         |
+| 5     | User     | `$HOME/.config/mdtablefix/config.toml`, then                          |
+|       |          | `$HOME/.config/.mdtablefix.toml`, then `$HOME/.mdtablefix.toml`.      |
+| 6     | Project  | `.mdtablefix.toml` in the working directory.                          |
 
 _Table 2: Where a configuration file is found._
 
-Precedence runs the other way. A typed command-line flag wins over an
-environment variable, which wins over a configuration file, which wins over the
-compiled-in default. The layers stack rather than replace: a file that sets
-`wrap` and an environment that sets `breaks` supply both, and only a key stated
-twice needs a decision.
+The working directory holds only the dotfile: a `mdtablefix/config.toml` beside
+a run's own files is not a candidate.
+
+The scopes stack system below user below project, so the working-directory file
+is the **most** influential one, not the least: it is applied last and
+overrides a key that a user file also states. This is the opposite of what a
+flat reading of the table suggests, and it is deliberate — the file nearest the
+work is the one that should describe it. A selected file short-circuits the
+whole walk, so `MDTABLEFIX_CONFIG_PATH` is read alone and nothing automatic is
+consulted.
+
+Precedence overall is compiled-in defaults, then files, then the environment,
+then the command line. A typed command-line flag wins over an environment
+variable, which wins over a configuration file, which wins over the default.
+The layers stack rather than replace: a file that sets `wrap` and an
+environment that sets `breaks` supply both, and only a key stated twice needs a
+decision.
 
 Every setting also has an environment variable, spelled `MDTABLEFIX_` followed
 by the key in upper case: `MDTABLEFIX_WRAP`, `MDTABLEFIX_RENUMBER`,
@@ -242,7 +255,10 @@ on standard error and nothing on standard output:
   required, so this is an error rather than a silent fall back to discovery,
   and the diagnostic quotes the path it was given.
 - A file is not valid TOML. The diagnostic quotes the path, the line and column,
-  and the parser's complaint.
+  and the parser's complaint. This applies to a discovered file as well as a
+  selected one: a broken `.mdtablefix.toml` beside a good user file fails the
+  run rather than being skipped, because running under the user file's rules
+  while the project file says something else would be a surprise.
 - A value has the wrong type — `wrap = "yes"` rather than `wrap = true`. The
   diagnostic names the mismatch,
   `invalid type: string "yes", expected a boolean`. It does not repeat the file

@@ -1036,14 +1036,19 @@ inside the seam [ADR 0012](adrs/0012-environment-seam-taxonomy.md) requires
 without needing an exception to it.
 
 Failures divide in two. A configuration failure — an unreadable or malformed
-selected file, a value of the wrong type, an unreadable directory that makes a
-candidate unclassifiable — is reported on standard error as
-`mdtablefix: <message>` and ends the run with `ExitStatus::Error`, which is
-status 2, before any file is read. Help and version requests are not failures:
-they are display requests that the argument parser satisfies and the run
-reports as success. `Settings::resolve` returns a `Result` and neither prints
-nor exits, so the decision to write to a stream and to choose a status stays in
-`main`.
+selected file, an unreadable or malformed _discovered_ file, a value of the
+wrong type, an unreadable directory that makes a candidate unclassifiable — is
+reported on standard error as `mdtablefix: <message>` and ends the run with
+`ExitStatus::Error`, which is status 2, before any file is read. A discovered
+file that is absent is not a failure; it contributes nothing. A discovered file
+that exists and cannot be loaded is, even when another scope loaded: the
+framework classifies automatic candidates as optional and would otherwise
+withhold the failure, so the composition root promotes those errors rather than
+proceeding on a lower scope's settings. Help and version requests are not
+failures: they are display requests that the argument parser satisfies and the
+run reports as success. `Settings::resolve` returns a `Result` and neither
+prints nor exits, so the decision to write to a stream and to choose a status
+stays in `main`.
 
 For screen readers: The following flow traces one run from the argument vector
 to the driver, showing where the command-line tier is read, where each
