@@ -510,6 +510,30 @@ actual current state of the work.
       table row with the two abbreviations it had relied on spelled out below.
       Note for future edits to this file: markdownlint's MD049 requires
       asterisks for emphasis, so `_As built_` is refused.
+- [ ] CodeRabbit round nine on `4e0dc27`: pending. The CLI reported "0 of 10
+      remaining" with a rolling-hour reset on the first attempt, so the round
+      was deferred by a randomised window rather than retried immediately. The
+      deterministic gates were green on `4e0dc27` before the request — all six,
+      run sequentially — so only the review itself remains.
+- [x] (2026-10-27) The CodeScene record was wrong and is now corrected
+      (`1596ad0`, `c87afa9`, `4e0dc27`). Two errors: the entry called the two
+      surviving findings advisory when they also fail the critical
+      `New code is healthy` gate, and it said "all critical rules then passed"
+      when the check run lists four passed and two failed. The plan now states
+      the gate result accurately, records the finding as accepted rather than
+      cleared, and gives the measurement that supports the acceptance — 10 of
+      10 and 14 of 15 primitive arguments against a 40 per cent threshold.
+      Three trapdoors found while fixing this, worth recording for whoever
+      edits this file next. A blank line between paragraphs inside a `- [x]`
+      item makes markdownlint read the continuation as an indented code block
+      and then flag every fenced block in the file under MD046, so a long entry
+      has to be one paragraph. `mdtablefix --check` and this file's
+      hand-wrapping disagree about where a line breaks, so reflowing a passage
+      by hand fails `check-fmt` until it is reflowed by the same rules — wrap
+      at 80 with a six-space continuation indent. And a claim about a check run
+      should be read off the run itself: the first draft of this correction
+      said six of eight gates passed, which counted the four passing gates as
+      though there were six of them. The summary line names both totals.
 
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
