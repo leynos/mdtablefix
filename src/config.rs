@@ -392,3 +392,7 @@ fn extension_filter(config: &ConfigFile, cli: &Cli) -> Result<ExtensionFilter, C
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;
