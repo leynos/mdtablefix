@@ -1848,6 +1848,52 @@ scan directory as its working directory. The regression tests
 open for writing while it runs, so direct execution fails them
 deterministically.
 
+## Configuration layering
+
+`src/config.rs` is a binary-only module: `src/main.rs` declares it and
+`src/lib.rs` does not, so the reusable library never names `ortho_config`.
+`tests/cli_config_dependency_contract.rs` holds that boundary by scanning every
+file under `src/` for the framework's name and allowing it only in
+`src/config.rs` and `src/config_tests.rs`. A Cargo feature cannot express the
+boundary, because `ortho_config` is a normal dependency of the package and is
+therefore linked into the library as well as the binary; what keeps the library
+reusable is that no library source uses it.
+
+The module resolves settings in one pass and hands the driver a plain
+`Settings` struct with no configuration types in its signature, so the code
+that formats a file cannot tell where a setting came from. The layers are
+composed by hand rather than by the derive's generated loader, for the reason
+[ADR 0014](adrs/0014-configuration-layering.md) records: the generated parser
+renders every boolean switch with a value placeholder and accepts
+`--wrap=false`, and it adds a hidden `--config-path`, either of which would
+change the command line this tool already has. `Cli::parse_validated()` stays
+the only argument parser, and `ConfigFile` is used only as a merge target.
+
+`Settings::resolve` is the process-backed entry point; it names
+`process_env_source()` and `process_scan_env_source()` once, at the composition
+root, and delegates to `Settings::resolve_with_sources`, which takes the two
+shared traits. That split exists for
+[the environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md):
+discovery only performs named lookups while the merge layer enumerates a
+prefix, so the two are separate traits, and a test supplies one `MapEnv` as
+both. Nothing in the module reads the process environment itself.
+
+Two rules decide which layer an argument reaches. A value counts as typed only
+when `ArgMatches::value_source` reports `ValueSource::CommandLine`, so a clap
+default never outranks a configured value and never counts as typing the flag
+that carries it — which is what keeps `--md-exts` from demanding `--git` when a
+file supplied the list. And a positional file argument outranks a configured
+`git`, because a path is the user's own statement of what to act on; `Settings`
+states that rule once, so no caller has a second copy to drift from.
+
+One dependency is worth knowing about. `ortho_config`'s discovery builder
+always resolves a Project root from the process working directory, and the
+method that would substitute one is crate-private upstream. A test asserting a
+compiled-in default therefore also relies on the repository root holding no
+`.mdtablefix.toml` and no `mdtablefix/config.toml`. `src/config_tests.rs`
+states that in its module documentation; if such a file ever appears at the
+root, the affected cells fail loudly rather than passing for the wrong reason.
+
 ## Coverage publication belongs to `main`
 
 Coverage has two persistent outputs, the CodeScene upload and the ratchet

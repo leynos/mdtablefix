@@ -175,6 +175,88 @@ line to standard error: this tool's own wording with Git's diagnostic appended.
 The process is always `git ls-files`, run without a shell, so nothing a user
 typed is ever interpreted as a command.
 
+### Configuration
+
+A repository that formats the same way on every run can state its rule set once
+in a configuration file or an environment variable instead of repeating the
+flags. Configuration supplies _settings_ — what the tool does — and never the
+mode or the file arguments, which stay the invocation's own business. The
+configurable keys are the eight transformation switches, `md_exts`, and the
+three Git selection switches.
+
+A file supplies a key the same way the flag does. This file formats paragraphs,
+renumbers lists, and normalises thematic breaks without any flag being typed:
+
+```toml
+wrap = true
+renumber = true
+breaks = true
+```
+
+The file is TOML. Its name is `config.toml` inside a `mdtablefix` directory, or
+`.mdtablefix.toml`, and discovery reads it from these locations, most preferred
+first:
+
+| Order | Location                                                              |
+| ----- | --------------------------------------------------------------------- |
+| 1     | The path named by `MDTABLEFIX_CONFIG_PATH`, when set and non-empty.   |
+| 2     | `$XDG_CONFIG_HOME/mdtablefix/config.toml`, then the dotfile beside    |
+|       | it.                                                                   |
+| 3     | The same pair under each `XDG_CONFIG_DIRS` entry, or under `/etc/xdg` |
+|       | when the variable is unset or names no usable directory.              |
+| 4     | The same pair under `%APPDATA%`, then under `%LOCALAPPDATA%`.         |
+| 5     | `$HOME/.config/mdtablefix/config.toml`, then                          |
+|       | `$HOME/.config/.mdtablefix.toml`, then `$HOME/.mdtablefix.toml`.      |
+| 6     | `.mdtablefix.toml` in the working directory.                          |
+
+_Table 2: Where a configuration file is found._
+
+Precedence runs the other way. A typed command-line flag wins over an
+environment variable, which wins over a configuration file, which wins over the
+compiled-in default. The layers stack rather than replace: a file that sets
+`wrap` and an environment that sets `breaks` supply both, and only a key stated
+twice needs a decision.
+
+Every setting also has an environment variable, spelled `MDTABLEFIX_` followed
+by the key in upper case: `MDTABLEFIX_WRAP`, `MDTABLEFIX_RENUMBER`,
+`MDTABLEFIX_BREAKS`, `MDTABLEFIX_ELLIPSIS`, `MDTABLEFIX_FENCES`,
+`MDTABLEFIX_FOOTNOTES`, `MDTABLEFIX_CODE_EMPHASIS`, `MDTABLEFIX_HEADINGS`,
+`MDTABLEFIX_MD_EXTS`, `MDTABLEFIX_GIT`, `MDTABLEFIX_INCLUDE_UNTRACKED`, and
+`MDTABLEFIX_ALLOW_CONFLICTED`. A boolean takes `true` or `false` in any case,
+and a list may be written with brackets (`[rst,xml]`), as a quoted list
+(`["rst"]`), or as bare comma-separated words (`rst,xml`). A list written with
+spaces but no commas (`rst xml`) is a single string, which is not a list, so
+the run fails rather than silently narrowing the selection.
+
+Four failures are worth recognising, all of which exit `2` with the diagnostic
+on standard error and nothing on standard output:
+
+- `MDTABLEFIX_CONFIG_PATH` names a file that does not exist. A named file is
+  required, so this is an error rather than a silent fall back to discovery,
+  and the diagnostic quotes the path it was given.
+- A file is not valid TOML. The diagnostic quotes the path, the line and column,
+  and the parser's complaint.
+- A value has the wrong type — `wrap = "yes"` rather than `wrap = true`. The
+  diagnostic names the mismatch,
+  `invalid type: string "yes", expected a boolean`. It does not repeat the file
+  path, because the value has already been merged by the time the type is
+  checked; the setting it names is what identifies the source.
+- A configured `md_exts` holds an extension this tool rejects. These values did
+  not pass through the command line's parser, so the diagnostic names the key:
+  `invalid configuration value for md_exts: ...`.
+
+An unknown key is ignored, so a file written for a newer version still loads. A
+missing file at an automatic location is not an error; it simply contributes
+nothing. When no configuration is found and no variable is set, a run behaves
+exactly as it did before configuration existed.
+
+One asymmetry follows from the flags themselves. Every transformation switch is
+a bare presence flag, so the command line can turn a setting _on_ but cannot
+turn one _off_: `--breaks=false` is a usage error. A file or variable that
+enables a transformation is therefore disabled at the environment layer, which
+can express `false` — `MDTABLEFIX_BREAKS=false` beside `breaks = true` leaves
+breaks alone — and not by a typed flag.
+
 ### Exit status
 
 | Status | Meaning                                                       |
@@ -185,7 +267,7 @@ typed is ever interpreted as a command.
 | `2`    | A file could not be read or rewritten, the selection of files |
 |        | failed, or the command line was rejected.                     |
 
-_Table 2: The exit statuses._
+_Table 3: The exit statuses._
 
 An error outranks drift: a run that could not read one file exits `2` even when
 another file drifted, so a gate never reports a clean tree from an incomplete
