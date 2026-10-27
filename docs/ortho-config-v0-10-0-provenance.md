@@ -31,7 +31,7 @@ peels it to the commit. The documentation was read from that commit, never from
 | `docs/ortho-config-v0-10-0-migration-guide.md` | `docs/v0-10-0-migration-guide.md` | `b5331aa6cfcc07b3dcd188c620db98d0a1a1f13b0c8ef96d88913d701bca25bf` | 498   |
 
 Upstream's own name for the migration guide carries a `v0-` prefix; this
-repository's copy carries the same prefix so the two names stay recognisably
+repository's copy carries the same prefix so the two names stay recognizably
 related.
 
 ## Re-syncing

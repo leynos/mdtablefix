@@ -155,7 +155,7 @@ fn no_library_source_names_the_framework() -> Result<()> {
 /// files, so the reachability half is asserted by walking the module graph
 /// rather than by matching a declaration's text. Text cannot see
 /// `#[path = "config.rs"] mod settings;`, which reaches the same file under a
-/// name no literal check would recognise, so the walk follows `mod`, `#[path]`
+/// name no literal check would recognize, so the walk follows `mod`, `#[path]`
 /// and `include!` alike.
 #[test]
 fn the_library_reaches_no_binary_only_source() -> Result<()> {

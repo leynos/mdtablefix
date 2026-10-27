@@ -699,7 +699,7 @@ Document with evidence so future work benefits.
   editing the fixture.
 - Observation (CodeRabbit round three): a `#[path = "config.rs"] mod settings;`
   in `src/lib.rs` reaches a binary-only file without writing any text the
-  dependency contract's scan could recognise. Impact: the reachability half is
+  dependency contract's scan could recognize. Impact: the reachability half is
   now a module-graph walk in `tests/support/module_graph.rs`, following `mod`,
   `#[path]` and `include!`, with an unresolvable declaration treated as an
   error rather than a skipped edge.

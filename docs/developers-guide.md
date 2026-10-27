@@ -1880,7 +1880,7 @@ trusting the list. It does so by walking the module graph from `src/lib.rs` with
 `tests/support/module_graph.rs`, which follows `mod` declarations, `#[path]`
 attributes and `include!` alike, because text cannot see that
 `#[path = "config.rs"] mod settings;` reaches the same file under a name no
-literal check would recognise. A declaration naming no existing file is an
+literal check would recognize. A declaration naming no existing file is an
 error rather than a skipped edge, so a resolver that quietly stopped following
 one would fail rather than pass. The walker expands no macros, so a macro whose
 body or arguments write `mod` is reported as unanalysable instead of skipped: a
