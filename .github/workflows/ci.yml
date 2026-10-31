@@ -43,6 +43,8 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v24.2.0
         with:
           globs: '**/*.md'
+      - name: Install Whitaker
+        uses: leynos/shared-actions/.github/actions/install-whitaker@5a99aed78ce68dcebd3052b75c31e6f173162b1e
       - name: Lint
         run: make lint
       - name: Test and Measure Coverage
