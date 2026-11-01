@@ -596,6 +596,13 @@ actual current state of the work.
       value" as a layer, when the design adds no such option and
       `MDTABLEFIX_CONFIG_PATH` selects a file rather than forming a layer of
       its own.
+- [x] (2026-11-01) CodeRabbit round twelve on `ee9bfa4`: one finding, accepted.
+      The paragraph describing `FormatOpts` said "each of the twelve
+      configurable settings" accepts the three `=<BOOL>` spellings, but
+      `md_exts` is one of those twelve and takes a list, not a boolean. Eleven
+      are switches; the paragraph now says eleven and names `md_exts` as the
+      exception, so the count agrees with the other three places in this file
+      and with ADR 0014, which already said eleven.
 - [x] (2026-10-27) The CodeScene record was wrong and is now corrected
       (`1596ad0`, `c87afa9`, `4e0dc27`). Two errors: the entry called the two
       surviving findings advisory when they also fail the critical
@@ -1579,9 +1586,10 @@ depends on `--in-place` staying valueless.
 `FormatOpts` is the eight-flag rule set flattened into `Cli`: `--wrap`,
 `--renumber`, `--breaks`, `--ellipsis`, `--fences`, `--footnotes`,
 `--code-emphasis`, and `--headings`, each a `bool` with the same bundle, so
-each of the twelve configurable settings accepts `--flag`, `--flag=true`, and
-`--flag=false` while rejecting `--flag=80`. `From<FormatOpts> for Options`
-carries them into the library.
+each of the eleven configurable switches accepts `--flag`, `--flag=true`, and
+`--flag=false` while rejecting `--flag=80`. The twelfth setting, `md_exts`,
+takes a list rather than a boolean and is unaffected.
+`From<FormatOpts> for Options` carries them into the library.
 
 `Cli::parse_validated()` parses argv, then enforces one cross-argument rule that
 `clap` cannot express on its own:
