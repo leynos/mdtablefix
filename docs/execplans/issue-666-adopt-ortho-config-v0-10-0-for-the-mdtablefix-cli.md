@@ -700,6 +700,28 @@ actual current state of the work.
       decision stands. Round fifteen on the resulting head found nothing at
       all: zero findings across the same 34 files.
 
+- [x] (2026-11-01) CodeRabbit round sixteen, five findings reducing to three.
+      The duplicated pair on `tests/cli_config_dependency_contract.rs` was a
+      real brittleness: four `contains` assertions on exact spellings, and a
+      `required-features = ["cli"]` match that would fire anywhere in the file.
+      The test now parses `Cargo.toml` with `toml::from_str` and reads
+      `dependencies.ortho_config.optional`, the `default` and `cli` feature
+      members, and the `mdtablefix` `[[bin]]`'s own `required-features`. The
+      walker that test needed moved to `tests/support/source_walk.rs`, because
+      the rewritten test would otherwise have taken the file past the 400-line
+      cap. The second duplicated pair was a regression I introduced in
+      `fe40ede`: two mode-input cases pushed `tests/cli_git.rs` to 445 lines.
+      They now live in `tests/cli_git_mode_inputs.rs`, sharing
+      `tests/support/cli_git_fixture.rs`; the pair was also strengthened, since
+      "not rejected" is satisfied by a run that accepts and then does nothing,
+      so each accepted case now asserts on what the mode actually produced and
+      `--in-place` gets its own rewriting case. The minor finding was real too:
+      `md_exts = []` is valid TOML whose zero members all parse, so
+      `extension_filter` now rejects the empty list by name, with a unit case in
+      `src/config_error_tests.rs`, a process-level case in
+      `tests/cli_config_failure_binary.rs`, and matching paragraphs in the users'
+      guide and ADR 0014.
+
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while

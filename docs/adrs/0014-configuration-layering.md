@@ -218,6 +218,13 @@ that is neither a `Vec` nor a map — `merge_strategy` may not even be written o
 such a field, where it is a compile error — and it is the behaviour the
 precedence rule requires. A user who sets an extension list means that list.
 
+Replacement makes an empty list reachable from a file, and an empty filter
+selects nothing: a `--git` run would then report an empty selection as a
+successful run. The resolution therefore rejects `md_exts = []` with the same
+error it uses for a value the parser refuses, naming the key. The command line
+cannot express the case, because `--md-exts` takes at least one value, so this
+is a rule the configured path needs and the typed one does not.
+
 A schema whose every field is optional, merged from no layers at all, still
 deserializes: the framework normalizes the empty accumulator to an empty object
 before deserialization, so the absent case is all-`None` rather than an error.

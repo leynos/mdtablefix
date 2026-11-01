@@ -261,3 +261,30 @@ fn an_unreadable_project_file_is_reported_beside_a_valid_user_file() {
         "a run that could not load its configuration must not touch the input"
     );
 }
+
+/// An empty extension list is rejected rather than selecting nothing.
+///
+/// The process-level half of the unit case: `md_exts = []` is valid TOML and
+/// every one of its zero members parses, so only the explicit length check
+/// catches it. Without this, a `--git` run would select nothing and report
+/// that as a successful, empty run — indistinguishable from "no files need
+/// changing", which is exactly the silence a configuration mistake should not
+/// be able to produce.
+///
+/// The positional path is supplied for the same reason as the rejected-value
+/// case above: every setting is validated whether or not the resolved mode
+/// consults it.
+#[test]
+fn an_empty_extension_list_names_its_key() {
+    let fixture = Fixture::new();
+    let config = fixture.write("selected.toml", "md_exts = []\n");
+    fixture.write("notes.md", RAGGED);
+
+    let run = fixture.run_selected(&config, &["notes.md"], "");
+
+    assert_failure(
+        &run,
+        2,
+        "invalid configuration value for md_exts: the extension list must name at least one",
+    );
+}

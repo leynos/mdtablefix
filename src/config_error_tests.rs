@@ -121,6 +121,34 @@ fn an_extension_the_parser_rejects_names_its_key() {
     );
 }
 
+/// An empty extension list is rejected rather than selecting nothing.
+///
+/// The list is valid TOML and every one of its zero members parses, so only an
+/// explicit length check catches it. Left alone it would build an empty filter
+/// and a `--git` run would report a selection of nothing — a result the user
+/// could not explain from the file they wrote, and one they would more likely
+/// read as "no files need changing" than as a mistake.
+///
+/// The command line cannot reach this state, because `--md-exts` takes at least
+/// one value, which is why the guard belongs here rather than in the parser.
+#[test]
+fn an_empty_extension_list_is_an_error() {
+    let fixture = Fixture::new();
+    let environment = fixture.selecting("md_exts = []\n");
+
+    let error = resolve(&["mdtablefix"], &environment).expect_err("the list names no extension");
+
+    assert!(
+        matches!(&error, ConfigError::InvalidValue { key, .. } if key == "md_exts"),
+        "{error:?}"
+    );
+    assert_eq!(
+        error.to_string(),
+        "invalid configuration value for md_exts: the extension list must name at least one \
+         extension"
+    );
+}
+
 /// A key the schema does not know is ignored, so a newer file still loads.
 #[test]
 fn an_unknown_key_is_ignored() {

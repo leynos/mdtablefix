@@ -285,6 +285,12 @@ on standard error and nothing on standard output:
 - A configured `md_exts` holds an extension this tool rejects. These values did
   not pass through the command line's parser, so the diagnostic names the key:
   `invalid configuration value for md_exts: ...`.
+- A configured `md_exts` names no extension at all — `md_exts = []`. The list
+  is valid TOML, so only an explicit check catches it, and it is rejected for
+  the same reason a value that could never match is: a filter that selects
+  nothing would end a `--git` run with an empty result the user could not
+  explain from the file they wrote. The command line cannot express this case,
+  because `--md-exts` takes at least one value.
 
 An unknown key is ignored, so a file written for a newer version still loads. A
 missing file at an automatic location is not an error; it simply contributes

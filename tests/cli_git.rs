@@ -9,129 +9,12 @@
 //! configuration neutralised, because the developer's own `core.excludesFile`
 //! would otherwise leak into what is selected.
 
-use std::{path::Path, process::Command as ProcessCommand};
-
-use assert_cmd::Command;
 use rstest::rstest;
-use tempfile::TempDir;
 
-/// A ragged table, which every mode must agree needs reformatting.
-const RAGGED: &str = "|A|B|\n|---|---|\n|1|2|\n";
+#[path = "support/cli_git_fixture.rs"]
+mod fixture;
 
-/// The same table already aligned, which no mode may change.
-const CLEAN: &str = "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n";
-
-/// What one run of the binary produced.
-struct Run {
-    /// The process exit status, or `-1` when the process was signalled.
-    status: i32,
-    /// Standard output as text.
-    stdout: String,
-    /// Standard error as text.
-    stderr: String,
-}
-
-/// A fixture repository in a temporary directory.
-struct Fixture {
-    /// Kept alive for the length of the test; dropping it deletes the tree.
-    directory: TempDir,
-}
-
-impl Fixture {
-    /// Creates an empty repository whose default branch is `main`.
-    fn new() -> Self {
-        let directory = tempfile::tempdir().expect("create temporary directory");
-        let fixture = Self { directory };
-        fixture.git(&["init", "--quiet", "-b", "main"]);
-
-        fixture
-    }
-
-    /// Runs `git` in the repository, requiring it to succeed.
-    fn git(&self, args: &[&str]) {
-        let output = self
-            .git_command(args)
-            .output()
-            .expect("run git; the fixture needs it on PATH");
-        assert!(
-            output.status.success(),
-            "git {args:?} failed with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-
-    /// The fixture's hardened `git` invocation.
-    ///
-    /// `GIT_CONFIG_GLOBAL=/dev/null` removes the developer's configuration
-    /// along with their identity, so the fixture supplies the identity through
-    /// the environment rather than through a file inside the repository — a
-    /// file the selection could then read.
-    fn git_command(&self, args: &[&str]) -> ProcessCommand {
-        let mut command = ProcessCommand::new("git");
-        command
-            .current_dir(self.root())
-            .args(args)
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("GIT_CONFIG_GLOBAL", "/dev/null")
-            .env("HOME", self.root())
-            .env("LC_ALL", "C")
-            .env("LANGUAGE", "")
-            .env("GIT_AUTHOR_NAME", "mdtablefix tests")
-            .env("GIT_AUTHOR_EMAIL", "tests@example.invalid")
-            .env("GIT_COMMITTER_NAME", "mdtablefix tests")
-            .env("GIT_COMMITTER_EMAIL", "tests@example.invalid");
-
-        command
-    }
-
-    /// The repository root.
-    fn root(&self) -> &Path { self.directory.path() }
-
-    /// Writes `content` as `name`, creating its parent directories.
-    fn write(&self, name: &str, content: impl AsRef<[u8]>) {
-        let path = self.root().join(name);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).expect("create the fixture's directory");
-        }
-        std::fs::write(&path, content).expect("write a fixture");
-    }
-
-    /// Writes `name` and stages it.
-    fn track(&self, name: &str, content: impl AsRef<[u8]>) {
-        self.write(name, content);
-        self.git(&["add", "--", name]);
-    }
-
-    /// Reads `name` as text.
-    fn read(&self, name: &str) -> String {
-        std::fs::read_to_string(self.root().join(name)).expect("read a fixture")
-    }
-
-    /// Runs the binary in the repository root.
-    fn run(&self, args: &[&str]) -> Run { run_in(self.root(), args) }
-}
-
-/// Runs the binary in `directory`, with the same hardened environment.
-fn run_in(directory: &Path, args: &[&str]) -> Run {
-    let output = Command::cargo_bin("mdtablefix")
-        .expect("cargo binary")
-        .current_dir(directory)
-        .args(args)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("HOME", directory)
-        .env("LC_ALL", "C")
-        .env("LANGUAGE", "")
-        .output()
-        .expect("run mdtablefix");
-
-    Run {
-        status: output.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    }
-}
+use fixture::{CLEAN, Fixture, RAGGED, command_in, run_in};
 
 /// REQ-GIT-003: `--md-exts` replaces the default set rather than adding to it,
 /// a leading dot is optional, and surrounding whitespace is ignored.
@@ -259,82 +142,6 @@ fn a_git_only_flag_without_git_is_rejected(#[case] args: &[&str], #[case] flag: 
     );
 }
 
-/// A mode flag needs an input of its own, and `--git=false` is not one.
-///
-/// The `mode` group's `requires("inputs")` is satisfied by typing `--git`,
-/// whatever value is typed with it, so this path passed parsing while stating
-/// that no Git selection was wanted. Standard input was then read and, in a
-/// reporting mode, printed and exited 0 — a run that reports nothing and
-/// leaves a script believing it passed. Before the optional `=<BOOL>` value
-/// the state could not be expressed, which is why the group alone sufficed.
-///
-/// Input is supplied on standard input precisely because that is the fallback
-/// under test: a run that read it would print the formatted table here.
-///
-/// `--list-files` is deliberately absent: it is caught a step earlier by the
-/// `--list-files requires --git` rule, because reading paths is not something a
-/// file argument can stand in for either. These three are the modes that
-/// otherwise fell through to standard input.
-#[rstest]
-#[case("--check")]
-#[case("--diff")]
-#[case("--in-place")]
-fn a_mode_flag_with_git_false_and_no_file_is_rejected(#[case] mode: &str) {
-    let fixture = Fixture::new();
-
-    let output = Command::cargo_bin("mdtablefix")
-        .expect("cargo binary")
-        .current_dir(fixture.root())
-        .args([mode, "--git=false"])
-        .write_stdin(RAGGED)
-        .output()
-        .expect("run mdtablefix");
-
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "stderr must drive the status"
-    );
-    assert!(
-        output.stdout.is_empty(),
-        "a rejected run must print nothing to stdout: {:?}",
-        String::from_utf8_lossy(&output.stdout)
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains(&format!("{mode} requires --git or at least one file")),
-        "the rejection must name the mode flag: {stderr}"
-    );
-}
-
-/// The same mode flags are accepted when `--git=true` or a file is supplied.
-///
-/// The positive control for the case above: a check that rejected every mode
-/// flag, or that ignored the value of `--git`, would pass a test that only
-/// asserted rejection. `--list-files` is used because it reads no document, so
-/// the assertion is about acceptance rather than about formatting.
-#[rstest]
-#[case(&["--list-files", "--git=true"])]
-#[case(&["--list-files", "--git"])]
-#[case(&["--check", "notes.md"])]
-fn a_mode_flag_with_a_usable_input_is_accepted(#[case] args: &[&str]) {
-    let fixture = Fixture::new();
-    fixture.track("notes.md", RAGGED);
-
-    let output = Command::cargo_bin("mdtablefix")
-        .expect("cargo binary")
-        .current_dir(fixture.root())
-        .args(args)
-        .output()
-        .expect("run mdtablefix");
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !stderr.contains("requires --git or at least one file"),
-        "a usable input must not be rejected: {stderr}"
-    );
-}
-
 /// The default extension set is still the default when the flag is absent from
 /// a successful run, which is what makes the replacement above observable.
 #[test]
@@ -413,8 +220,9 @@ fn a_git_failure_is_reported_as_one_deliberate_line() {
 /// line below it.
 #[test]
 fn help_documents_the_git_flags() {
-    let output = Command::cargo_bin("mdtablefix")
-        .expect("cargo binary")
+    // The help rendering does not depend on the working directory, so the
+    // fixture's hardened environment is reused without building a repository.
+    let output = command_in(&std::env::temp_dir())
         .arg("--help")
         .output()
         .expect("run mdtablefix --help");

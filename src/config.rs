@@ -304,10 +304,23 @@ fn formatting_options(config: &ConfigFile, cli: &Cli) -> FormatOpts {
 /// Configuration values did not pass through clap's `value_parser`, so they are
 /// parsed here with the same function. A rejected value names the key rather
 /// than silently narrowing the selection.
+///
+/// An empty list is rejected for the reason [`parse_extension`] refuses an
+/// empty value: a filter that matches nothing selects nothing, and a `--git`
+/// run would then report an empty selection the user could not explain from the
+/// file they wrote. The command line cannot reach the state — `--md-exts`
+/// requires at least one value — so this is the one path where the guard is
+/// needed.
 fn extension_filter(config: &ConfigFile, cli: &Cli) -> Result<ExtensionFilter, ConfigError> {
     let Some(values) = config.md_exts.as_deref() else {
         return Ok(cli.extensions());
     };
+    if values.is_empty() {
+        return Err(ConfigError::InvalidValue {
+            key: String::from("md_exts"),
+            message: String::from("the extension list must name at least one extension"),
+        });
+    }
 
     values
         .iter()

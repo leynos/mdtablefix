@@ -30,9 +30,17 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 
-// The path is relative to this file's own directory, `tests/`.
+// The paths are relative to this file's own directory, `tests/`.
 #[path = "support/module_graph.rs"]
 mod module_graph;
+// The filesystem walk lives on its own so this file stays a statement of the
+// contract rather than of how a tree is listed. Unlike the two files elsewhere
+// that share the Git fixture, this module is declared by exactly one binary, so
+// every item it defines is reached here and none is dead code.
+#[path = "support/source_walk.rs"]
+mod source_walk;
+
+use source_walk::rust_sources;
 
 /// The dependency whose absence from the library is the invariant.
 const FRAMEWORK: &str = "ortho_config";
@@ -56,117 +64,6 @@ fn repository_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 /// Reads a repository file as text.
 fn read(path: &Path) -> Result<String> {
     std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))
-}
-
-/// Whether `directory` is one the walk should descend into.
-///
-/// `target` holds build output and a dotfile directory holds editor or tooling
-/// state; neither can contain a source this crate compiles, and descending into
-/// `target` alone would dwarf the sources the check reads.
-fn is_walkable(directory: &Path) -> bool {
-    let name = directory
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-
-    !name.starts_with('.') && name != "target"
-}
-
-/// The entries of `directory`, or a failure naming it.
-///
-/// Kept separate so [`rust_sources`] reads as a visit rather than as error
-/// plumbing, and so the diagnostic that names an unreadable directory is
-/// written once.
-fn entries_of(directory: &Path) -> Result<Vec<std::fs::DirEntry>> {
-    std::fs::read_dir(directory)
-        .with_context(|| format!("listing {}", directory.display()))?
-        .map(|entry| entry.with_context(|| format!("reading an entry of {}", directory.display())))
-        .collect()
-}
-
-/// What the walk should do with one directory entry.
-///
-/// Naming the three outcomes lets [`rust_sources`] dispatch on a value instead
-/// of nesting its tests: the loop body stays one `match` however many rules a
-/// classification grows.
-enum Step {
-    /// A directory worth descending into.
-    Descend(PathBuf),
-    /// A Rust source to collect.
-    Source(PathBuf),
-    /// Something the walk ignores, such as build output or a non-source file.
-    Ignore,
-}
-
-/// Classifies one entry of the walk.
-///
-/// A directory the walk should not descend into is ignored rather than
-/// collected, and a file is collected only for its `.rs` suffix. The suffix
-/// test goes through the lossy name because a non-UTF-8 file name cannot end in
-/// `.rs` as this crate's sources do.
-fn classify(entry: &std::fs::DirEntry) -> Step {
-    let path = entry.path();
-    if path.is_dir() {
-        return if is_walkable(&path) {
-            Step::Descend(path)
-        } else {
-            Step::Ignore
-        };
-    }
-    if entry.file_name().to_string_lossy().ends_with(".rs") {
-        return Step::Source(path);
-    }
-
-    Step::Ignore
-}
-
-/// The two things one directory contributes to the walk.
-///
-/// Separating them keeps [`rust_sources`] a loop over directories rather than a
-/// loop over directories containing a loop over entries containing a dispatch:
-/// each directory is read once, and the result says where the walk goes next.
-#[derive(Default)]
-struct Visit {
-    /// Subdirectories still to walk.
-    descend: Vec<PathBuf>,
-    /// Rust sources found directly in this directory.
-    sources: Vec<PathBuf>,
-}
-
-/// Reads one directory and classifies each of its entries.
-///
-/// The failure names the directory, because an unreadable one aborts the walk
-/// rather than shrinking it.
-fn visit_directory(directory: &Path) -> Result<Visit> {
-    let mut visit = Visit::default();
-    for entry in entries_of(directory)? {
-        match classify(&entry) {
-            Step::Descend(path) => visit.descend.push(path),
-            Step::Source(path) => visit.sources.push(path),
-            Step::Ignore => {}
-        }
-    }
-
-    Ok(visit)
-}
-
-/// Collects every Rust source beneath `root`, excluding `target` and dotfiles.
-///
-/// A breadth-first walk written against `std::path`, so it behaves the same way
-/// on every platform the CI matrix covers. A directory that cannot be read is
-/// fatal rather than skipped: an incomplete walk could miss a library source
-/// that names the framework, and so satisfy the invariant for the wrong reason.
-fn rust_sources(root: &Path) -> Result<Vec<PathBuf>> {
-    let mut pending = vec![root.to_path_buf()];
-    let mut found = Vec::new();
-    while let Some(directory) = pending.pop() {
-        let visit = visit_directory(&directory)?;
-        pending.extend(visit.descend);
-        found.extend(visit.sources);
-    }
-    found.sort();
-
-    Ok(found)
 }
 
 /// Renders `path` relative to `root`, with `/` separators.
@@ -338,32 +235,76 @@ fn the_walk_refuses_an_unanalysable_module_declaration() {
 
 /// The manifest still declares the framework, optionally, behind the CLI feature.
 ///
-/// Three things have to hold together for the feature to be a real boundary
+/// Four things have to hold together for the feature to be a real boundary
 /// rather than a declared one. The dependency must be declared, or the contract
 /// proves nothing on a tree where the adoption never happened. It must be
 /// `optional`, or `--no-default-features` silently keeps compiling it anyway.
-/// And it must be enabled by `default`, or a plain `cargo build` loses the
-/// binary.
+/// It must be enabled by `default`, or a plain `cargo build` loses the binary.
+/// And the *binary* must be the target that requires it, not some other target
+/// while `mdtablefix` itself compiles without the framework.
+///
+/// The manifest is parsed rather than searched, so a reformat — a respaced
+/// inline table, a `[ "cli" ]` array, a reordered `[features]` table — is not
+/// mistaken for a regression, and so `required-features` is read off the target
+/// it belongs to rather than matched wherever it appears.
 #[test]
 fn the_manifest_declares_the_framework() -> Result<()> {
-    let manifest = read(&repository_root().join("Cargo.toml"))?;
+    let source = read(&repository_root().join("Cargo.toml"))?;
+    let manifest: toml::Value = toml::from_str(&source)
+        .context("Cargo.toml is not valid TOML, so the manifest half of the contract cannot run")?;
 
+    // The witness: an expected key that is absent must fail here rather than
+    // reporting a satisfied contract on a manifest this test cannot read.
+    let dependencies = manifest
+        .get("dependencies")
+        .and_then(toml::Value::as_table)
+        .context("the manifest has no [dependencies] table")?;
+    let framework = dependencies
+        .get(FRAMEWORK)
+        .context("the manifest no longer declares ortho_config, so this contract proves nothing")?;
     ensure!(
-        manifest.contains(&format!("{FRAMEWORK} = ")),
-        "the manifest no longer declares {FRAMEWORK}, so this contract proves nothing"
+        framework.get("optional").and_then(toml::Value::as_bool) == Some(true),
+        "{FRAMEWORK} is no longer `optional`, so `default-features = false` keeps compiling it"
     );
-    for required in [
-        format!("{FRAMEWORK} = {{ version = \"0.10.0\", optional = true }}"),
-        String::from("default = [\"cli\"]"),
-        String::from("cli = [\"dep:ortho_config\", \"dep:serde\"]"),
-        String::from("required-features = [\"cli\"]"),
+
+    let features = manifest
+        .get("features")
+        .and_then(toml::Value::as_table)
+        .context("the manifest has no [features] table")?;
+    for (feature, required) in [
+        ("default", "cli"),
+        ("cli", "dep:ortho_config"),
+        ("cli", "dep:serde"),
     ] {
+        let members = features
+            .get(feature)
+            .and_then(toml::Value::as_array)
+            .with_context(|| format!("the manifest has no `{feature}` feature"))?;
         ensure!(
-            manifest.contains(&required),
-            "the manifest no longer states `{required}`, so the library and the command line \
-             share one dependency set again"
+            members
+                .iter()
+                .any(|member| member.as_str() == Some(required)),
+            "the `{feature}` feature no longer includes `{required}`"
         );
     }
+
+    let binaries = manifest
+        .get("bin")
+        .and_then(toml::Value::as_array)
+        .context("the manifest declares no [[bin]] target")?;
+    let binary = binaries
+        .iter()
+        .find(|target| target.get("name").and_then(toml::Value::as_str) == Some("mdtablefix"))
+        .context("no [[bin]] target is named mdtablefix")?;
+    let required = binary
+        .get("required-features")
+        .and_then(toml::Value::as_array)
+        .context("the mdtablefix [[bin]] states no required-features")?;
+    ensure!(
+        required.iter().any(|member| member.as_str() == Some("cli")),
+        "the mdtablefix [[bin]] no longer requires `cli`, so it would compile without the \
+         framework"
+    );
 
     Ok(())
 }
