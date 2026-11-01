@@ -276,9 +276,21 @@ would make a repository's checked-in rule set harder to override for one
 invocation than the environment variable it replaced.
 
 The cost is a real change to the command line: `--breaks=false` was a usage
-error and is now accepted. That is recorded rather than hidden, and it is the
-only argument the tool newly accepts. The behaviour-preservation constraint is
-about vectors that already worked, and none of them changes meaning.
+error and is now accepted, and so is the corresponding `=<BOOL>` form of every
+other configurable switch — `--wrap=true`, `--git=false`,
+`--include-untracked=false` and the rest. That is recorded rather than hidden.
+The behaviour-preservation constraint is about vectors that already worked, and
+none of them changes meaning; the newly accepted spellings are all of the form
+`--flag=<true|false>`, which no earlier release accepted.
+
+One consequence needs stating beside the rule, because it is not obvious from
+the grammar alone. `--git=false` is a *typed* flag and so satisfies the `mode`
+group's `requires("inputs")`, while stating that no Git selection is wanted.
+`Cli::parse_validated` therefore also rejects a typed mode flag (`--check`,
+`--diff`, `--in-place`) given with no file and `git == false`, exiting 2 with
+`<flag> requires --git or at least one file`. Without that guard the run would
+fall through to standard input and, in a reporting mode, print a formatted
+document and exit 0 while reporting nothing.
 
 `ValueSource::CommandLine` is the typed signal for these values too, so
 `--wrap=false` outranks a configured `true` by the same rule as a bare

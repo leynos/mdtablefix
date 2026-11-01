@@ -574,6 +574,28 @@ actual current state of the work.
       tests still assert rather than skip on this host (uid 1000, no skip line
       with `--nocapture`): `cargo test --test cli_config_failure_binary`, 8
       passed, 0 failed.
+- [x] (2026-11-01) CodeRabbit round eleven on `da536c1`: four findings, two
+      reported twice, all documentation and all correct. The ADR's "only
+      argument the tool newly accepts" sentence named `--breaks=false` alone
+      when every switch's `=<BOOL>` spelling is equally new — it now says so,
+      and records the `--git=false` mode-flag guard beside the rule that made
+      it necessary, since a reader of the ADR would otherwise meet the
+      rejection in `Cli::parse_validated` with nothing explaining it. The
+      other three findings were the same defect in the ExecPlan's
+      `Verification plan`, which the plan's own rules require to stay current
+      and which had drifted on three points: INV-NOCONFIG still named
+      `a_run_with_no_configuration_formats_as_it_always_did` and described
+      "an explicitly empty selected file", when the built test is
+      `a_run_with_no_configuration_at_all_formats_as_it_always_did` and uses
+      no selector and no candidate at all — the empty selected file is a
+      separate case, `an_empty_selected_file_leaves_every_default_in_place`,
+      which short-circuits discovery rather than exercising it; INV-PRECEDENCE
+      still said five keys and 50 cells, when `src/config_tests.rs` covers
+      twelve keys × five source combinations × two file supplies, 120 cells;
+      and INV-PRECEDENCE listed "an explicitly configured `--config-path`
+      value" as a layer, when the design adds no such option and
+      `MDTABLEFIX_CONFIG_PATH` selects a file rather than forming a layer of
+      its own.
 - [x] (2026-10-27) The CodeScene record was wrong and is now corrected
       (`1596ad0`, `c87afa9`, `4e0dc27`). Two errors: the entry called the two
       surviving findings advisory when they also fail the critical
@@ -1777,10 +1799,10 @@ invariants to the required behaviour.
   variable is set, the process writes the same standard output, the same
   standard error, and the same exit status as the base commit.
 - INV-PRECEDENCE: for every settings key `k`, the resolved value is the first
-  defined value in the order typed command-line flag (or an explicitly
-  configured `--config-path` value), then environment, then the most-preferred
-  configuration file, then the compiled-in default. "Typed" excludes a clap
-  default.
+  defined value in the order typed command-line flag, then environment, then
+  the most-preferred configuration file, then the compiled-in default. "Typed"
+  excludes a clap default. `MDTABLEFIX_CONFIG_PATH` is not a layer in that
+  order: it *selects* a file, and that file then participates as the file layer.
 - INV-TYPED: the `--git` requirement for `--include-untracked`,
   `--allow-conflicted`, `--list-files`, and `--md-exts` is judged on whether
   the user typed the flag, never on whether a configuration source supplied a
@@ -1819,36 +1841,38 @@ invariants to the required behaviour.
   observable behaviour of every mode, and the one case the configuration module
   could disturb is the invocation that supplies nothing at all. Domain: the
   default file mode reading standard input, in a temporary directory whose
-  configuration base directories all point into a temporary tree, with an
-  explicitly empty selected file so discovery cannot reach the host's own
-  configuration. Artefact: `tests/cli_config_binary.rs`'s
-  `a_run_with_no_configuration_formats_as_it_always_did`, plus the unchanged
-  `tests/snapshots/cli_git_help.snap` and the unchanged existing suites.
-  Evidence: `cargo test --workspace` passes with the snapshot unmodified; the
-  case asserts standard output equal to the expected rendering character for
-  character, empty standard error, and exit status 0. Non-vacuity: the expected
-  output is the aligned three-line table `CLEAN`, the input is the ragged
-  three-line table `RAGGED`, and the two differ in every cell, so a run that
-  echoed its input, produced nothing, or aligned differently would fail.
-  Reverting the wiring is not a meaningful control here — the module is what
-  supplies the merge — so the control is the pre-change output, recorded in the
-  test as the constant `CLEAN`. Deviation from the planned differential case:
-  the base binary is not built, because the case pins the exact bytes instead,
-  which is the same claim without a second compilation. Recorded in
-  `Decision log` deviation `a`.
+  configuration base directories all point into a temporary tree, with no
+  selector, no `MDTABLEFIX_*` variable, and no candidate anywhere discovery
+  reaches. Artefact: `tests/cli_config_binary.rs`'s
+  `a_run_with_no_configuration_at_all_formats_as_it_always_did`, plus the
+  unchanged `tests/snapshots/cli_git_help.snap` and the unchanged existing
+  suites. Evidence: `cargo test --workspace` passes with the snapshot
+  unmodified; the case asserts standard output equal to the expected rendering
+  character for character, empty standard error, and exit status 0.
+  Non-vacuity: the expected output is the aligned three-line table `CLEAN`, the
+  input is the ragged three-line table `RAGGED`, and the two differ in every
+  cell, so a run that echoed its input, produced nothing, or aligned
+  differently would fail. Reverting the wiring is not a meaningful control here
+  — the module is what supplies the merge — so the control is the pre-change
+  output, recorded in the test as the constant `CLEAN`. Deviation from the
+  planned differential case: the base binary is not built, because the case
+  pins the exact bytes instead, which is the same claim without a second
+  compilation. Recorded in `Decision log` deviation `a`.
 - Obligation: INV-PRECEDENCE.
   Method: parameterized `rstest` table over source combinations, using injected
   sources only. Rationale: the partition is finite and small; a table makes
   each cell's meaning explicit and makes a missing combination visible. Domain:
-  five keys (`wrap`, `renumber`, `headings`, `md_exts`, `git`) across five
-  source combinations (defaults only, file only, environment only, file and
-  environment, all three including the command line), with the file supplied
-  both through discovery and through an explicit `MDTABLEFIX_CONFIG_PATH`.
-  Artefact: `src/config_tests.rs` with a `MapEnv` and a temporary TOML file —
-  not `tests/cli_config.rs`, because `mod config` is binary-only; see
-  `Decision log` deviation `a`. Evidence: the table fails before the wiring
-  lands, because the configuration module does not exist; after the wiring, all
-  50 cells pass. Non-vacuity: each cell asserts the *resolved* value, not
+  twelve keys (`wrap`, `renumber`, `breaks`, `ellipsis`, `fences`, `footnotes`,
+  `code_emphasis`, `headings`, `md_exts`, `git`, `include_untracked`,
+  `allow_conflicted`) across five source combinations (defaults only, file
+  only, environment only, file and environment, all three including the command
+  line), with the file supplied both through discovery and through an explicit
+  `MDTABLEFIX_CONFIG_PATH`. Artefact: `src/config_tests.rs` with a `MapEnv` and
+  a temporary TOML file — not `tests/cli_config.rs`, because `mod config` is
+  binary-only; see `Decision log` deviation `a`. Evidence: the table fails
+  before the wiring lands, because the configuration module does not exist;
+  after the wiring, all 120 cells pass (12 keys × 5 source combinations × 2
+  file supplies). Non-vacuity: each cell asserts the *resolved* value, not
   merely that parsing succeeded, and the file-only and environment-only cells
   differ in value from each other and from the default so a layer silently
   dropped would change an assertion. Both controls were run: reversing the
