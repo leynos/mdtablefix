@@ -551,6 +551,29 @@ actual current state of the work.
       edits. Logs: `/tmp/mdtablefix-gate/test-cli-git-r9.log`,
       `check-fmt-issue-666-r9.out`, `markdownlint-issue-666-r9.out` and
       `nixie-issue-666-r9.out`.
+- [x] (2026-11-01) CodeRabbit round ten, run against `fe40ede` (the commit
+      above, pushed). Three findings, one reported twice, all accepted and
+      fixed. The ADR still said the absence of a `--config-path` option "keeps
+      `--help` byte-identical", which its own Consequences section contradicts
+      a few dozen lines later; it now says the true, narrower benefit — the
+      help stays free of any configuration flag. The other finding, reported
+      twice, is a correct objection to a probe this branch added the previous
+      day: `root_ignores_permissions()` tested `geteuid() == 0`, which is the
+      wrong property twice over. Root is not the only process that reads a
+      `0o000` file — an unprivileged one holding `CAP_DAC_OVERRIDE` or
+      `CAP_DAC_READ_SEARCH` does too, and on such a runner the identity check
+      would report "the read will fail" for a read that then succeeds, failing
+      the test for a reason unrelated to the tool — and the check needed
+      `libc::geteuid()` behind an `unsafe` block, against AGENTS.md's rule that
+      `unsafe` needs to be necessary. Replaced by
+      `permissions_are_ignored(path)`, which opens the file: the probe *is* the
+      denial, so it observes the property the test depends on rather than
+      inferring it, and it is safe. Both callers now probe the denied file
+      after the run and before `allow_read`, since reading it after the mode is
+      restored would always report "denied bits are honoured". Verified the
+      tests still assert rather than skip on this host (uid 1000, no skip line
+      with `--nocapture`): `cargo test --test cli_config_failure_binary`, 8
+      passed, 0 failed.
 - [x] (2026-10-27) The CodeScene record was wrong and is now corrected
       (`1596ad0`, `c87afa9`, `4e0dc27`). Two errors: the entry called the two
       surviving findings advisory when they also fail the critical
@@ -1875,12 +1898,17 @@ invariants to the required behaviour.
   `tests/cli_config_failure_binary.rs`, added 2026-11-01. Evidence: both exit
   2, leave standard output empty, name the file, and state the permission
   failure; the selected case also proves the positional input was not
-  rewritten. Non-vacuity: a run as root cannot fail a read on permission bits,
-  so each test checks `geteuid()` and *reports a skip* rather than passing
-  silently; the observed result under a non-root runner is asserted, so the
-  tests are evidence only where they actually ran. The discovered case is
-  written beside a valid user file, so a promotion that only fires in the
-  all-empty case fails it.
+  rewritten. Non-vacuity: a process that ignores permission bits cannot fail a
+  read on them, so each test probes the denied file and *reports a skip* rather
+  than passing silently; the observed result under a runner that honours the
+  bits is asserted, so the tests are evidence only where they actually ran. The
+  probe opens the `0o000` file rather than checking `geteuid() == 0`, because
+  root is not the only process that bypasses the bits — an unprivileged one
+  holding `CAP_DAC_OVERRIDE` does too, and an identity check would report "the
+  read will fail" for a read that then succeeds (CodeRabbit round ten, fixed
+  the same day; the behavioural probe also removed the only `unsafe` in this
+  branch's test support). The discovered case is written beside a valid user
+  file, so a promotion that only fires in the all-empty case fails it.
 - Obligation: INV-ENV.
   Method: the existing `make lint` gate, which denies
   `clippy::disallowed_methods`, plus the existing

@@ -361,7 +361,8 @@ second axis of precedence and a reserved key for a tool whose settings fit in
 one table. Help text and parse failures stay in English. No `cargo-mdtablefix`
 entry point is added, because the binary is not named that and nobody invokes
 it through Cargo. No `--config-path` option is added either: explicit selection
-is `MDTABLEFIX_CONFIG_PATH` alone, which keeps `--help` byte-identical.
+is `MDTABLEFIX_CONFIG_PATH` alone, which keeps `--help` free of any
+configuration flag.
 
 ## Consequences
 

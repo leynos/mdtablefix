@@ -19,7 +19,7 @@ mod permission_denial;
 
 use fixture::{Fixture, RAGGED, assert_clean_success, assert_failure};
 #[cfg(unix)]
-use permission_denial::{allow_read, deny_read, root_ignores_permissions};
+use permission_denial::{allow_read, deny_read, permissions_are_ignored};
 
 /// A selected file that is absent is an error on standard error, exit 2.
 #[test]
@@ -161,10 +161,10 @@ fn a_rejected_extension_names_its_key() {
 /// silently replace with the defaults.
 ///
 /// The mode is `0o000` rather than a read-only directory, because the
-/// configuration path is *read* rather than written. Root ignores permission
-/// bits, so a run as root cannot induce the failure at all; that is reported as
-/// a skip rather than asserted, since an assertion that never fails would be
-/// vacuous.
+/// configuration path is *read* rather than written. A process that ignores
+/// permission bits — root, or an unprivileged one holding `CAP_DAC_OVERRIDE` —
+/// cannot induce the failure at all; that is reported as a skip rather than
+/// asserted, since an assertion that never fails would be vacuous.
 #[cfg(unix)]
 #[test]
 fn an_unreadable_selected_file_exits_two_with_no_standard_output() {
@@ -174,10 +174,11 @@ fn an_unreadable_selected_file_exits_two_with_no_standard_output() {
     deny_read(&config);
 
     let run = fixture.run_selected(&config, &["drift.md"], "");
+    let permissions_ignored = permissions_are_ignored(&config);
     allow_read(&config);
 
-    if root_ignores_permissions() {
-        eprintln!("skipped: root ignores permission bits, so the read cannot fail");
+    if permissions_ignored {
+        eprintln!("skipped: this process ignores permission bits, so the read cannot fail");
         return;
     }
 
@@ -230,10 +231,11 @@ fn an_unreadable_project_file_is_reported_beside_a_valid_user_file() {
     deny_read(&project);
 
     let run = fixture.run(&["drift.md"], "");
+    let permissions_ignored = permissions_are_ignored(&project);
     allow_read(&project);
 
-    if root_ignores_permissions() {
-        eprintln!("skipped: root ignores permission bits, so the read cannot fail");
+    if permissions_ignored {
+        eprintln!("skipped: this process ignores permission bits, so the read cannot fail");
         return;
     }
 

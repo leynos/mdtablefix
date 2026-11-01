@@ -13,18 +13,26 @@
 //! itself. The atomic-rewrite suite denies a different thing — a write to a file
 //! that stays readable — with a read-only parent directory, and cannot be
 //! reused for this.
+//!
+//! Every item here is safe: whether a denied file can still be opened is
+//! observed by opening it, rather than inferred from the process's user ID.
 
 use std::path::Path;
 
-/// Whether this process is root, and therefore ignores permission bits.
+/// Whether the permission bits on `path` are ignored for this process.
 ///
-/// A permission-denied test that runs as root cannot induce the failure it
-/// asserts: the read it expects to fail succeeds. Each caller reports that as a
-/// skip, because an assertion that is never reached is not evidence.
-pub fn root_ignores_permissions() -> bool {
-    // SAFETY: `geteuid()` has no side effects and is safe to call in tests.
-    unsafe { libc::geteuid() == 0 }
-}
+/// Call this **after** [`deny_read`] and **before** [`allow_read`]: the probe is
+/// the denial itself. A process that can open a `0o000` file cannot induce the
+/// failure a permission-denied test asserts, because the read it expects to
+/// fail succeeds. Each caller reports that as a skip, because an assertion that
+/// is never reached is not evidence.
+///
+/// The probe is behavioural rather than a check for user ID 0, because root is
+/// not the only process that bypasses permission bits: a container runner may
+/// grant `CAP_DAC_OVERRIDE` or `CAP_DAC_READ_SEARCH` to an unprivileged user,
+/// and an identity check would report "not root, the read will fail" for a read
+/// that then succeeds, failing the test for a reason unrelated to the tool.
+pub fn permissions_are_ignored(path: &Path) -> bool { std::fs::File::open(path).is_ok() }
 
 /// Removes every permission bit from `path`, making it unreadable.
 ///
