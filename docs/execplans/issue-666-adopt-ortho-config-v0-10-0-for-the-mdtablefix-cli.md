@@ -1534,17 +1534,18 @@ fully verified, and named five gaps. Each is answered below.
   worked before changes meaning. Cost accepted and recorded: the CLI contract
   changes, and the help renders `--wrap[=<BOOL>]`, so
   `tests/snapshots/cli_git_help.snap` was regenerated once. Evidence: a probe
-  binary pinned all four spellings before the change was written, and
-  `src/command.rs`'s unit tests plus three process-level tests in
-  `tests/cli_config_binary.rs` pin them after. Recorded in ADR 0014 under
-  *Accept a typed value on every switch*, and in `docs/users-guide.md` and
-  `docs/developers-guide.md`. Residual note, stated plainly: the review asked
-  for a decision, and the decision to implement the syntax rather than document
-  the presence-only scope was taken by the implementation agent. It could not
-  be put to the user — the question tool was refused twice in this session — so
-  it is recorded as a design decision with its cost, not as an approved one. If
-  the repository prefers presence-only switches, reverting this change is a
-  self-contained edit to `src/command.rs` plus one snapshot, and the tests that
+  binary pinned all four spellings before the change was written, and three
+  process-level tests in `tests/cli_config_binary.rs` pin them after;
+  `src/command.rs` has no unit test module on this branch or its base. Recorded
+  in ADR 0014 under *Accept a typed value on every switch*, and in
+  `docs/users-guide.md` and `docs/developers-guide.md`. Residual note, stated
+  plainly: the review asked for a decision, and the decision to implement the
+  syntax rather than document the presence-only scope was taken by the
+  implementation agent. It could not be put to the user — the question tool was
+  refused twice in this session — so it is recorded as a design decision with
+  its cost, not as an approved one. If the repository prefers presence-only
+  switches, reverting this change is a self-contained edit to `src/command.rs`
+  and `src/command/format_options.rs` plus one snapshot, and the tests that
   would be removed are named in this entry. Date/Author: 2026-11-01,
   implementation agent.
 - Decision (accepted): the no-configuration process case runs with no selector,
@@ -1600,9 +1601,9 @@ fully verified, and named five gaps. Each is answered below.
   default on `is_takes_value_set()` and the possible values on `use_long_pv`),
   and the prediction matched the measurement exactly.
   `[possible values: true, false]` is kept because it describes the argument's
-  grammar. Evidence: `HIDE_SWITCH_DEFAULT` in `src/command.rs`, applied on all
-  eleven switches; `tests/snapshots/cli_git_help.snap`; ADR 0014. Date/Author:
-  2026-11-01, implementation agent.
+  grammar. Evidence: `HIDE_SWITCH_DEFAULT` in `src/command/format_options.rs`,
+  applied on all eleven switches; `tests/snapshots/cli_git_help.snap`; ADR
+  0014. Date/Author: 2026-11-01, implementation agent.
 - Decision (accepted, CodeRabbit round thirteen): make `ortho_config` and
   `serde` `optional` behind a default-on `cli` feature, and declare the binary
   with `required-features = ["cli"]`. Rationale: the earlier position — that
@@ -1692,7 +1693,8 @@ holds the `metrics` facade; `select` holds the file-selection tree.
 
 ### The command-line surface, in full
 
-`src/command.rs` declares:
+`src/command.rs` declares `Cli`, and `src/command/format_options.rs` declares
+the `FormatOpts` group it flattens in:
 
 ```rust
 #[derive(Parser)]
@@ -1787,10 +1789,11 @@ because a plain `bool` field takes no value and clap renders neither a default
 nor a possible-value list for one. Printing it would state a layer rather than
 the command line: a repository file setting `wrap = true` makes the resolved
 value true while the help line still claims `false`. The column is therefore
-carried by a named `hide_default_value` constant in `src/command.rs`, on all
-eleven switches, with the rationale on the constant rather than repeated in
-eleven attribute blocks. `[possible values: true, false]` stays: it describes
-the argument's grammar, which is what `--help` is for.
+carried by a named `hide_default_value` constant in
+`src/command/format_options.rs`, on all eleven switches, with the rationale on
+the constant rather than repeated in eleven attribute blocks.
+`[possible values: true, false]` stays: it describes the argument's grammar,
+which is what `--help` is for.
 
 ### Every caller of the command line
 
