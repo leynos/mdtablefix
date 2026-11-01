@@ -13,6 +13,30 @@ the `--wrap` option is used, it also wraps paragraphs and list items to 80 colum
 members = [".", "test-macros"]
 resolver = "3"
 
+[features]
+# The command-line interface, on by default so a plain `cargo install mdtablefix`
+# or `cargo build` is unchanged. A consumer that only wants the Markdown
+# reflowing library turns it off with `default-features = false` and stops
+# compiling `ortho_config` and the TOML, `figment` and `serde_json` stack it
+# brings in — none of which the library names, so nothing else has to change.
+# `serde` is gated with it, though `html5ever` still pulls `serde` in
+# transitively; the saving is that this manifest stops naming it. `clap` stays
+# unconditional because `src/select/extensions.rs` parses `--md-exts` with it and
+# that module is part of the binary's selection tree. The feature is additive on
+# purpose: it gates *dependencies*, never `cfg`s, so `--all-features` and
+# `--no-default-features` build the same library sources.
+default = ["cli"]
+cli = ["dep:ortho_config", "dep:serde"]
+
+# Declared rather than left to Cargo's implicit `src/main.rs` discovery, which
+# has no way to state a feature requirement. Without `required-features` a
+# `--no-default-features` build would try to compile `main.rs` with the
+# framework absent and fail at `use ortho_config` rather than at the manifest.
+[[bin]]
+name = "mdtablefix"
+path = "src/main.rs"
+required-features = ["cli"]
+
 # Applies to every target: the release workflow publishes one archive shape for
 # Linux, macOS and Windows alike, so no per-target override is needed. `bin-dir`
 # names the binary at the archive root; `.` resolves to an empty source path and
@@ -43,14 +67,16 @@ metrics = "0.24"
 thiserror = "2"
 tracing = "0.1"
 unicode-width = "0.2"
-# Layered configuration for the binary's settings. Default features carry the
-# TOML and `serde_json` providers, and the crate does not build without them
+# Layered configuration for the binary's settings, behind the `cli` feature so a
+# library-only consumer does not compile it. Default features carry the TOML and
+# `serde_json` providers, and the crate does not build without them
 # (leynos/ortho-config#627). It is reachable only from binary-only modules, so
 # `src/lib.rs` never sees it; see docs/adrs/0014-configuration-layering.md.
-ortho_config = "0.10.0"
+ortho_config = { version = "0.10.0", optional = true }
 # The derive emits code naming `serde::Serialize` and `serde::de::DeserializeOwned`,
-# so the traits must come from a crate this package names directly.
-serde = { version = "1", features = ["derive"] }
+# so the traits must come from a crate this package names directly. Optional for
+# the same reason as `ortho_config`: the only code that needs it is the binary's.
+serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
 rstest = "0.28"

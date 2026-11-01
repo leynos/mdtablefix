@@ -357,13 +357,26 @@ in-process tests inject `MapEnv` and mutate nothing.
 ### Keep the library free of the framework
 
 One package builds both the library and the binary, and Cargo has no
-binary-only dependency table, so the manifest cannot keep `ortho_config` and
-`serde` away from the library. The boundary is therefore drawn in the module
-graph: the configuration module is declared from `src/main.rs` beside the other
-binary modules and is not reachable from `src/lib.rs`, and `src/lib.rs` is
-unchanged by the adoption. A test asserts the contract by reading the manifest
-and the library's module sources, so a future import into the library fails the
-suite rather than passing unnoticed.
+binary-only dependency table, so a single dependency list used to serve both
+targets. The manifest now marks `ortho_config` and `serde` `optional` behind a
+default-on `cli` feature, with a `[[bin]]` declaring
+`required-features = ["cli"]`. A consumer that only wants the library sets
+`default-features = false` and drops `ortho_config`, `figment`, its providers
+and `serde` as *this package's* dependencies; a plain `cargo install` or
+`cargo build` is unaffected. (`serde` still reaches the build transitively —
+`html5ever`'s parser stack uses it — but not because this manifest names it.)
+The feature gates dependencies only, never a `cfg`, so the library sources are
+identical whichever way it is set.
+
+The feature is a matter of build cost, not of correctness: with it on — the
+default — the framework is still present in the package graph of the library
+build, and only the module graph keeps it out of the library's own code. That
+boundary is drawn there as well: the configuration module is declared from
+`src/main.rs` beside the other binary modules and is not reachable from
+`src/lib.rs`, and `src/lib.rs` is unchanged by the adoption. A test asserts the
+contract by reading the manifest and the library's module sources, so either
+half regressing — a dropped `optional`, a dropped `default`, or a new import
+into the library — fails the suite rather than passing unnoticed.
 
 ### Do not adopt subcommands, profiles, or localization
 
@@ -402,10 +415,12 @@ configuration flag.
 - A typo in a configuration key is silently ignored, which is the price of a
   file that survives a version skew; the users' guide lists the accepted keys
   exhaustively to make the intended spelling findable.
-- The dependency graph grows. The framework brings `figment` and its TOML
-  provider, `serde_json`, `toml`, `uncased`, `clap-dispatch`, `camino`, `dirs`
-  (or `xdg` on Unix, or `directories` elsewhere), and `ortho_l10n`; several of
-  those, such as `camino`, `cap-std`, `tracing`, `thiserror`, and `clap`, this
+- The dependency graph grows for the default build, and only for it. A
+  library-only consumer that sets `default-features = false` compiles none of
+  the following. The framework brings `figment` and its TOML provider,
+  `serde_json`, `toml`, `uncased`, `clap-dispatch`, `camino`, `dirs` (or `xdg`
+  on Unix, or `directories` elsewhere), and `ortho_l10n`; several of those,
+  such as `camino`, `cap-std`, `tracing`, `thiserror`, and `clap`, this
   workspace already depends on, so only the remainder is new. The declared
   minimum supported Rust version does not move: the framework's floor is 1.89.0
   and this workspace already declares `rust-version = "1.89"`.

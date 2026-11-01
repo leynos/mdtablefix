@@ -667,6 +667,26 @@ actual current state of the work.
       `test-issue-666-rerun.out`, `test-doc-issue-666.out`, `sweep.txt`.
       Date/Author: 2026-11-01, implementation agent.
 
+- [x] (2026-11-01) CodeRabbit round thirteen, four findings in two duplicated
+      pairs. The provenance note now maps every relative link in the vendored
+      guides: two of them (`users-guide.md` and `../CHANGELOG.md` /
+      `../README.md`) resolve *successfully* to this repository's own files
+      about something else, which is the worse failure mode, and the rest have
+      no local target. The note also retracts the claim that the local
+      migration-guide name "carries the same prefix": it gains an
+      `ortho-config-` prefix. The vendored files themselves still hash to the
+      recorded values, so the byte-for-byte property holds. The second pair
+      asked for the `cli` feature; implemented rather than declined, because
+      the reason the earlier decision gave for declining was wrong — an
+      explicit `[[bin]]` *can* carry `required-features`. Evidence:
+      `cargo check --no-default-features --lib` succeeds, and
+      `cargo tree --no-default-features -e normal` no longer lists
+      `ortho_config` or `figment`; `serde` survives that tree only under
+      `html5ever`, which is why the ADR and the guide say the manifest stops
+      *naming* it rather than that the crate disappears. The
+      dependency-contract test now pins the four manifest spellings, so a quiet
+      revert fails the suite.
+
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while
@@ -1480,6 +1500,24 @@ fully verified, and named five gaps. Each is answered below.
   grammar. Evidence: `HIDE_SWITCH_DEFAULT` in `src/command.rs`, applied on all
   eleven switches; `tests/snapshots/cli_git_help.snap`; ADR 0014. Date/Author:
   2026-11-01, implementation agent.
+- Decision (accepted, CodeRabbit round thirteen): make `ortho_config` and
+  `serde` `optional` behind a default-on `cli` feature, and declare the binary
+  with `required-features = ["cli"]`. Rationale: the earlier position — that
+  the manifest could not keep the two crates away from a library-only consumer
+  — was true only of an implicit `src/main.rs`. An explicit `[[bin]]` can state
+  a feature requirement, and an optional dependency disappears from a
+  `default-features = false` build, so the boundary that was drawn only in the
+  module graph now has a Cargo half as well. The feature gates dependencies and
+  never a `cfg`, so `--all-features` and `--no-default-features` compile
+  identical library sources and the source-level scan keeps its meaning.
+  `default = ["cli"]` keeps `cargo install mdtablefix` and `cargo build`
+  unchanged. Evidence: `cargo check --no-default-features --lib` succeeds and
+  the build log no longer contains `ortho_config`; the dependency-contract test
+  now asserts the `optional`, `default`, `cli` and `required-features`
+  spellings as well as the declaration, so a silent revert fails the suite. ADR
+  0014's "Keep the library free of the framework" and the developers' guide
+  both stated the old conclusion and were corrected rather than left to
+  contradict the manifest. Date/Author: 2026-11-01, implementation agent.
 
 ## Outcomes & retrospective
 
@@ -2136,9 +2174,9 @@ written. The "Configuration layering" section of `docs/developers-guide.md`
 sits as the plan asked, immediately after the "Environment access policy"
 section and its "Environment variables in subprocess tests" and "Stub scripts
 in subprocess tests" subsections, and before "Coverage publication belongs to
-`main`"; it covers the binary-only module and the test that guards it, why a
-Cargo feature cannot express the boundary, the hand-composed layers, the
-`resolve` / `resolve_with_sources` split, the two provenance rules, and the
+`main`"; it covers the binary-only module and the test that guards it, the
+`cli` feature and what it does and does not separate, the hand-composed layers,
+the `resolve` / `resolve_with_sources` split, the two provenance rules, and the
 residual dependency on the working directory. Run every gate. Commit. Push.
 Open the draft pull request. Do not merge.
 

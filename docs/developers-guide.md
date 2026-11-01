@@ -1888,10 +1888,21 @@ body or arguments write `mod` is reported as unanalysable instead of skipped: a
 otherwise reach a binary-only file while every file the walk reads stayed
 clean. A macro invoked elsewhere with a body that writes no `mod` token remains
 undetectable, and that residual gap is recorded in the ExecPlan's
-`Residual gaps` rather than claimed away. A Cargo feature cannot express the
-boundary, because `ortho_config` is a normal dependency of the package and is
-therefore linked into the library as well as the binary; what keeps the library
-reusable is that no library source uses it.
+`Residual gaps` rather than claimed away.
+
+The manifest carries a second, coarser half of the same boundary.
+`ortho_config` and `serde` are `optional`, the default-on `cli` feature is what
+enables them, and a `[[bin]]` declaration gives `src/main.rs`
+`required-features = ["cli"]`. A consumer that wants only the reflowing library
+writes `default-features = false` and stops compiling `ortho_config` and its
+providers; a plain `cargo install mdtablefix` sees no difference. `serde` is
+gated the same way, though `html5ever` still brings it in transitively, so the
+saving there is that this manifest stops naming it. The feature gates
+dependencies and never a `cfg`, so `--all-features` and `--no-default-features`
+compile the same library sources and the source scan above stays meaningful in
+both. It still is not the whole boundary: with the feature on — which is the
+default — the framework is linked into the library's package graph, and only
+the module graph keeps it out of the library's own code.
 
 The module resolves settings in one pass and hands the driver a plain
 `Settings` struct with no configuration types in its signature, so the code

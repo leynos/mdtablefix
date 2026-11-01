@@ -1,11 +1,13 @@
 //! INV-LIB: the reusable library gains no dependency on `ortho_config`.
 //!
-//! The manifest no longer separates the two targets — `ortho_config` is a
-//! normal dependency of the package, so it is linked into the library as well
-//! as the binary. What keeps the library reusable is therefore a *source*
-//! boundary rather than a Cargo one: no file reachable from `src/lib.rs` may
-//! name the framework. `src/config.rs` and its tests do, and `src/main.rs`
-//! declares them, so they belong to the binary alone.
+//! The manifest cannot separate the two targets by dependency table alone —
+//! both are built from one package — so the framework sits behind the `cli`
+//! feature instead, and `required-features` keeps the binary out of a build
+//! that turns the feature off. That makes the boundary a *Cargo* one for a
+//! consumer who opts out with `default-features = false`, and a *source* one
+//! for everything else: even with the feature on, no file reachable from
+//! `src/lib.rs` may name the framework. `src/config.rs` and its tests do, and
+//! `src/main.rs` declares them, so they belong to the binary alone.
 //!
 //! The first check is textual, so it also covers an `include!` target or a path
 //! spelled inside a macro. A file that names the framework anywhere at all is
@@ -334,7 +336,14 @@ fn the_walk_refuses_an_unanalysable_module_declaration() {
     );
 }
 
-/// The manifest still declares the framework, so the contract is not vacuous.
+/// The manifest still declares the framework, optionally, behind the CLI feature.
+///
+/// Three things have to hold together for the feature to be a real boundary
+/// rather than a declared one. The dependency must be declared, or the contract
+/// proves nothing on a tree where the adoption never happened. It must be
+/// `optional`, or `--no-default-features` silently keeps compiling it anyway.
+/// And it must be enabled by `default`, or a plain `cargo build` loses the
+/// binary.
 #[test]
 fn the_manifest_declares_the_framework() -> Result<()> {
     let manifest = read(&repository_root().join("Cargo.toml"))?;
@@ -343,6 +352,18 @@ fn the_manifest_declares_the_framework() -> Result<()> {
         manifest.contains(&format!("{FRAMEWORK} = ")),
         "the manifest no longer declares {FRAMEWORK}, so this contract proves nothing"
     );
+    for required in [
+        format!("{FRAMEWORK} = {{ version = \"0.10.0\", optional = true }}"),
+        String::from("default = [\"cli\"]"),
+        String::from("cli = [\"dep:ortho_config\", \"dep:serde\"]"),
+        String::from("required-features = [\"cli\"]"),
+    ] {
+        ensure!(
+            manifest.contains(&required),
+            "the manifest no longer states `{required}`, so the library and the command line \
+             share one dependency set again"
+        );
+    }
 
     Ok(())
 }
