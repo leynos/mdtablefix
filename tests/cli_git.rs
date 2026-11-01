@@ -14,7 +14,13 @@ use rstest::rstest;
 #[path = "support/cli_git_fixture.rs"]
 mod fixture;
 
-use fixture::{CLEAN, Fixture, RAGGED, command_in, run_in};
+// `run_in` is reached from the fixture by every `Fixture::run` call, but the
+// only *direct* use here is the check below, which exists only where
+// `ExitStatus` renders itself the same way. Importing it unconditionally made
+// the Windows build fail `-D unused-imports`, where that test is compiled out.
+#[cfg(unix)]
+use fixture::run_in;
+use fixture::{CLEAN, Fixture, RAGGED, command_in};
 
 /// REQ-GIT-003: `--md-exts` replaces the default set rather than adding to it,
 /// a leading dot is optional, and surrounding whitespace is ignored.
