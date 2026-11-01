@@ -1260,6 +1260,17 @@ plan status to `BLOCKED` until the deviation is accepted.
   every such file is one of `src/config.rs` and `src/config_tests.rs`. A
   textual check also covers an `include!` target and a path spelled inside a
   macro. Date/Author: 2026-10-27, implementation agent.
+- Correction to deviation `c` (2026-11-01, CodeRabbit round thirteen): the
+  premise "Cargo cannot separate the two targets" was wrong. An implicit
+  `src/main.rs` cannot carry `required-features`, but an explicit `[[bin]]`
+  can, and an `optional` dependency disappears from a
+  `default-features = false` build. The manifest now has all of that, so the
+  Cargo half of the boundary exists. Decision `c` is *not* superseded: with the
+  feature on — the default — the framework is still in the package graph of a
+  library build, so the source scan and the module-graph walk remain what keeps
+  it out of the library's own code, and both are still asserted. The
+  round-thirteen Decision-log entry records the change and the dependency
+  contract pins the four manifest spellings.
 - Decision (CodeRabbit round two, accepted): a discovered file that exists but
   cannot be loaded is a fatal diagnostic even when another scope loaded.
   Rationale: the framework classifies an automatic candidate as optional and
@@ -2111,11 +2122,13 @@ the ADR to `docs/contents.md`. Rewrite the two stale sentences in
 `docs/execplans/check-option.md` at lines 943–945 and 4277–4278, which assert
 that this repository uses plain `clap` and not `ortho-config`.
 
-EP-M3, the wiring. Add `ortho_config = "0.10.0"` and
-`serde = { version = "1", features = ["derive"] }` to `Cargo.toml`, and update
-`Cargo.lock`. Add a new binary-only module, `src/config.rs`, declared from
-`src/main.rs` beside the existing `mod` lines, and add it to the module comment
-that the file already carries. The module holds:
+EP-M3, the wiring. Add `ortho_config` and `serde` to `Cargo.toml` as
+`optional = true` dependencies enabled by a default-on `cli` feature, declare
+the binary as a `[[bin]]` with `required-features = ["cli"]`, and update
+`Cargo.lock`. The exact block is in "Interfaces and dependencies" above. Add a
+new binary-only module, `src/config.rs`, declared from `src/main.rs` beside the
+existing `mod` lines, and add it to the module comment that the file already
+carries. The module holds:
 
 - `Settings`, the resolved configuration the driver consumes, as a plain struct
   with explicit fields and no `ortho_config` types in its signature.
@@ -2601,14 +2614,27 @@ at the end of the milestone. Prefer stable names and paths such as
 The manifest additions are exactly:
 
 ```toml
-ortho_config = "0.10.0"
-serde = { version = "1", features = ["derive"] }
+ortho_config = { version = "0.10.0", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+default = ["cli"]
+cli = ["dep:ortho_config", "dep:serde"]
+
+[[bin]]
+name = "mdtablefix"
+path = "src/main.rs"
+required-features = ["cli"]
 ```
 
 `ortho_config` is a caret requirement with default features, as the issue
 mandates and as its own feature table requires. `serde` is a direct dependency
 because the derive emits code naming `serde::Serialize` and
 `serde::de::DeserializeOwned`; it is used only by the configuration module.
+Both are `optional` behind the default-on `cli` feature, which the `[[bin]]`
+requires, so a consumer that sets `default-features = false` gets the library
+without them; the Decision log entry for round thirteen records why this was
+adopted after an earlier note said Cargo could not express it.
 
 In the new module `src/config.rs`, the following types must exist at the end of
 EP-M3. The declarations are followed by a note on where the built code differs
