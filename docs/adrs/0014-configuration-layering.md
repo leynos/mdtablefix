@@ -432,7 +432,7 @@ configuration flag.
 - Because scopes stack, the resolved outcome reports which scopes contributed a
   layer; under a flat scan that report would always be empty.
 - A typo in a configuration key is silently ignored, which is the price of a
-  file that survives a version skew; the users' guide lists the accepted keys
+  file that survives a version skew; the user's guide lists the accepted keys
   exhaustively to make the intended spelling findable.
 - The dependency graph grows for the default build, and only for it. A
   library-only consumer that sets `default-features = false` compiles none of

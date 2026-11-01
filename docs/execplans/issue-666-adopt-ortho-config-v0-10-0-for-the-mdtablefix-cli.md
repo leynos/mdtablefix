@@ -835,8 +835,8 @@ actual current state of the work.
       the EP-M3 decision entry are corrected to match.
 
 - [x] (2026-11-01) CodeRabbit round twenty-two on `e488e6d`: three findings
-      reducing to two defects, both applied. The first was mine: adding the
-      `--md-exts` comment in round twenty-one put a second, identical
+      reducing to two defects, both applied. The first was self-inflicted:
+      adding the `--md-exts` comment in round twenty-one put a second, identical
       `#[case(&["--md-exts", "md"], "--md-exts")]` on the table, so the same
       arguments ran twice. The duplication is removed and the two comments
       merged into one. The other two findings were the same stale doc comment
@@ -848,6 +848,16 @@ actual current state of the work.
       says why the group cannot be. Both defects predate or arise from this
       branch's own edits rather than from the adoption itself, and neither
       changes behaviour.
+
+- [x] (2026-11-01) CodeRabbit round twenty-three on `3eb535d`: two trivial
+      prose findings, both applied. The plan's round-twenty-two entry used the
+      first person ("mine"), which the Markdown path instructions forbid
+      outside `README.md` and the BDD feature files; it now reads
+      "self-inflicted", so the point survives without the pronoun. ADR 0014
+      said "users' guide" where the documentation style guide and
+      `docs/contents.md` both name it the "user's guide"; the possessive form
+      is restored. The plural survives only in the ExecPlans, which are
+      historical records of the wording in force when each was written.
 
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
