@@ -293,9 +293,18 @@ rendering and renumbering retain their own state.
 
 `src/command.rs` command-line surface and formatting:
 
-- `Cli` and `FormatOpts` are the parsed command line and the formatting
-  switches it carries; `process_lines(lines, opts)` runs the shared pipeline
-  over them.
+- `Cli` is the parsed command line and `FormatOpts` the formatting switches it
+  carries; `process_lines(lines, opts)` runs the shared pipeline over them.
+- `src/command/format_options.rs` holds `FormatOpts` itself, its
+  `From<FormatOpts> for Options` conversion, and the two constants its `#[arg]`
+  attributes share. The switch declarations and their optional `=<BOOL>`
+  grammar are long enough to push `src/command.rs` past the 400-line cap
+  `AGENTS.md` sets, so they live beside it; the module is declared only from
+  `src/command.rs` and re-exported there, so the split is a line-count boundary
+  rather than a new layer. `SWITCH_VALUE` and `HIDE_SWITCH_DEFAULT` are
+  `pub(super)` for the same reason: `Cli`'s own `--git`, `--include-untracked`,
+  and `--allow-conflicted` switches declare the same grammar and must render
+  identically.
 - `formatting_closure(opts) -> impl Fn(&SourceDocument<'_>) -> String + Sync`
   builds the one formatter every mode shares. It renders the document's body
   through the pipeline and re-attaches the mark and the selected line ending,
@@ -1689,7 +1698,7 @@ turn the rest into a vacuous pass. Run it with `make test`.
 ## Environment access policy
 
 No production code in this repository reads or writes the process environment
-at run time, and the only run-time reads anywhere are the three sanctioned test
+at run time, and the only run-time reads anywhere are the four sanctioned test
 composition roots described under [Choosing a seam](#choosing-a-seam).
 `make lint` keeps it that way. `clippy.toml` lists `std::env::var`, `var_os`,
 `vars`, `vars_os`, `set_var`, and `remove_var` under `disallowed-methods`, and
@@ -1721,9 +1730,10 @@ alone at a sanctioned composition root, and nowhere else. The scan matches the
 source path and the enclosing item against `SANCTIONED_ROOTS` in
 `tests/support/allow_scan/roots.rs`, which currently names
 `write_failure_child` in `tests/rewrite_atomic.rs`, `ambient_variable` in
-`tests/support/idempotence_harness.rs`, and `command` in
-`tests/support/cli_config_fixture.rs`. The same attribute on any other item is
-an offence, because exempting every item-scoped `expect` would honour the
+`tests/support/idempotence_harness.rs`, `command` in
+`tests/support/cli_config_fixture.rs`, and `command_in` in
+`tests/support/cli_git_fixture.rs`. The same attribute on any other item is an
+offence, because exempting every item-scoped `expect` would honour the
 attribute rather than the rule: a contributor could write it on any function
 and read the environment beneath it. Adding a root is a policy decision, so it
 goes in the allowlist, in ADR-0012 and in this section together, with the
@@ -1739,6 +1749,15 @@ upper-case spellings would therefore leave the lower-case ones readable on
 Linux and macOS. The site has no seam because handing it a pre-scrubbed
 environment would remove exactly the ambient input the fixture exists to
 exclude.
+
+The fourth is the same shape one fixture over. `command_in` in
+`tests/support/cli_git_fixture.rs` builds each child the `--git` end-to-end
+tests spawn, and a developer's exported `MDTABLEFIX_ELLIPSIS` would otherwise
+change which files those tests report as needing a rewrite. The two fixtures
+are separate modules rather than one shared one because each `#[path]`
+declaration compiles the module into a different pair of test binaries, so a
+combined fixture would carry the configuration cases' tree into the `git`
+binaries and every item would have to be reached from both.
 
 Two shapes are refused structurally, neither being a complete attribute where
 it is written. A `macro_rules!` arm that forwards the attribute's *path*
@@ -1814,9 +1833,9 @@ it and there is no argument to take instead. `ambient_variable` in
 `tests/support/idempotence_harness.rs` reads `PROPTEST_CASES`, proptest's own
 knob, set by whoever runs the suite rather than by a caller in this repository;
 `case_count` takes the reader as an argument so the fallback is exercised
-without it, which is the narrow reader closure from the table above. The two
-`command` builders, in `tests/support/cli_config_fixture.rs` and
-`tests/support/cli_git_fixture.rs`, enumerate the test process's environment to
+without it, which is the narrow reader closure from the table above.
+`Fixture::command` in `tests/support/cli_config_fixture.rs` and `command_in` in
+`tests/support/cli_git_fixture.rs` enumerate the test process's environment to
 remove each `MDTABLEFIX_*` name from the child they are about to spawn. There
 is no caller to hand them a clean copy: the property under test is that the
 developer's exported variable does not reach the child, so an environment
@@ -1926,10 +1945,10 @@ The optional `=<BOOL>` value on each switch is declared on `Cli` and
 `--wrap[=<BOOL>]`, and `SWITCH_VALUE` names the placeholder once so the help
 text reads the same everywhere. That shape is what makes `--wrap=false` outrank
 a configured `true` while leaving `--wrap` alone meaning `true` and `--wrap=80`
-a usage error; the four spellings are pinned in `src/command.rs`'s tests and
-process-level in `tests/cli_config_binary.rs`. Because the declaration is
-explicit, a new switch has to opt in rather than acquire the behaviour
-silently, and `src/config_tests.rs` checks every one of them.
+a usage error; the four spellings are pinned process-level in
+`tests/cli_config_binary.rs`. Because the declaration is explicit, a new switch
+has to opt in rather than acquire the behaviour silently, and
+`src/config_tests.rs` checks every one of them.
 
 `Settings::resolve` is the process-backed entry point; it names
 `process_env_source()` and `process_scan_env_source()` once, at the composition

@@ -125,9 +125,9 @@ rather than a mutation of the test process's own, which is the shape
 [Build child environments explicitly](#build-child-environments-explicitly)
 prescribes.
 
-`Fixture::command` in `tests/support/cli_git_fixture.rs` is the fourth, and it
-exists for the same reason one fixture over. The `--git` end-to-end tests spawn
-the binary in a scratch repository, and a developer's exported
+`command_in` in `tests/support/cli_git_fixture.rs` is the fourth, and it exists
+for the same reason one fixture over. The `--git` end-to-end tests spawn the
+binary in a scratch repository, and a developer's exported
 `MDTABLEFIX_ELLIPSIS` would change which files those tests report as needing a
 rewrite. The two fixtures are separate rather than one shared module because
 each is compiled into a different pair of test binaries: a `#[path]` module

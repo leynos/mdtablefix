@@ -755,6 +755,30 @@ actual current state of the work.
       duplicating the scan in whichever file needed it, would have spread the
       one read the policy exists to contain.
 
+- [x] (2026-11-01) CodeRabbit round eighteen, three minor findings, all
+      applied. Two were stale prose: ADR 0012 named `Fixture::command` in
+      `tests/support/cli_git_fixture.rs` where the allowlist and the file both
+      say `command_in`, and the developers' guide contradicted itself within
+      one section, saying "three" sanctioned roots beside "four" and then
+      listing only three of them. The third was a real cap violation:
+      `src/command.rs` had grown to 409 lines, nine over the limit `AGENTS.md`
+      sets, because the optional `=<BOOL>` value on each of the eight
+      formatting switches takes four attribute lines apiece. `FormatOpts`, its
+      `From<FormatOpts> for Options` conversion and the two shared constants
+      now live in `src/command/format_options.rs`, declared and re-exported
+      from `src/command.rs`, which is 278 lines beside the new module's 153;
+      the constants are `pub(super)` because `Cli`'s own `--git`,
+      `--include-untracked` and `--allow-conflicted` switches declare the
+      same grammar and must render identically. The move also falsified a
+      doc line carried across with the struct: it credited
+      `src/command.rs`'s tests with pinning the four `--wrap[=<BOOL>]`
+      spellings, but that module has no test module on this branch or its
+      base — the four are pinned process-level in
+      `tests/cli_config_binary.rs`, which is what the struct doc, ADR 0014 and
+      the developers' guide now say. The new module's scope and re-use rule are
+      recorded in the developers' guide beside the existing `src/command.rs`
+      entry, as `AGENTS.md` requires of an extracted module.
+
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while

@@ -301,10 +301,10 @@ document and exit 0 while reporting nothing.
 
 `ValueSource::CommandLine` is the typed signal for these values too, so
 `--wrap=false` outranks a configured `true` by the same rule as a bare
-`--wrap`. The four spellings are pinned in `src/command.rs`'s tests, and
-`src/config_tests.rs` checks the typed-false direction for every switch, so one
-that lost the declaration fails the table rather than silently ignoring the
-value.
+`--wrap`. The four spellings are pinned process-level in
+`tests/cli_config_binary.rs`, and `src/config_tests.rs` checks the typed-false
+direction for every switch, so one that lost the declaration fails the table
+rather than silently ignoring the value.
 
 Taking a value has one rendering side effect that is not wanted. `--help` is
 where those four spellings are advertised, so making the argument take a value
