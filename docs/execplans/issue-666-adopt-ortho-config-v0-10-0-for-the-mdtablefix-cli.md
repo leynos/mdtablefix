@@ -687,6 +687,19 @@ actual current state of the work.
       dependency-contract test now pins the four manifest spellings, so a quiet
       revert fails the suite.
 
+- [x] (2026-11-01) CodeRabbit round fourteen, two findings at the same site,
+      the plan's own prescriptive text. Both said the "Interfaces and
+      dependencies" block and the EP-M3 paragraph still gave the pre-feature
+      manifest; both were right, and the two had to be followed together
+      because they disagreed on one point. The first asked for decision `c` to
+      be marked superseded, the second said to keep it — and the second is
+      correct: the round-thirteen feature gates *dependencies*, and with it on
+      by default the framework is still in a library build's package graph, so
+      the source scan remains the boundary that matters. Deviation `c` now
+      carries a correction recording that its premise was wrong while the
+      decision stands. Round fifteen on the resulting head found nothing at
+      all: zero findings across the same 34 files.
+
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while
