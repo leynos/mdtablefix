@@ -834,6 +834,21 @@ actual current state of the work.
       users' guide, the developers' guide, the plan's command-line sketch and
       the EP-M3 decision entry are corrected to match.
 
+- [x] (2026-11-01) CodeRabbit round twenty-two on `e488e6d`: three findings
+      reducing to two defects, both applied. The first was mine: adding the
+      `--md-exts` comment in round twenty-one put a second, identical
+      `#[case(&["--md-exts", "md"], "--md-exts")]` on the table, so the same
+      arguments ran twice. The duplication is removed and the two comments
+      merged into one. The other two findings were the same stale doc comment
+      on `run_stdin` in `src/driver/run.rs`, reported twice: it said the
+      parser's `inputs` group guarantees a mode flag arrives with a file
+      argument, which stopped being true when `--git=false` was introduced,
+      because `requires("inputs")` accepts a typed `--git=false` that names no
+      input. The comment now names `Cli::parse_validated` as the guarantor and
+      says why the group cannot be. Both defects predate or arise from this
+      branch's own edits rather than from the adoption itself, and neither
+      changes behaviour.
+
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while

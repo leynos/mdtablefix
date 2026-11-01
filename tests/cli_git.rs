@@ -133,10 +133,9 @@ fn in_place_is_satisfied_by_git() {
 #[case(&["--allow-conflicted"], "--allow-conflicted")]
 #[case(&["--allow-conflicted=false", "notes.md"], "--allow-conflicted")]
 #[case(&["--list-files", "notes.md"], "--list-files")]
-// The flag is judged the same way as the switches above.
-#[case(&["--md-exts", "md"], "--md-exts")]
-// `--md-exts` has a default, so the check is keyed on where its value came from
-// rather than on whether it is present.
+// The flag is judged the same way as the switches above, and its default is why:
+// the check is keyed on where the value came from rather than on whether one is
+// present.
 #[case(&["--md-exts", "md"], "--md-exts")]
 fn a_git_only_flag_without_git_is_rejected(#[case] args: &[&str], #[case] flag: &str) {
     let fixture = Fixture::new();

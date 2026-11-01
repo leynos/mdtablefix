@@ -164,8 +164,11 @@ pub(crate) fn execute(
 /// Formats standard input and writes the result to standard output.
 ///
 /// The destination is standard output whatever the mode, because there is no
-/// file for a mode flag to act on: the parser's `inputs` group is what
-/// guarantees a mode flag arrives with a file argument instead.
+/// file for a mode flag to act on. That a mode flag never arrives here is
+/// `Cli::parse_validated`'s doing rather than the parser's: the `inputs`
+/// group's `requires` is satisfied by a typed `--git=false`, which names no
+/// input, so the post-parse guard is what rejects a mode flag with neither a
+/// file nor a true `--git`.
 fn run_stdin(opts: FormatOpts) -> anyhow::Result<ExitStatus> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
