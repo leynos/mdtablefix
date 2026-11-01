@@ -248,6 +248,18 @@ treated as absent, so a compiled-in default never outranks a configured value.
 `md,mdc,markdown`, and treating it as typed would both override a configuration
 file and demand `--git` from a user who typed nothing.
 
+One predicate serves both readings. `is_typed` in `src/command.rs` is the
+single test for `ValueSource::CommandLine`; `git_only_flags` applies it to the
+four flags the requirement covers, and `src/config.rs` applies it to decide
+which settings the command line contributes. Sharing it is not tidiness: with
+the optional `=<BOOL>` value the two readings can disagree, and a value-based
+check would let `--include-untracked=false file.md` through while a bare
+`--include-untracked file.md` is rejected. `--include-untracked=false` names
+the flag as surely as the bare form does — the user is stating which selection
+they want, and only the value differs — so it is judged the same way and the
+same rejection applies. `tests/cli_git.rs` pins both directions: the `=false`
+spellings are rejected without `--git`, and accepted with it.
+
 The framework spells the same rule `cli_default_as_absent`. This repository's
 path does not need the attribute, because its command-line layer is built from
 the parser's own record of provenance and its schema fields carry no clap

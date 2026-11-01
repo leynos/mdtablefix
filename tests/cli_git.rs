@@ -129,8 +129,12 @@ fn in_place_is_satisfied_by_git() {
 /// check, with the exit status and usage footer of a parser error.
 #[rstest]
 #[case(&["--include-untracked"], "--include-untracked")]
+#[case(&["--include-untracked=false", "notes.md"], "--include-untracked")]
 #[case(&["--allow-conflicted"], "--allow-conflicted")]
+#[case(&["--allow-conflicted=false", "notes.md"], "--allow-conflicted")]
 #[case(&["--list-files", "notes.md"], "--list-files")]
+// The flag is judged the same way as the switches above.
+#[case(&["--md-exts", "md"], "--md-exts")]
 // `--md-exts` has a default, so the check is keyed on where its value came from
 // rather than on whether it is present.
 #[case(&["--md-exts", "md"], "--md-exts")]
@@ -146,6 +150,28 @@ fn a_git_only_flag_without_git_is_rejected(#[case] args: &[&str], #[case] flag: 
         "the rejection must name the flag: {}",
         run.stderr
     );
+}
+
+/// The other direction: a flag that resolves to false because nobody typed it
+/// must not demand `--git`, and a typed `=false` given *with* `--git` is
+/// accepted.
+///
+/// The first half is what the rejection cases cannot show: a value-based check
+/// would pass it too, so it stands as the control that the provenance check did
+/// not simply reject everything. The second half is the pairing the rejection
+/// cases deliberately omit, and it proves the `=false` rejection above is about
+/// `--git` rather than about the value.
+#[rstest]
+#[case(&["notes.md"])]
+#[case(&["--git", "--include-untracked=false"])]
+#[case(&["--git", "--allow-conflicted=false"])]
+fn a_git_only_flag_typed_false_is_accepted_with_git(#[case] args: &[&str]) {
+    let fixture = Fixture::new();
+    fixture.track("notes.md", RAGGED);
+
+    let run = fixture.run(args);
+
+    assert_eq!(run.status, 0, "stderr: {}", run.stderr);
 }
 
 /// The default extension set is still the default when the flag is absent from

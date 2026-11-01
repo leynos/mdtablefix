@@ -814,6 +814,26 @@ actual current state of the work.
       --all-features` under `RUSTFLAGS="-D warnings"`, which failed before the
       fix and finished in 6m09s afterwards.
 
+- [x] (2026-11-01) CodeRabbit round twenty-one on `d9a39ce`: two minor
+      findings, one defect reported at its code site and again at the ADR, both
+      applied. `git_only_flags` judged `--include-untracked` and
+      `--allow-conflicted` by their resolved booleans, while ADR 0014 states
+      that the `--git` requirement is judged on whether the user typed the
+      flag. With the optional `=<BOOL>` value the two readings part company,
+      and the divergence was observable in the built binary:
+      `--include-untracked=false file.md` was accepted where the bare
+      `--include-untracked file.md` exits 2, and `--md-exts md file.md` — the
+      one flag already checked on provenance — exits 2. So the fix is not
+      cosmetic. All four flags are now judged by one `is_typed` predicate, and
+      that predicate moved from `src/config.rs` to `src/command.rs` and is
+      shared, because two copies are what allowed the two readings to drift.
+      `tests/cli_git.rs` pins both directions rather than only the rejection:
+      the `=false` spellings without `--git` are rejected, and the same
+      spellings with `--git` are accepted, so the rejection is shown to be
+      about the missing `--git` rather than about the value. ADR 0014, the
+      users' guide, the developers' guide, the plan's command-line sketch and
+      the EP-M3 decision entry are corrected to match.
+
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while
@@ -1335,9 +1355,13 @@ plan status to `BLOCKED` until the deviation is accepted.
   configuration's benefit. The two helpers read
   `matches.value_source(id) == Some(ValueSource::CommandLine)`, the same test
   the framework's generated loader uses (`build_cli_push_tokens`). `Cli` keeps
-  its four accessors for what the command line *said*, and configuration is the
-  only reader of what the user *typed*. Date/Author: 2026-10-27, implementation
-  agent.
+  its four accessors for what the command line *said*. Recorded later, after
+  CodeRabbit round twenty-one: `is_typed` moved to `src/command.rs` and is
+  shared with `git_only_flags`, because the optional `=<BOOL>` value made two
+  copies of the same predicate disagree — configuration asked whether the flag
+  was typed, the `--git` requirement asked whether its value was true, and
+  `--include-untracked=false file.md` slipped past a requirement the bare form
+  triggers. Date/Author: 2026-10-27, implementation agent.
 - Decision: `Settings::resolve` is split into `resolve` and
   `resolve_with_sources`. Rationale: EP-M4 must drive discovery, the selector,
   and the merge layer from one fixed map without touching the process
@@ -1773,8 +1797,8 @@ takes a list rather than a boolean and is unaffected.
 `clap` cannot express on its own:
 
 ```rust
-for (name, present) in git_only_flags(&cli, &matches) {
-    if present && !cli.git {
+for (name, typed) in git_only_flags(&matches) {
+    if typed && !cli.git {
         Self::command()
             .error(ErrorKind::MissingRequiredArgument, format!("{name} requires --git"))
             .exit();
@@ -1783,10 +1807,11 @@ for (name, present) in git_only_flags(&cli, &matches) {
 ```
 
 The four names are `--include-untracked`, `--allow-conflicted`, `--list-files`,
-and `--md-exts`. The last is special: it counts as present only when
-`matches.value_source("md_exts") != Some(ValueSource::DefaultValue)`, so the
-compiled-in default `md,mdc,markdown` does not require `--git` but a typed
-`--md-exts` does.
+and `--md-exts`, and each counts as present only when `is_typed` reports
+`ValueSource::CommandLine`. That one predicate serves the requirement and the
+configuration layer alike, so the compiled-in default `md,mdc,markdown` does
+not require `--git` but a typed `--md-exts` does, and a typed
+`--include-untracked=false` requires it exactly as the bare form does.
 
 The getters `mode()`, `selects_from_git()`, `includes_untracked()`,
 `allows_conflicted()`, and `extensions()` are the whole of what the rest of the

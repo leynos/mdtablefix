@@ -22,7 +22,7 @@
 
 use std::sync::Arc;
 
-use clap::{ArgMatches, parser::ValueSource};
+use clap::ArgMatches;
 use ortho_config::{
     AutomaticMode,
     ConfigDiscovery,
@@ -46,7 +46,7 @@ use ortho_config::{
 pub(crate) use self::schema::ConfigFile;
 use self::schema::{APP_NAME, CONFIGURED_ARGUMENTS, ENV_PREFIX, ENV_SEPARATOR, SELECTOR_VARIABLE};
 use crate::{
-    command::{Cli, FormatOpts},
+    command::{Cli, FormatOpts, is_typed},
     select::extensions::{ExtensionFilter, parse_extension},
 };
 
@@ -237,8 +237,8 @@ fn promoted_discovery_errors(outcome: &ortho_config::FileLayerOutcome) -> Vec<Ar
 
 /// The command line's contribution, or `None` when nothing was typed.
 ///
-/// Judged on provenance, never on value: [`ValueSource::CommandLine`] is the
-/// only source that counts as a statement, so a compiled-in default such as
+/// Judged on provenance, never on value: [`is_typed`] accepts only clap's
+/// `CommandLine` source, so a compiled-in default such as
 /// `--md-exts md,mdc,markdown` never outranks a configured value and never
 /// counts as typing the flag. Returning `None` rather than an all-`None` schema
 /// keeps the absent case free of any layer at all.
@@ -269,11 +269,6 @@ fn command_line_layer(
     // `sanitize_value` drops the `None`s, so the layer carries exactly the
     // settings the user stated and leaves every other key to the layers below.
     sanitize_value(&layer).map(Some).map_err(ConfigError::from)
-}
-
-/// Whether `id` was supplied on the command line rather than defaulted.
-fn is_typed(matches: &ArgMatches, id: &str) -> bool {
-    matches.value_source(id) == Some(ValueSource::CommandLine)
 }
 
 /// The parsed value of a flag, but only when the user typed it.

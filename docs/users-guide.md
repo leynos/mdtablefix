@@ -205,6 +205,13 @@ selection is wanted. A mode flag given with it and no file is rejected — with
 `--list-files requires --git` — and exits 2, rather than falling back to
 standard input and, in a reporting mode, reporting nothing.
 
+`--include-untracked`, `--allow-conflicted`, `--list-files`, and `--md-exts`
+require `--git`, and the requirement is judged on whether the flag was typed
+rather than on the value it resolved to. So `--include-untracked=false file.md`
+without `--git` is rejected exactly like the bare `--include-untracked`, while
+`--git --include-untracked=false` is accepted and simply selects no untracked
+files.
+
 A file supplies a key the same way the flag does. This file formats paragraphs,
 renumbers lists, and normalizes thematic breaks without any flag being typed:
 

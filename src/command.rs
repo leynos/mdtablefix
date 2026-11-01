@@ -117,22 +117,35 @@ pub struct Cli {
     pub files: Vec<PathBuf>,
 }
 
-/// The flags that only make sense with `--git`, each paired with the form the
-/// user wrote it in.
+/// The flags that only make sense with `--git`, each paired with whether the
+/// user typed it.
 ///
-/// `--md-exts` is checked by its [`ValueSource`] rather than by its value,
-/// because its default means it always carries one: a user who typed
-/// `--md-exts md` explicitly is asking for `--git`, and must be told so, while
-/// a user who typed nothing is not.
-fn git_only_flags(cli: &Cli, matches: &clap::ArgMatches) -> [(&'static str, bool); 4] {
-    let explicit_exts = matches.value_source("md_exts") != Some(ValueSource::DefaultValue);
-
+/// Every one is judged by its [`ValueSource`] rather than by its value, because
+/// a resolved `false` cannot tell the two ways of meaning it apart. `--md-exts`
+/// is the clearest case, since its default means it always carries a value: a
+/// user who typed `--md-exts md` is asking for `--git`, and a user who typed
+/// nothing is not. The optional `=<BOOL>` value makes the same distinction for
+/// the switches: `--include-untracked=false` names the flag as surely as the
+/// bare form does, so it is judged the same way, and only `CommandLine` counts
+/// as naming it.
+fn git_only_flags(matches: &clap::ArgMatches) -> [(&'static str, bool); 4] {
     [
-        ("--include-untracked", cli.include_untracked),
-        ("--allow-conflicted", cli.allow_conflicted),
-        ("--list-files", cli.list_files),
-        ("--md-exts", explicit_exts),
+        (
+            "--include-untracked",
+            is_typed(matches, "include_untracked"),
+        ),
+        ("--allow-conflicted", is_typed(matches, "allow_conflicted")),
+        ("--list-files", is_typed(matches, "list_files")),
+        ("--md-exts", is_typed(matches, "md_exts")),
     ]
+}
+
+/// Whether `id` was supplied on the command line rather than defaulted.
+///
+/// Shared with [`crate::config`], which uses it to decide which settings the
+/// command line contributes: a defaulted value states nothing there either.
+pub(crate) fn is_typed(matches: &clap::ArgMatches, id: &str) -> bool {
+    matches.value_source(id) == Some(ValueSource::CommandLine)
 }
 
 /// The name of the mode flag the user typed, if any.
@@ -179,8 +192,8 @@ impl Cli {
     pub fn parse_validated() -> (Self, clap::ArgMatches) {
         let matches = Self::command().get_matches();
         let cli = Self::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
-        for (name, present) in git_only_flags(&cli, &matches) {
-            if present && !cli.git {
+        for (name, typed) in git_only_flags(&matches) {
+            if typed && !cli.git {
                 Self::command()
                     .error(
                         ErrorKind::MissingRequiredArgument,

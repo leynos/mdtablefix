@@ -1967,6 +1967,15 @@ file supplied the list. And a positional file argument outranks a configured
 `git`, because a path is the user's own statement of what to act on; `Settings`
 states that rule once, so no caller has a second copy to drift from.
 
+`is_typed` in `src/command.rs` is the one test for that provenance, and it
+serves both this module and the `--git` requirement. `git_only_flags` applies
+it to the four flags that need `--git`, so the requirement is about the flag
+being typed rather than about the value it resolved to: the optional `=<BOOL>`
+value would otherwise let `--include-untracked=false file.md` pass where a bare
+`--include-untracked file.md` is rejected. Keeping one predicate rather than
+two is what makes the two readings of "typed" unable to disagree, which is the
+defect the split surfaced.
+
 One dependency is worth knowing about. `ortho_config`'s discovery builder
 always resolves a Project root from the process working directory, and the
 method that would substitute one is crate-private upstream. A test asserting a
