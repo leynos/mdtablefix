@@ -779,6 +779,41 @@ actual current state of the work.
       recorded in the developers' guide beside the existing `src/command.rs`
       entry, as `AGENTS.md` requires of an extracted module.
 
+- [x] (2026-11-01) CodeRabbit round nineteen on `0075714`: one minor finding,
+      applied in `81742bd`. The findings list said `src/command.rs`'s unit
+      tests pin the four `--wrap[=<BOOL>]` spellings, and it named
+      `HIDE_SWITCH_DEFAULT` and the `hide_default_value` constant as living in
+      `src/command.rs`. Neither holds: the module has no test module on this
+      branch or its base, and both constants moved to
+      `src/command/format_options.rs` in `0075714`. Three passages were
+      corrected to match the built state, and the surrounding sentence that
+      claimed the constants are private was rewritten because they are now
+      `pub(super)`.
+
+- [x] (2026-11-01) CodeRabbit round twenty on `81742bd`: zero findings, across
+      40 reviewed files including `src/command.rs`,
+      `src/command/format_options.rs` and the whole configuration suite.
+
+- [x] (2026-11-01) A genuine Windows-only defect, found after round twenty by
+      reading `gh pr checks 671` rather than by any local gate. The Windows job
+      failed the `cli_git` test target with `unused import: run_in` at
+      `tests/cli_git.rs:17`, under the `-D warnings` that CI sets. On `main`,
+      `run_in` was defined in `tests/cli_git.rs` and reached from
+      `Fixture::run`'s one-liner; the fixture refactor moved it into
+      `tests/support/cli_git_fixture.rs`, where `Fixture::run` resolves it
+      internally. That left the re-import in `cli_git.rs` used only inside
+      `a_git_failure_is_reported_as_one_deliberate_line`, which is
+      `#[cfg(unix)]` because it asserts on `ExitStatus`'s rendering. On Windows
+      the test is
+      compiled out, the import is unused, and `-D warnings` turns that into a
+      compile error. The import now carries the same `#[cfg(unix)]` as its
+      caller, with a comment saying why it must stay gated. The Linux suite
+      could not have caught this: the host target compiles the test that uses
+      the import, so the Linux build is clean. It was reproduced with
+      `cargo check --target x86_64-pc-windows-msvc --all-targets
+      --all-features` under `RUSTFLAGS="-D warnings"`, which failed before the
+      fix and finished in 6m09s afterwards.
+
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while
