@@ -13,7 +13,13 @@
 #[path = "support/cli_config_fixture.rs"]
 mod fixture;
 
+#[cfg(unix)]
+#[path = "support/permission_denial.rs"]
+mod permission_denial;
+
 use fixture::{Fixture, RAGGED, assert_clean_success, assert_failure};
+#[cfg(unix)]
+use permission_denial::{allow_read, deny_read, root_ignores_permissions};
 
 /// A selected file that is absent is an error on standard error, exit 2.
 #[test]
@@ -143,4 +149,113 @@ fn a_rejected_extension_names_its_key() {
     let run = fixture.run_selected(&config, &["notes.md"], "");
 
     assert_failure(&run, 2, "invalid configuration value for md_exts");
+}
+
+/// A selected file that exists but cannot be read is an error, exit 2.
+///
+/// The missing-file case above is satisfied by a loader that refuses only what
+/// is absent. This one is the other half: the path exists, so any check that
+/// stops at metadata passes, and only a real failed read produces the status.
+/// `ExplicitMode::RequiredExclusive` is what makes it fatal — a named file is a
+/// statement of intent, so a file the tool cannot honour is not one it may
+/// silently replace with the defaults.
+///
+/// The mode is `0o000` rather than a read-only directory, because the
+/// configuration path is *read* rather than written. Root ignores permission
+/// bits, so a run as root cannot induce the failure at all; that is reported as
+/// a skip rather than asserted, since an assertion that never fails would be
+/// vacuous.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_selected_file_exits_two_with_no_standard_output() {
+    let fixture = Fixture::new();
+    let config = fixture.write("locked.toml", "ellipsis = true\n");
+    fixture.write("drift.md", RAGGED);
+    deny_read(&config);
+
+    let run = fixture.run_selected(&config, &["drift.md"], "");
+    allow_read(&config);
+
+    if root_ignores_permissions() {
+        eprintln!("skipped: root ignores permission bits, so the read cannot fail");
+        return;
+    }
+
+    assert_eq!(
+        run.status, 2,
+        "stdout: {} stderr: {}",
+        run.stdout, run.stderr
+    );
+    assert_eq!(run.stdout, "", "the diagnostic belongs on stderr");
+    assert!(
+        run.stderr.contains("locked.toml"),
+        "the diagnostic names the unreadable file: {}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.to_lowercase().contains("permission denied"),
+        "the diagnostic states why the read failed: {}",
+        run.stderr
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.root().join("drift.md")).expect("read the input"),
+        RAGGED,
+        "a run that could not load its configuration must not touch the input"
+    );
+}
+
+/// An unreadable discovered file is reported even when a valid one loaded.
+///
+/// The promotion in `src/config.rs` exists for exactly this shape: the
+/// framework classifies an automatic candidate as optional and withholds the
+/// failure whenever any scope loaded, so without promotion a locked project
+/// file beside a readable user file would leave the run formatting on settings
+/// the user cannot see. A malformed file proves the same path; an *unreadable*
+/// one proves it for the failure mode a permissions mistake actually produces,
+/// where the bytes are not even available to parse.
+///
+/// The user file is the read-only one, so the precedence order is the real
+/// one: the project file that cannot be read is the *nearer* scope, and a run
+/// that ignored it would silently apply the user file instead. The input is a
+/// named file rather than standard input, so the case can also show that a run
+/// which fails before reading its configuration does not rewrite what it was
+/// asked to format.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_project_file_is_reported_beside_a_valid_user_file() {
+    let fixture = Fixture::new();
+    fixture.write("xdg/mdtablefix/config.toml", "ellipsis = true\n");
+    let project = fixture.write(".mdtablefix.toml", "wrap = true\n");
+    fixture.write("drift.md", RAGGED);
+    deny_read(&project);
+
+    let run = fixture.run(&["drift.md"], "");
+    allow_read(&project);
+
+    if root_ignores_permissions() {
+        eprintln!("skipped: root ignores permission bits, so the read cannot fail");
+        return;
+    }
+
+    assert_eq!(
+        run.status, 2,
+        "stdout: {} stderr: {}",
+        run.stdout, run.stderr
+    );
+    assert_eq!(run.stdout, "", "the diagnostic belongs on stderr");
+    assert!(
+        run.stderr.contains(".mdtablefix.toml"),
+        "the diagnostic names the unreadable file: {}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.to_lowercase().contains("permission denied"),
+        "the diagnostic states why the read failed: {}",
+        run.stderr
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.root().join("drift.md")).expect("read the input"),
+        RAGGED,
+        "a run that could not load its configuration must not touch the input"
+    );
 }

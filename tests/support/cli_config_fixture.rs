@@ -5,21 +5,30 @@
 //! limit. Each test binary compiles alone, so this is declared with `#[path]`
 //! from each of them rather than shared by Cargo.
 //!
-//! Two boundaries keep the child environment honest. `MDTABLEFIX_CONFIG_PATH`
-//! short-circuits automatic discovery, so a case that wants no configuration at
-//! all names a free-standing empty file rather than relying on the host having
-//! none. And every variable the provider could read is removed from the child,
-//! so a developer who exported one does not change what a test sees.
+//! Two boundaries keep the child environment honest. Every variable the
+//! provider could read is removed from the child, so a developer who exported
+//! one does not change what a test sees; and `MDTABLEFIX_CONFIG_PATH` is
+//! available to a case that wants an exact file, which also short-circuits
+//! automatic discovery. A case that wants *no* configuration uses neither: it
+//! runs with no selector, and the tree it runs in holds no candidate, so
+//! discovery has to search and find nothing. The two are not interchangeable —
+//! an empty selected file proves the loader can read a file that states
+//! nothing, not that discovery handles absence.
 //!
-//! The second boundary is a prefix match rather than a list. The provider
-//! upper-cases a name before comparing it, so it reads any spelling of the
-//! prefix: measured on 2026-10-27, `MDTABLEFIX_ELLIPSIS=true`,
-//! `mdtablefix_ellipsis=true` and `MdTaBlEfIx_ElLiPsIs=true` each enabled the
-//! transformation, and a lower-case `mdtablefix_config_path` selected its file
-//! too. Removing one spelling of each key would therefore leave the others
-//! readable on any platform where names are case-sensitive, so the scrub
-//! enumerates the environment and removes every name that carries the prefix in
-//! any case.
+//! The second boundary is a prefix match rather than a list, and it covers two
+//! mechanisms that differ in exactly this respect. A *setting* reaches the
+//! merge through `CsvEnv`, which upper-cases a name after stripping the prefix,
+//! so it really does read any spelling: measured on 2026-10-27,
+//! `MDTABLEFIX_ELLIPSIS=true`, `mdtablefix_ellipsis=true` and
+//! `MdTaBlEfIx_ElLiPsIs=true` each enabled the transformation. The *selector*,
+//! `MDTABLEFIX_CONFIG_PATH`, is a different path: `ConfigPathSelector::env`
+//! resolves it through `EnvSource::get`, which on the production
+//! `ProcessEnv` is `std::env::var_os` — an exact, case-sensitive name lookup
+//! with no folding anywhere — so a lower-case `mdtablefix_config_path` selects
+//! nothing on Linux. The scrub is nevertheless a case-insensitive prefix match,
+//! because half of what it must remove is genuinely case-insensitive, and
+//! removing only one spelling of a setting would leave the others readable on
+//! any platform where names are case-sensitive.
 //!
 //! The environment is otherwise inherited rather than cleared with
 //! `env_clear`: Windows needs `SystemRoot` and `PATH` to create a process and to
@@ -50,10 +59,13 @@ const CONFIGURATION_PREFIX: &str = "mdtablefix_";
 
 /// Whether `name` could be a configuration variable, in any spelling.
 ///
-/// Compared in lower case because the provider upper-cases a name before
-/// matching it, so every spelling of the prefix reaches a setting. Only the
-/// prefix is tested, not a key, so a variable this fixture has never heard of
-/// is still removed.
+/// Compared in lower case because a setting reaches the merge through
+/// `CsvEnv`, which upper-cases a name before matching it, so every spelling of
+/// the prefix selects a setting. Only the prefix is tested, not a key, so a
+/// variable this fixture has never heard of is still removed. The selector's
+/// own lookup is exact, but removing more than the selector could read is
+/// harmless: the job here is to hide a developer's configuration, not to model
+/// every path that reads it.
 fn carries_configuration_prefix(name: &std::ffi::OsStr) -> bool {
     name.to_string_lossy()
         .to_lowercase()

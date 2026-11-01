@@ -30,6 +30,28 @@ use crate::{
     select::extensions::{ExtensionFilter, parse_extension},
 };
 
+/// The value name every switch with an optional `=<BOOL>` renders in `--help`.
+///
+/// Named rather than repeated, because it is the reader's cue that
+/// `--wrap=false` is accepted at all: a bare `bool` field would render
+/// `--wrap` alone, and the help would then advertise a switch that cannot be
+/// turned off.
+const SWITCH_VALUE: &str = "BOOL";
+
+/// Hides the `[default: false]` that an optional-value switch would print.
+///
+/// The switch still declares `ArgAction::SetTrue`, which supplies `false` as a
+/// default value when the field declares none, so the resolved default is
+/// unchanged; only the rendering is suppressed. `--help` would otherwise claim
+/// `--wrap` defaults to false, which stops being the whole truth once a
+/// configuration file or an `MDTABLEFIX_*` variable can set it true — the help
+/// describes the command line, and on the command line the flag is absent.
+///
+/// A plain `bool` field needs none of this: it takes no value, so clap prints
+/// neither a default nor a possible-value list. Both appear here only because
+/// `num_args = 0..=1` makes the argument take one.
+const HIDE_SWITCH_DEFAULT: bool = true;
+
 /// Parsed command-line request before it is mapped to a formatting mode.
 ///
 /// The mutually exclusive input and output groups keep selection, reporting,
@@ -62,10 +84,24 @@ pub struct Cli {
     #[arg(long = "list-files", group = "mode")]
     list_files: bool,
     /// Select Markdown files tracked by Git beneath the current directory
-    #[arg(long = "git")]
+    #[arg(
+        long = "git",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     git: bool,
     /// Also select untracked files that Git does not ignore
-    #[arg(long = "include-untracked")]
+    #[arg(
+        long = "include-untracked",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     include_untracked: bool,
     /// File extensions to select under `--git`
     // One `default_value` rather than `default_values`, so `--help` renders the
@@ -83,7 +119,14 @@ pub struct Cli {
     )]
     md_exts: Vec<String>,
     /// Rewrite files containing conflict markers during a merge or rebase
-    #[arg(long = "allow-conflicted")]
+    #[arg(
+        long = "allow-conflicted",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     allow_conflicted: bool,
     /// Content transformations applied after an input has been selected.
     #[command(flatten)]
@@ -186,6 +229,13 @@ impl Cli {
 ///
 /// These flags are intentionally represented separately so the processing
 /// pipeline can apply its stable normalization order to any selected subset.
+///
+/// Each takes an optional `=<BOOL>` value: `--wrap` alone still means `true`,
+/// `--wrap=false` is a valid override of a configured `true`, and `--wrap=80`
+/// is still rejected. The equals sign is required for the value, so
+/// `--wrap false` leaves `false` a positional argument exactly as it did
+/// before, and every argv that worked before the change is accepted with the
+/// same meaning. `src/command.rs`'s tests pin all four spellings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::Args)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -193,29 +243,85 @@ impl Cli {
 )]
 pub struct FormatOpts {
     /// Wrap paragraphs and list items to 80 columns
-    #[arg(long = "wrap")]
+    #[arg(
+        long = "wrap",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     pub wrap: bool,
     /// Renumber ordered list items
-    #[arg(long = "renumber")]
+    #[arg(
+        long = "renumber",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     pub renumber: bool,
     /// Reformat thematic breaks as underscores
-    #[arg(long = "breaks")]
+    #[arg(
+        long = "breaks",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     pub breaks: bool,
     /// Replace "..." with the ellipsis character
-    #[arg(long = "ellipsis")]
+    #[arg(
+        long = "ellipsis",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     pub ellipsis: bool,
     /// Normalize fence delimiters to three backticks
-    #[arg(long = "fences")]
+    #[arg(
+        long = "fences",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     pub fences: bool,
     /// Convert bare numeric references and the final numbered list to
     /// Markdown footnote links
-    #[arg(long = "footnotes")]
+    #[arg(
+        long = "footnotes",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     pub footnotes: bool,
     /// Fix emphasis markers adjacent to inline code
-    #[arg(long = "code-emphasis")]
+    #[arg(
+        long = "code-emphasis",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     pub code_emphasis: bool,
     /// Convert Setext-style headings to hash-prefixed headings
-    #[arg(long = "headings")]
+    #[arg(
+        long = "headings",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     pub headings: bool,
 }
 

@@ -31,13 +31,15 @@ Two constraints shape the adoption.
 The first is behaviour preservation. For every argument vector the tool accepts
 today, a run in which no configuration file is discoverable and no
 `MDTABLEFIX_` variable is set must write the same standard output, the same
-standard error, and the same exit status as before. That rules out routing
-process arguments through the framework's generated parser, which renders every
-boolean switch with a `<BOOL>` value placeholder and accepts `--wrap=false`,
-where this tool renders a bare switch and rejects `--wrap=80`. The generated
-parser also adds a `--config-path` option; it is hidden from the help text by
-default, so it would be accepted without being documented — a worse outcome
-than either showing it or not having it.
+standard error, and the same exit status as before.
+
+That rules out routing process arguments through the framework's generated
+parser, for two reasons. It adds a `--config-path` option, hidden from the help
+text by default, so the option would be accepted without being documented — a
+worse outcome than either showing it or not having it. And it puts a second
+parser in the binary, where this tool's command line is meant to have exactly
+one; see *Accept a typed value on every switch* below for the narrower change
+that this record does make.
 
 The second is [ADR 0012](0012-environment-seam-taxonomy.md), which prohibits
 this repository's code from reading the process environment and names the
@@ -244,6 +246,59 @@ path does not need the attribute, because its command-line layer is built from
 the parser's own record of provenance and its schema fields carry no clap
 default that could be mistaken for a typed value.
 
+### Accept a typed value on every switch
+
+Every configurable switch accepts an optional `=<BOOL>` value: `--wrap`,
+`--wrap=true`, and `--wrap=false` are all valid, while `--wrap=80` and
+`--wrap false` keep the meanings they had before. The declaration is
+`num_args = 0..=1` with `require_equals = true` and
+`default_missing_value = "true"`, written on each field rather than shared, so
+a switch added later has to opt in.
+
+Two requirements pulled in opposite directions here, and this is how they were
+reconciled. The issue that asked for the adoption describes turning a
+configured rule off for one run with `--flag=false`, which a bare presence flag
+cannot express. The adoption's own constraint is that a run with no
+configuration present must behave exactly as before, on the same argument
+vectors. An optional value satisfies both, because it is strictly additive:
+every argument vector the tool accepted before is still accepted with the same
+meaning. A bare switch is still `true`; the value cannot be separated from the
+flag by a space, so `--wrap false` still leaves `false` a positional argument;
+and a non-boolean value still fails as a usage error, though the diagnostic now
+comes from the boolean parser (`invalid value '80'`) rather than from the
+"takes no value" check (`unexpected value '80'`).
+
+The alternative — keeping presence-only switches and documenting
+`MDTABLEFIX_<KEY>=false` as the only way to override a configured `true` — was
+rejected. It leaves the command line unable to express what a configuration
+file can, which is the asymmetry the issue names as its motivation, and it
+would make a repository's checked-in rule set harder to override for one
+invocation than the environment variable it replaced.
+
+The cost is a real change to the command line: `--breaks=false` was a usage
+error and is now accepted. That is recorded rather than hidden, and it is the
+only argument the tool newly accepts. The behaviour-preservation constraint is
+about vectors that already worked, and none of them changes meaning.
+
+`ValueSource::CommandLine` is the typed signal for these values too, so
+`--wrap=false` outranks a configured `true` by the same rule as a bare
+`--wrap`. The four spellings are pinned in `src/command.rs`'s tests, and
+`src/config_tests.rs` checks the typed-false direction for every switch, so one
+that lost the declaration fails the table rather than silently ignoring the
+value.
+
+Taking a value has one rendering side effect that is not wanted. `--help` is
+where those four spellings are advertised, so making the argument take a value
+is right, and clap then prints `[possible values: true, false]` against each
+switch — a welcome statement of the grammar. It also prints `[default: false]`,
+which is not: the default comes from `ArgAction::SetTrue`, so it is the
+command-line default only, and a repository file setting `wrap = true` makes
+the resolved value true while the help line would still claim `false`. Before
+the change neither suffix appeared, because a plain `bool` field takes no value
+at all. The default column is therefore suppressed with `hide_default_value`,
+held as one named constant rather than repeated eleven times. The resolved
+default is untouched; only the claim `--help` makes about it is withdrawn.
+
 ### Ignore keys the schema does not name
 
 A configuration key the schema does not declare is ignored. The framework's
@@ -311,8 +366,13 @@ is `MDTABLEFIX_CONFIG_PATH` alone, which keeps `--help` byte-identical.
 ## Consequences
 
 - With no file, no `MDTABLEFIX_CONFIG_PATH`, and no `MDTABLEFIX_*` variable, the
-  resolved settings equal the compiled-in defaults and the run is unchanged,
-  including the pinned `--help` snapshot.
+  resolved settings equal the compiled-in defaults and the run is unchanged.
+- The `--help` text changes in one place: each configurable switch is rendered
+  with its optional value, `--wrap[=<BOOL>]`, and lists `true` and `false` as
+  possible values. The switch names, the mode and input groups, the
+  descriptions and the exit statuses are unchanged, and the help still
+  describes only the command line: no configuration flag or variable is added
+  to it.
 - A `.mdtablefix.toml` in a working directory changes the behaviour of every
   invocation there, including `make check-fmt` and editor hooks, which is the
   point; this repository adds no such file, so its own gates keep pinning every

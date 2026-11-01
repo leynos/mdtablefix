@@ -24,13 +24,149 @@ use fixture::{Fixture, RAGGED, assert_clean_success, assert_failure};
 /// only by this binary, so it lives here rather than in the shared fixture.
 const CLEAN: &str = "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n";
 
-/// A run with no configuration formats exactly as it did before the adoption.
+/// One line per transformation, each written so that switching it on changes
+/// the line and switching it off leaves it alone.
 ///
-/// The output is pinned character for character, so a changed default — a
-/// switch that arrives enabled, or an extension list that narrows — fails here
-/// rather than in a downstream repository.
+/// Every transformation switch the configuration schema carries has a witness
+/// here, so a default that arrived enabled is visible per key rather than as
+/// one opaque diff. The eight transformations a run reaches from standard
+/// input are all present: `wrap`, `renumber`, `breaks`, `ellipsis`, `fences`,
+/// `footnotes`, `code_emphasis` and `headings`. Every one defaults to off on
+/// the command line, which is why the answer below is the witness unchanged,
+/// and [`every_transformation_switch_changes_its_witness`] proves that each
+/// witness line is one its switch really edits.
+///
+/// The three switches that do *not* appear are `git`, `include_untracked` and
+/// `allow_conflicted`: all describe which files a run reads, not what it does
+/// to a stream, so a run reading standard input cannot witness them. They are
+/// covered by the precedence table in `src/config_tests.rs`, and `git`
+/// additionally by [`a_configured_git_selection_runs_without_the_flag`].
+const DEFAULTS_WITNESS: &str = concat!(
+    "A paragraph that is short.\n",
+    "\n",
+    "A paragraph that is long enough to be reflowed by the wrapping pass, which measures each \
+     line against eighty columns and breaks it apart.\n",
+    "\n",
+    "1. First\n",
+    "1. Second\n",
+    "\n",
+    "***\n",
+    "\n",
+    "An ellipsis...\n",
+    "\n",
+    "~~~~\nfenced\n~~~~\n",
+    "\n",
+    "See the docs.1 for details.\n",
+    "\n",
+    "a**`b`**c\n",
+    "\n",
+    "Setext heading\n",
+    "==============\n",
+);
+
+/// What [`DEFAULTS_WITNESS`] formats to when every default holds.
+///
+/// Spelled out rather than derived from the witness, so a reader can see that
+/// nothing moved: every transformation is off, so `***`, `...`, `~~~~`,
+/// `docs.1`, `` a**`b`**c `` and the Setext pair all come back untouched. The
+/// one transformation that edits by default is table alignment, and the
+/// witness deliberately holds no table — [`RAGGED`] covers that separately.
+///
+/// The witness therefore equals the answer byte-for-byte, which is the claim
+/// the case makes. What stops that from being vacuous is that each line is
+/// *changed* by its own switch: `--wrap` breaks the long paragraph,
+/// `--renumber` makes the second item `2.`, `--breaks` rewrites `***`,
+/// `--ellipsis` writes `…`, `--fences` writes backticks, `--footnotes` writes
+/// `docs.[^1]`, `--code-emphasis` writes `` a`b`c ``, and `--headings` writes
+/// `# Setext heading`. A default that arrived enabled anywhere would show up
+/// here as a difference between the two constants.
+const DEFAULTS_ANSWER: &str = concat!(
+    "A paragraph that is short.\n",
+    "\n",
+    "A paragraph that is long enough to be reflowed by the wrapping pass, which measures each \
+     line against eighty columns and breaks it apart.\n",
+    "\n",
+    "1. First\n",
+    "1. Second\n",
+    "\n",
+    "***\n",
+    "\n",
+    "An ellipsis...\n",
+    "\n",
+    "~~~~\nfenced\n~~~~\n",
+    "\n",
+    "See the docs.1 for details.\n",
+    "\n",
+    "a**`b`**c\n",
+    "\n",
+    "Setext heading\n",
+    "==============\n",
+);
+
+/// A run with no configuration at all formats exactly as it did before.
+///
+/// No selector, no configuration variable, and no candidate anywhere in the
+/// tree the child searches: discovery runs and finds nothing, which is the only
+/// spelling that exercises the absence path. Naming an empty selected file
+/// would instead short-circuit discovery and prove only that the loader can
+/// read a file that states nothing.
+///
+/// The input is one line per transformation a default could have flipped, so a
+/// switch that arrived enabled, or a default that narrowed, changes the output.
+/// `RAGGED` is deliberately not used: it distinguishes alignment and nothing
+/// else.
 #[test]
-fn a_run_with_no_configuration_formats_as_it_always_did() {
+fn a_run_with_no_configuration_at_all_formats_as_it_always_did() {
+    let fixture = Fixture::new();
+
+    let run = fixture.run(&[], DEFAULTS_WITNESS);
+
+    assert_clean_success(&run, DEFAULTS_ANSWER);
+}
+
+/// Every switch that has a witness line really rewrites that line.
+///
+/// The negative control for the case above. If a witness line were inert —
+/// because the syntax it probes had changed, or because the pass had stopped
+/// reaching it — then "the default leaves it alone" would be true of any
+/// implementation, including one whose defaults had all flipped. This proves
+/// the opposite direction for each line separately, so the pair together say
+/// that the defaults are *exactly* off rather than merely looking untouched.
+///
+/// `--wrap` reflows rather than edits one line, and `--fences` edits two, so
+/// the assertion is that the output differs from the unswitched run, not that
+/// it differs by one line.
+#[rstest::rstest]
+#[case("--wrap")]
+#[case("--renumber")]
+#[case("--breaks")]
+#[case("--ellipsis")]
+#[case("--fences")]
+#[case("--footnotes")]
+#[case("--code-emphasis")]
+#[case("--headings")]
+fn every_transformation_switch_changes_its_witness(#[case] flag: &str) {
+    let fixture = Fixture::new();
+
+    let bare = fixture.run(&[], DEFAULTS_WITNESS);
+    let switched = fixture.run(&[flag], DEFAULTS_WITNESS);
+
+    assert_clean_success(&bare, DEFAULTS_ANSWER);
+    assert_eq!(switched.status, 0, "stderr: {}", switched.stderr);
+    assert!(switched.stderr.is_empty(), "stderr: {}", switched.stderr);
+    assert_ne!(
+        switched.stdout, bare.stdout,
+        "{flag} left the witness untouched, so the line it is meant to witness proves nothing"
+    );
+}
+
+/// An empty selected file is not the same run, and still formats unchanged.
+///
+/// Kept beside the case above because the two are easy to confuse and prove
+/// different things: this one shows a selected file that supplies nothing
+/// leaves every default in place, while absence is proved by the case above.
+#[test]
+fn an_empty_selected_file_leaves_every_default_in_place() {
     let fixture = Fixture::new();
     let empty = fixture.empty_config();
 
@@ -199,4 +335,53 @@ fn help_still_describes_only_the_command_line() {
         run.stdout
     );
     assert!(!run.stdout.contains("configuration"), "{}", run.stdout);
+}
+
+/// A typed `--flag=false` turns a configured switch off, exit 0.
+///
+/// The interface issue #666 named: a repository records its rule set once and
+/// an invocation switches one rule off. The file says `ellipsis = true`, which
+/// [`a_discovered_file_supplies_a_setting`] proves applies, and the command
+/// line says `--ellipsis=false`, so an implementation that ignored the value
+/// would print the ellipsis and fail here.
+#[test]
+fn a_typed_false_turns_a_configured_switch_off() {
+    let fixture = Fixture::new();
+    let config = fixture.write("selected.toml", "ellipsis = true\n");
+
+    let run = fixture.run_selected(&config, &["--ellipsis=false"], "a...b\n");
+
+    assert_clean_success(&run, "a...b\n");
+}
+
+/// A bare switch still means `true`, and `--flag=true` means the same.
+///
+/// The additive half of the syntax: the value is optional, so a command line
+/// written before it existed is unchanged. Both spellings are checked against
+/// the same input, so a parser that treated the presence of `=` as significant
+/// would fail one of them.
+#[test]
+fn a_bare_switch_and_a_typed_true_agree() {
+    let fixture = Fixture::new();
+
+    let bare = fixture.run(&["--ellipsis"], "a...b\n");
+    let typed = fixture.run(&["--ellipsis=true"], "a...b\n");
+
+    assert_clean_success(&bare, "a…b\n");
+    assert_clean_success(&typed, "a…b\n");
+}
+
+/// A non-boolean value for a switch is still a usage error, exit 2.
+///
+/// `--wrap=80` was rejected before the optional value existed and must stay
+/// rejected: the flag names a transformation, not a width. The diagnostic now
+/// comes from the boolean parser rather than from "takes no value", so the
+/// status and the stream are the contract and the wording is not pinned.
+#[test]
+fn a_non_boolean_switch_value_is_a_usage_error() {
+    let fixture = Fixture::new();
+
+    let run = fixture.run(&["--wrap=80"], "alpha beta\n");
+
+    assert_failure(&run, 2, "'80'");
 }

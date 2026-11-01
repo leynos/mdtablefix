@@ -534,6 +534,50 @@ actual current state of the work.
       should be read off the run itself: the first draft of this correction
       said six of eight gates passed, which counted the four passing gates as
       though there were six of them. The summary line names both totals.
+- [x] (2026-11-01) The external review of `7a5198d` demanded five gaps. Gap 1,
+      the `--flag=false` scope, is answered by the optional value and its cost
+      recorded; the question tool was refused twice, so the decision stands as
+      the implementation agent's rather than as an approved one. Gap 2's
+      unreadable-file tests exist and are not vacuous — the runner is uid 1000,
+      so a `0o000` file really does fail to open. Gaps 3, 4 and 5 are recorded
+      above. One thing the review did not name was found while settling gap 1:
+      the optional value also makes `--help` print `[default: false]` on all
+      eleven switches, which the ExecPlan had not recorded. Traced through clap
+      4.6.7's `spec_vals` and `Arg::_build` before the rebuilt binary existed,
+      then measured: the prediction matched byte-for-byte. The default is
+      suppressed with a named `hide_default_value` constant;
+      `[possible values: true, false]` is kept. The snapshot was rewritten from
+      the measured `--help` rather than through `INSTA_UPDATE`, because the
+      test target did not finish compiling before its background cap, and the
+      text a snapshot records is the normalized help the test already prints.
+      Date/Author: 2026-11-01, implementation agent.
+
+- [x] (2026-11-01) Full gate evidence for the review-round tree. The first gate
+      run was red for two reasons that have both been fixed: `make lint` failed
+      with three `dead_code` errors because the permission helpers sat in a
+      `#[path]` fixture that two binaries compile and only one calls — they now
+      live in `tests/support/permission_denial.rs`, included with `#[cfg(unix)]`
+      by the failure binary alone — and `src/config_tests.rs` did not compile,
+      first because `Key` lacked `PartialEq` and then because the `FILE_TRUE`
+      early return hid the other arms from exhaustiveness checking, which is now
+      a match on `key` alone so a new key cannot go uncovered. Both were
+      genuine defects that had never been compiled, not formatting noise.
+      Result: `make check-fmt`, `make lint` (475s, zero diagnostics),
+      `make markdownlint` (47 files, 0 issues) and `make nixie` all pass.
+      `make test --all-targets` reached its two-hour harness cap while compiling
+      trybuild UI probes, having run 21 binaries with **1972 passed, 0 failed**;
+      a second invocation reached the same cap at the same point, so the
+      remaining 49 built binaries were run directly from
+      `target/debug/deps/`, giving **2566 passed, 0 failed**, and
+      `cargo test --workspace --doc --all-features` passed separately. Total:
+      4538 tests passed, 0 failed, 0 ignored; the only two "no summary" entries
+      are the proc-macro `.so` and the bare `mdtablefix` binary, neither of which
+      is a test harness. The touched suites are green: `cli_config_binary` 23,
+      `cli_config_failure_binary` 8 (including both unix permission cases), and
+      `cli_git` 17 with the regenerated snapshot. Logs:
+      `/tmp/mdtablefix-gate/{check-fmt,lint,markdownlint,nixie}-issue-666.out`,
+      `test-issue-666-rerun.out`, `test-doc-issue-666.out`, `sweep.txt`.
+      Date/Author: 2026-11-01, implementation agent.
 
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
@@ -575,10 +619,13 @@ Document with evidence so future work benefits.
   rather than as an error. Evidence: the upstream test suite pins this in
   `ortho_config/tests/trybuild/boolean_cli_override.rs` and again in
   `documentation_examples/boolean_override.rs`. Impact: routing `mdtablefix`'s
-  existing argv through the generated parser would change behaviour, because
-  `mdtablefix --wrap=false` is today a `clap` parse error with exit status 2.
-  This is the decisive reason to keep `Cli::parse_validated()` as the sole
-  argument parser.
+  existing argv through the generated parser would add a second parser, whose
+  help rendering and provenance rules this repository would then have to keep
+  in step with its own. This is the reason to keep `Cli::parse_validated()` as
+  the sole argument parser. The syntax itself is no longer a reason: on
+  2026-11-01 the `Cli` switches were given the same optional `=<BOOL>` value
+  the derive emits, declared by hand, so that a configured `true` can be turned
+  off for one run. See the Decision log entry of that date.
 - Observation: the generated `const _` guard names
   `serde::de::DeserializeOwned` with the crate spelled unqualified, so `serde`
   must be a direct dependency of any crate that derives `OrthoConfig`. Evidence:
@@ -649,6 +696,10 @@ Document with evidence so future work benefits.
   parse of an explicitly valued argument. Impact: it strengthens the decision
   to keep `Cli::parse_validated()` as the only argv parser; a `<BOOL>`
   placeholder would also break the pinned `tests/snapshots/cli_git_help.snap`.
+  Superseded in part on 2026-11-01: the placeholder was adopted deliberately on
+  `Cli` itself, so the snapshot was regenerated once and `--wrap=80` now fails
+  through the boolean parser rather than through the "takes no value" check.
+  The status is unchanged at 2 and the message still names `80`.
 - Observation: the generated `--config-path` flag is hidden from help by
   default, not shown. Evidence:
   `ortho_config_macros/src/derive/build/config_flag.rs` pushes `hide = true`
@@ -686,7 +737,10 @@ Document with evidence so future work benefits.
   carries that polarity for `wrap`, `renumber`, and `git` and the opposite for
   `headings`, whose file value is `false`. The plan's own acceptance text
   claimed a typed `--breaks=false` would override a variable, which was wrong
-  and is corrected under `Validation and acceptance`.
+  at the time and is corrected under `Validation and acceptance`. Superseded on
+  2026-11-01: the switches now carry the optional value, so the typed direction
+  exists, and the precedence table covers it with
+  `a_typed_false_outranks_a_configured_true`.
 - Observation: `MapEnv` is a usable injection seam for both halves of
   resolution, and one map can be shared between them. Evidence: the `EnvSource`
   and `ScanEnvSource` impls at `ortho_config/src/env_source.rs` around the
@@ -799,12 +853,25 @@ Document with evidence so future work benefits.
   `tests/support/cli_config_fixture.rs` matched a fixed list of upper-case
   names, but OrthoConfig upper-cases a name before comparing it. Measured on
   2026-10-27: `MDTABLEFIX_ELLIPSIS=true`, `mdtablefix_ellipsis=true` and
-  `MdTaBlEfIx_ElLiPsIs=true` each enabled the transformation, and a lower-case
-  `mdtablefix_config_path` selected its file through the discovery path too.
-  Impact: the scrub now enumerates the process environment and removes every
-  name carrying the `mdtablefix_` prefix in any case, so a spelling the fixture
-  has never heard of is still removed; any future key is covered without
-  editing the fixture.
+  `MdTaBlEfIx_ElLiPsIs=true` each enabled the transformation — the *settings*
+  path is case-folded, which is why the scrub had to stop enumerating
+  spellings. Impact: the scrub now enumerates the process environment and
+  removes every name carrying the `mdtablefix_` prefix in any case, so a
+  spelling the fixture has never heard of is still removed; any future key is
+  covered without editing the fixture.
+- Correction to the entry above (2026-11-01): it originally went on to claim
+  that a lower-case `mdtablefix_config_path` also selected its file. It does
+  not, and that claim was corrected after review. The selector is a different
+  mechanism from a setting: `ConfigPathSelector::env` resolves through
+  `EnvSource::get`, which on the production `ProcessEnv` is
+  `std::env::var_os` — an exact, case-sensitive name lookup with no folding
+  anywhere — so `mdtablefix_config_path` selects nothing on Linux. The
+  case-folding applies only to keys after the prefix is stripped, which is why
+  three spellings of `ellipsis` were measured to work while the selector's own
+  name is not folded. The scrub stays a case-insensitive prefix match because
+  it must cover the settings half; removing a selector spelling that could
+  never match is harmless. The fixture's module documentation now distinguishes
+  the two mechanisms explicitly.
 - Observation (CodeRabbit round three): a `#[path = "config.rs"] mod settings;`
   in `src/lib.rs` reaches a binary-only file without writing any text the
   dependency contract's scan could recognize. Impact: the reachability half is
@@ -830,6 +897,30 @@ Document with evidence so future work benefits.
   users' guide and this plan now say so and tell the reader to search the
   merged files and variables for the offending value, rather than promising a
   location the framework cannot supply.
+- Observation: an item defined in a `#[path]`-shared test support file is
+  `dead_code` under `-D warnings` in every including binary that does not call
+  it, and the cost is paid per including binary rather than once. The
+  permission helpers were placed beside the shared fixture, but the fixture is
+  compiled by both `tests/cli_config_binary.rs` and
+  `tests/cli_config_failure_binary.rs` while only the failure binary denies a
+  read, so `make lint` failed with three `dead_code` errors and `make test`
+  produced no test evidence at all. Impact: the helpers now live in their own
+  `tests/support/permission_denial.rs`, declared with `#[cfg(unix)]` by the
+  failure binary alone. The general rule for this repository is that a support
+  file used by several binaries must keep its items within the intersection of
+  what those binaries call, or be split so each binary pays only for what it
+  uses.
+- Observation: two defects in the new precedence table had never been
+  compiled, and both were found only by running the gates. `Key` derived
+  `Debug, Clone, Copy` but not `PartialEq`, so `FILE_TRUE.contains(&key)` did
+  not type-check; and once that was fixed, the
+  `if FILE_TRUE.contains(&key) { return … }` shape hid the remaining `match`
+  arms from exhaustiveness checking, so `(key, scenario)` was reported
+  non-exhaustive even though every reachable key was covered. Impact:
+  `expected` now matches on `key` alone, with the ten file-true switches
+  sharing one arm and `headings` and `md_exts` each stating their own. That
+  shape makes a key added to the enum without a cell here a compile error
+  rather than a silently uncovered row, which is the property the table is for.
 
 ## Decision log
 
@@ -1214,6 +1305,94 @@ defect reported twice; the third repeats a round-two finding already rejected.
   thirteen siblings and would break every existing cross-reference to it.
   Date/Author: 2026-10-27, implementation agent.
 
+### Review round after the draft pull request
+
+An external review of head `7a5198d` assessed the work as substantial but not
+fully verified, and named five gaps. Each is answered below.
+
+- Decision (accepted): give every configurable switch an optional `=<BOOL>`
+  value on `Cli` and `FormatOpts`, declared by hand with `num_args = 0..=1`,
+  `require_equals = true`, and `default_missing_value = "true"`. Rationale:
+  issue #666 names `--flag=false` as the way to disable a configured rule, and
+  a presence-only switch cannot express it. The reviewer required an explicit
+  decision rather than both requirements being described as satisfied. The
+  reconciliation is that the value is additive: a bare switch still means
+  `true`, a value must follow `=` so `--wrap false` keeps `false` as a
+  positional argument, and `--wrap=80` is still a usage error at exit 2. The
+  only argument newly accepted is `--flag=false`; no argument vector that
+  worked before changes meaning. Cost accepted and recorded: the CLI contract
+  changes, and the help renders `--wrap[=<BOOL>]`, so
+  `tests/snapshots/cli_git_help.snap` was regenerated once. Evidence: a probe
+  binary pinned all four spellings before the change was written, and
+  `src/command.rs`'s unit tests plus three process-level tests in
+  `tests/cli_config_binary.rs` pin them after. Recorded in ADR 0014 under
+  *Accept a typed value on every switch*, and in `docs/users-guide.md` and
+  `docs/developers-guide.md`. Residual note, stated plainly: the review asked
+  for a decision, and the decision to implement the syntax rather than document
+  the presence-only scope was taken by the implementation agent. It could not
+  be put to the user — the question tool was refused twice in this session — so
+  it is recorded as a design decision with its cost, not as an approved one. If
+  the repository prefers presence-only switches, reverting this change is a
+  self-contained edit to `src/command.rs` plus one snapshot, and the tests that
+  would be removed are named in this entry. Date/Author: 2026-11-01,
+  implementation agent.
+- Decision (accepted): the no-configuration process case runs with no selector,
+  no `MDTABLEFIX_*` variable and no candidate in the tree. Rationale: the
+  earlier case named an empty selected file, which short-circuits discovery, so
+  it proved the loader can read a file that states nothing rather than that
+  absence is handled. The two now exist as separate tests, and the fixture's
+  module documentation explains why they are not interchangeable. Evidence:
+  `a_run_with_no_configuration_at_all_formats_as_it_always_did` and
+  `an_empty_selected_file_leaves_every_default_in_place` in
+  `tests/cli_config_binary.rs`, with the input written as one line per
+  transformation so an enabled default is visible. Date/Author: 2026-11-01,
+  implementation agent.
+- Decision (accepted): the in-process precedence table names all twelve
+  `ConfigFile` keys, so `breaks`, `ellipsis`, `fences`, `footnotes`,
+  `code_emphasis`, `include_untracked`, and `allow_conflicted` are covered
+  where six of them previously had no cell. Rationale: the merge is generated
+  from the schema, so an omitted key would never fail — it would simply never
+  be exercised. The table is now 12 keys by 5 scenarios by 2 supplies. Evidence:
+  `src/config_tests.rs`. Date/Author: 2026-11-01, implementation agent.
+- Decision (accepted): correct two documentation errors.
+  `docs/users-guide.md` says `--breaks=false` is a usage error, which stopped
+  being true with the change above, and the same claim in ADR 0014's Context
+  was the reason given for bypassing the generated parser, so both were
+  rewritten to state the decision and its cost. The plan's
+  `mdtablefix --in-place` example omitted its input, and now names a positional
+  path, because configuration never supplies files.
+  `tests/support/cli_config_fixture.rs` claimed a lower-case
+  `mdtablefix_config_path` would be read; it will not, because
+  `ConfigPathSelector::env` resolves through `EnvSource::get`, which is an
+  exact name lookup, while the *settings* prefix really is case-folded. The
+  module documentation now distinguishes the two mechanisms and records the
+  three measured spellings that do enable a setting. Date/Author: 2026-11-01,
+  implementation agent.
+- Decision (accepted): the unreadable-file verification the plan claimed exists
+  now does. Rationale: the plan's `Validation and acceptance` asserted that
+  unreadable cases exit 2, but no test denied a read; the missing-file case
+  passes a loader that refuses only what is absent. Two `#[cfg(unix)]` tests
+  were added, one selected and one discovered beside a valid user file, and the
+  plan's claim was corrected only after they were written. Evidence:
+  `tests/cli_config_failure_binary.rs`, and the obligation entry under
+  `Verification plan`. Date/Author: 2026-11-01, implementation agent.
+- Decision (accepted): the optional `=<BOOL>` value's `[default: false]` is
+  suppressed in `--help`. Rationale: measured on the rebuilt binary, an
+  optional-value switch renders as
+  `--wrap[=<BOOL>]  Wrap… [default: false] [possible values: true, false]`,
+  where a plain `bool` switch rendered neither suffix. The default is an
+  artefact of `ArgAction::SetTrue`, which supplies `false` whenever the field
+  declares none — the resolved default is correct and unchanged, but printing
+  it states one layer as though it were the answer, and a repository file
+  setting `wrap = true` makes that claim wrong. Both suffixes were traced
+  through clap 4.6.7's source before the binary existed (`spec_vals` gates the
+  default on `is_takes_value_set()` and the possible values on `use_long_pv`),
+  and the prediction matched the measurement exactly.
+  `[possible values: true, false]` is kept because it describes the argument's
+  grammar. Evidence: `HIDE_SWITCH_DEFAULT` in `src/command.rs`, applied on all
+  eleven switches; `tests/snapshots/cli_git_help.snap`; ADR 0014. Date/Author:
+  2026-11-01, implementation agent.
+
 ## Outcomes & retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at
@@ -1296,21 +1475,32 @@ pub struct Cli {
     #[arg(long = "check", group = "mode")] check: bool,
     #[arg(long = "diff", group = "mode")] diff: bool,
     #[arg(long = "list-files", group = "mode")] list_files: bool,
-    #[arg(long = "git")] git: bool,
-    #[arg(long = "include-untracked")] include_untracked: bool,
+    #[arg(long = "git", /* switch-bundle */)] git: bool,
+    #[arg(long = "include-untracked", /* switch-bundle */)]
+    include_untracked: bool,
     #[arg(long = "md-exts", value_name = "EXT", value_delimiter = ',',
           default_value = "md,mdc,markdown", value_parser = parse_extension)]
     md_exts: Vec<String>,
-    #[arg(long = "allow-conflicted")] allow_conflicted: bool,
+    #[arg(long = "allow-conflicted", /* switch-bundle */)]
+    allow_conflicted: bool,
     #[command(flatten)] pub opts: FormatOpts,
     pub files: Vec<PathBuf>,
 }
 ```
 
+`switch-bundle` stands for the four attributes given every configurable switch
+after the 2026-11-01 review: `value_name = SWITCH_VALUE` (the constant
+`"BOOL"`), `num_args = 0..=1`, `require_equals = true`, and
+`default_missing_value = "true"`. The four mode flags do not take it: they are
+invocations rather than settings, and `in_place_without_inputs_is_rejected`
+depends on `--in-place` staying valueless.
+
 `FormatOpts` is the eight-flag rule set flattened into `Cli`: `--wrap`,
 `--renumber`, `--breaks`, `--ellipsis`, `--fences`, `--footnotes`,
-`--code-emphasis`, and `--headings`, each a plain `bool`.
-`From<FormatOpts> for Options` carries them into the library.
+`--code-emphasis`, and `--headings`, each a `bool` with the same bundle, so
+each of the twelve configurable settings accepts `--flag`, `--flag=true`, and
+`--flag=false` while rejecting `--flag=80`. `From<FormatOpts> for Options`
+carries them into the library.
 
 `Cli::parse_validated()` parses argv, then enforces one cross-argument rule that
 `clap` cannot express on its own:
@@ -1353,20 +1543,61 @@ description, every option from `--in-place` through `--headings`, `-h, --help`,
 `-V, --version`, and the `--md-exts <EXT>` default rendering
 `[default: md,mdc,markdown]`. `tests/cli_git.rs` around line 340 produces it by
 running the built binary with `--help`, normalizing `mdtablefix.exe` to
-`mdtablefix`, and asserting with `insta`.
+`mdtablefix`, and asserting with `insta`. The snapshot was regenerated once, on
+2026-11-01, when the configurable switches gained their optional `=<BOOL>`; the
+usage line, the argument description, the option list, and the default
+rendering are unchanged, and now each configurable switch renders as
+`--wrap[=<BOOL>]` with `[possible values: true, false]`.
+
+The `[default: false]` rendering an optional-value switch also gains is
+suppressed, deliberately. `ArgAction::SetTrue` supplies `false` as a default
+value whenever the field declares none, so the resolved default is unchanged;
+what changes is that `--help` would now print it. It did not print before,
+because a plain `bool` field takes no value and clap renders neither a default
+nor a possible-value list for one. Printing it would state a layer rather than
+the command line: a repository file setting `wrap = true` makes the resolved
+value true while the help line still claims `false`. The column is therefore
+carried by a named `hide_default_value` constant in `src/command.rs`, on all
+eleven switches, with the rationale on the constant rather than repeated in
+eleven attribute blocks. `[possible values: true, false]` stays: it describes
+the argument's grammar, which is what `--help` is for.
 
 ### Every caller of the command line
 
-- `Makefile` line 15 sets `MDTABLEFIX ?= mdtablefix`, line 17 sets
+- `Makefile` line 16 sets `MDTABLEFIX ?= mdtablefix`, line 17 sets
   `MDTABLEFIX_SELECT = --git --include-untracked`, and line 18 sets
   `MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences`. The
   `fmt` recipe at line 72 runs
   `$(MDTABLEFIX) --in-place $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)` and the
   `check-fmt` recipe at line 77 runs
-  `$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)`.
+  `$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)`. Every one
+  of those switches is typed bare and keeps meaning `true`.
 - `.github/workflows/ci.yml` installs `mdtablefix` at a pinned version for its
-  `make check-fmt` job. It never passes a configuration flag.
-- No sibling repository invokes `mdtablefix` with a configuration file.
+  `make check-fmt` job. It never passes a configuration flag, and it pins the
+  released version, so the switch syntax it exercises is the pre-`<BOOL>` one.
+- `dev-env-rocky`, in the worktree
+  `/home/leynos/.lody/repos/github---leynos---dev-env-rocky/worktrees/03dbd8bd-f627-44b3-8631-2c997d15602f`,
+  sets the same three variables at Makefile lines 8-10 and runs the same two
+  recipes at lines 385 and 391. Its `lint-test.yml` installs the tool through
+  `leynos/shared-actions/.github/actions/install-mdtablefix` at commit
+  `0606ca8`, so it exercises a released version rather than this worktree.
+- `shared-actions`, in the worktree
+  `/home/leynos/.lody/repos/github---leynos---shared-actions/worktrees/issue-591-mutation-cargo-mdtablefix-installer-input`,
+  calls it from its own `fmt` and `check-fmt` recipes (Makefile lines 206 and
+  212) with the variables at lines 31-33 — again all bare switches. The same
+  worktree also *publishes* the `install-mdtablefix` action the other
+  repositories consume.
+- `nile-valley` and `velocetty` were checked from their bare repositories,
+  because neither had a checkout on disk: `nile-valley`'s `HEAD` runs the tool
+  at Makefile lines 83 and 138 with the variables at 73-75, and `velocetty`'s
+  branches run it at Makefile lines 25 and 30 with the variables at 10-12. Both
+  spellings are the same bare set, and both pin the release in CI rather than
+  building this worktree.
+- No sibling repository invokes `mdtablefix` with a configuration file, so no
+  caller is affected by discovery, the environment prefix, or the precedence
+  order. The four callers above are named because they constrain the command
+  line: every spelling they use is a bare switch, and the 2026-11-01 change
+  keeps every bare switch meaning `true`.
 
 ### The ortho_config facts that shape the design
 
@@ -1583,16 +1814,37 @@ invariants to the required behaviour.
 - Obligation: INV-EXIT and INV-STREAM.
   Method: child-process checks in `assert_cmd`. Rationale: the exit status and
   the stream split are process-level contracts; no in-process test can observe
-  them faithfully. Domain: a malformed configuration file, an unreadable one, a
-  selected but missing one, a valid one that sets `wrap`, and no configuration
-  at all. Artefact: `tests/cli_config_failure_binary.rs` now holds the failing
-  cases and `tests/cli_config_binary.rs` the passing ones, split on 2026-10-27;
-  see the EP-M4 progress entry. Evidence: the malformed,
-  malformed-discovered-beside-a-valid-file, and unreadable cases exit 2 with
-  the diagnostic on standard error and nothing on standard output; the valid
-  case exits 0 and formats as configured; the no-configuration case exits 0
-  with the base output. Non-vacuity: every case asserts standard output and
-  standard error separately, so a diagnostic printed to the wrong stream fails.
+  them faithfully. Domain: a malformed configuration file, a selected but
+  missing one, a valid one that sets `wrap`, and a run with no configuration at
+  all — no selector, no variable, and no candidate in the discovered tree.
+  Artefact: `tests/cli_config_failure_binary.rs` now holds the failing cases and
+  `tests/cli_config_binary.rs` the passing ones, split on 2026-10-27; see the
+  EP-M4 progress entry. Evidence: the malformed and selected-but-missing cases
+  exit 2 with the diagnostic on standard error and nothing on standard output;
+  the valid case exits 0 and formats as configured; the no-configuration case
+  exits 0 with the base output. Non-vacuity: every case asserts standard output
+  and standard error separately, so a diagnostic printed to the wrong stream
+  fails, and the no-configuration case feeds one line per transformation so an
+  enabled default would change its output.
+- Obligation: INV-EXIT and INV-STREAM, unreadable half.
+  Method: child-process checks in `assert_cmd`, `#[cfg(unix)]`, with the file
+  made unreadable by `chmod 0o000`. Rationale: the absence of the file and the
+  unreadability of the file reach different code paths — a loader that refuses
+  only what is missing passes the missing-file case — so the read failure needs
+  its own evidence, and only a real permission bit produces one. Domain: a
+  selected file that exists but cannot be read, and a discovered project file
+  that cannot be read beside a valid user file. Artefact:
+  `an_unreadable_selected_file_exits_two_with_no_standard_output` and
+  `an_unreadable_project_file_is_reported_beside_a_valid_user_file` in
+  `tests/cli_config_failure_binary.rs`, added 2026-11-01. Evidence: both exit
+  2, leave standard output empty, name the file, and state the permission
+  failure; the selected case also proves the positional input was not
+  rewritten. Non-vacuity: a run as root cannot fail a read on permission bits,
+  so each test checks `geteuid()` and *reports a skip* rather than passing
+  silently; the observed result under a non-root runner is asserted, so the
+  tests are evidence only where they actually ran. The discovered case is
+  written beside a valid user file, so a promotion that only fires in the
+  all-empty case fails it.
 - Obligation: INV-ENV.
   Method: the existing `make lint` gate, which denies
   `clippy::disallowed_methods`, plus the existing
@@ -2033,22 +2285,27 @@ wrap = true
 renumber = true
 ```
 
-can run `mdtablefix --in-place` and see paragraphs wrapped and ordered lists
-renumbered without typing either flag. Adding `MDTABLEFIX_BREAKS=true` to the
-environment also normalizes thematic breaks.
+can run `mdtablefix --in-place notes.md` — the configuration supplies the rule
+set, never the files, so the path is still the invocation's to supply — and see
+paragraphs wrapped and ordered lists renumbered without typing either flag.
+Adding `MDTABLEFIX_BREAKS=true` to the environment also normalizes thematic
+breaks.
 
-Measured on 2026-10-27, the override direction is asymmetric, and this plan
-originally overstated it. Every switch this tool declares is a bare presence
-flag, so the command line can say `true` and cannot say `false`:
-`--breaks=false` is a clap parse error,
+Measured on 2026-10-27, and superseded on 2026-11-01, the override direction
+was originally asymmetric. Every switch was a bare presence flag, so the
+command line could say `true` and could not say `false`: `--breaks=false` was a
+clap parse error,
 `unexpected value 'false' for '--breaks' found; no more were expected`, exit
-status 2. A file or variable that enables a transformation is therefore turned
-*off* at the environment layer, which can express `false` —
-`MDTABLEFIX_BREAKS=false` beside `breaks = true` resolves to `false`, which is
-the `FileAndEnv` cell of the precedence table for the three switches of that
-polarity — and not from the command line. This is a property of the existing
-flag shape, not of the adoption: the flags were presence flags before this
-change and the issue requires that they stay so.
+status 2. A configured `true` was therefore turned *off* at the environment
+layer, which can express `false`, and not from the command line.
+
+The switches now accept an optional `=<BOOL>` value, so `--breaks=false`
+outranks a configured `breaks = true` and `--breaks` alone still means `true`.
+The change is recorded in ADR 0014 under *Accept a typed value on every
+switch*, along with its cost — `--breaks=false` was a usage error and is now
+accepted — and the argument that it is otherwise additive: every argument
+vector that worked before still works with the same meaning, because the value
+must follow an equals sign and a non-boolean value is still a usage error.
 
 A user with `MDTABLEFIX_CONFIG_PATH=/nonexistent/config.toml` sees
 
@@ -2145,6 +2402,60 @@ package version   0.6.1
 edition           2024
 rust-version      1.89
 ```
+
+The pre-change CLI test inventory. The commands that produced it read the base
+commit's tree rather than the working tree, so the count is of tests that
+existed *before* the adoption rather than of tests the adoption added. The
+inventory is recorded here rather than attached as a file because the original
+`make test` log from Stage 2 was not kept — only its summary line, "2872
+passed, 0 failed", survives in the Progress entry above. Re-deriving it from
+the base commit is reproducible, and is what this block is.
+
+```plaintext
+$ git ls-tree -r --name-only 4a9bdf0 -- tests/ | grep -v '/data/' | grep '\.rs$' | wc -l
+173
+```
+
+Of those 173 Rust files, these 19 carry test functions that run the binary or
+assert its grammar. Counts are per attribute occurrence in the base commit's
+blob:
+
+```plaintext
+file                                      #[test]  #[rstest]  #[case]
+tests/cli.rs                                  17         4       33
+tests/cli/ellipsis.rs                          8         0        0
+tests/cli_check/arguments.rs                   1         0        0
+tests/cli_check/closed_pipe.rs                 1         0        0
+tests/cli_check/exit_status.rs                 2         0        0
+tests/cli_check/no_write.rs                    2         0        0
+tests/cli_check/ordering.rs                    1         0        0
+tests/cli_diff.rs                              6         0        0
+tests/cli_fences.rs                            3         0        0
+tests/cli_frontmatter.rs                       2         2       12
+tests/cli_frontmatter_snapshots.rs             0         1        3
+tests/cli_git.rs                               7         3       10
+tests/cli_matrix.rs                           10         0        0
+tests/cli_matrix/invariants.rs                13         1        7
+tests/cli_matrix/reporting.rs                  6         2       13
+tests/cli_matrix/support_tests.rs              5         2        8
+tests/wrap/cli.rs                             17         3       11
+tests/wrap/cli_files.rs                        1         0        0
+tests/wrap_cli.rs                              3         1        4
+TOTAL                                        105        19      101
+```
+
+Two things about that table matter for the adoption's own claims. First, the
+files listed are exactly the ones that can observe the command-line surface,
+which is why `tests/cli_check.rs`, `tests/cli_matrix/cases.rs`,
+`tests/cli_matrix/support.rs`, `tests/support/cli_args.rs`,
+`tests/support/cli_stdin.rs`, and `tests/wrap/cli_issue_329_property.rs` are
+absent: each compiles into a sibling as a `#[path]` module, so its tests are
+counted once, under the file that declares them. Second, `tests/cli_git.rs` is
+where `cli_git_help.snap` is produced, and it was the one snapshot the adoption
+had to leave unchanged until the review round of 2026-11-01 added the optional
+`=<BOOL>` to every switch. Every other file in the table was a behaviour the
+adoption could not change, and the six full gates recorded in `Progress` are
+what demonstrate they did not.
 
 ## Interfaces and dependencies
 

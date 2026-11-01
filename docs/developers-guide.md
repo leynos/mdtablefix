@@ -1897,11 +1897,22 @@ The module resolves settings in one pass and hands the driver a plain
 `Settings` struct with no configuration types in its signature, so the code
 that formats a file cannot tell where a setting came from. The layers are
 composed by hand rather than by the derive's generated loader, for the reason
-[ADR 0014](adrs/0014-configuration-layering.md) records: the generated parser
-renders every boolean switch with a value placeholder and accepts
-`--wrap=false`, and it adds a hidden `--config-path`, either of which would
-change the command line this tool already has. `Cli::parse_validated()` stays
-the only argument parser, and `ConfigFile` is used only as a merge target.
+[ADR 0014](adrs/0014-configuration-layering.md) records: the generated loader
+brings its own parser, which adds a hidden `--config-path` and would make this
+tool's command line a second, undocumented entry point.
+`Cli::parse_validated()` stays the only argument parser, and `ConfigFile` is
+used only as a merge target.
+
+The optional `=<BOOL>` value on each switch is declared on `Cli` and
+`FormatOpts` by hand, not inherited from the derive: `num_args = 0..=1` with
+`require_equals = true` and `default_missing_value = "true"` renders
+`--wrap[=<BOOL>]`, and `SWITCH_VALUE` names the placeholder once so the help
+text reads the same everywhere. That shape is what makes `--wrap=false` outrank
+a configured `true` while leaving `--wrap` alone meaning `true` and `--wrap=80`
+a usage error; the four spellings are pinned in `src/command.rs`'s tests and
+process-level in `tests/cli_config_binary.rs`. Because the declaration is
+explicit, a new switch has to opt in rather than acquire the behaviour
+silently, and `src/config_tests.rs` checks every one of them.
 
 `Settings::resolve` is the process-backed entry point; it names
 `process_env_source()` and `process_scan_env_source()` once, at the composition

@@ -3,12 +3,20 @@
 ## Command-line usage
 
 ```bash
-mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
-          [--footnotes] [--code-emphasis] [--headings]
+mdtablefix [--wrap[=BOOL]] [--renumber[=BOOL]] [--breaks[=BOOL]]
+          [--ellipsis[=BOOL]] [--fences[=BOOL]] [--footnotes[=BOOL]]
+          [--code-emphasis[=BOOL]] [--headings[=BOOL]]
           [--in-place | --check | --diff | --list-files] [FILE...]
-          [--git [--include-untracked] [--md-exts EXT[,EXT...]]
-                 [--allow-conflicted]]
+          [--git[=BOOL] [--include-untracked[=BOOL]] [--md-exts EXT[,EXT...]]
+                      [--allow-conflicted[=BOOL]]]
 ```
+
+A switch takes an optional `=<BOOL>` value. Writing the switch alone means
+`true`, which is why every command line written before the value existed keeps
+its meaning; writing `=<BOOL>` states the value outright, and is how a
+configuration file's `true` is overridden for one run. The equals sign is part
+of the spelling: `--wrap false` is read as the bare switch plus the positional
+argument `false`, not as a value.
 
 Every named file is formatted, and the result is printed to standard output. If
 no file is named, the document is read from standard input and the formatted
@@ -16,33 +24,33 @@ text is written to standard output. Alternatively `--git` selects the files
 from the Git repository that contains the current directory. The behaviour of
 each formatting flag is described in the sections that follow.
 
-| Flag                     | Effect                                                   |
-| ------------------------ | -------------------------------------------------------- |
-| `--wrap`                 | Reflow paragraphs and list items to 80 columns.          |
-| `--renumber`             | Renumber ordered lists sequentially.                     |
-| `--breaks`               | Rewrite thematic breaks as a line of 70 underscores.     |
-| `--ellipsis`             | Replace `...` with the ellipsis character.               |
-| `--fences`               | Normalize fenced code blocks where compression is safe.  |
-| `--footnotes`            | Convert bare numeric references into footnote links.     |
-| `--code-emphasis`        | Repair emphasis markers that adjoin inline code.         |
-| `--headings`             | Convert Setext headings to hash-prefixed headings.       |
-| `--in-place`             | Rewrite each selected file instead of printing it.       |
-| `--check`                | Report each file that would be reformatted, without      |
-|                          | writing.                                                 |
-| `--diff`                 | Print a unified diff for each file that would be         |
-|                          | reformatted.                                             |
-| `--list-files`           | Print the paths a selection resolves to, without reading |
-|                          | or writing them.                                         |
-| `--git`                  | Select Markdown files tracked by Git beneath the current |
-|                          | directory.                                               |
-| `--include-untracked`    | With `--git`, also select untracked files Git does not   |
-|                          | ignore.                                                  |
-| `--md-exts EXT[,EXT...]` | With `--git`, the extensions to select, replacing the    |
-|                          | default `md`, `mdc`, and `markdown`.                     |
-| `--allow-conflicted`     | With `--git --in-place`, rewrite files that carry        |
-|                          | conflict markers during a merge, rebase, revert, or      |
-|                          | cherry-pick.                                             |
-| `--version`              | Print the version and exit.                              |
+| Flag                         | Effect                                                   |
+| ---------------------------- | -------------------------------------------------------- |
+| `--wrap[=BOOL]`              | Reflow paragraphs and list items to 80 columns.          |
+| `--renumber[=BOOL]`          | Renumber ordered lists sequentially.                     |
+| `--breaks[=BOOL]`            | Rewrite thematic breaks as a line of 70 underscores.     |
+| `--ellipsis[=BOOL]`          | Replace `...` with the ellipsis character.               |
+| `--fences[=BOOL]`            | Normalize fenced code blocks where compression is safe.  |
+| `--footnotes[=BOOL]`         | Convert bare numeric references into footnote links.     |
+| `--code-emphasis[=BOOL]`     | Repair emphasis markers that adjoin inline code.         |
+| `--headings[=BOOL]`          | Convert Setext headings to hash-prefixed headings.       |
+| `--in-place`                 | Rewrite each selected file instead of printing it.       |
+| `--check`                    | Report each file that would be reformatted, without      |
+|                              | writing.                                                 |
+| `--diff`                     | Print a unified diff for each file that would be         |
+|                              | reformatted.                                             |
+| `--list-files`               | Print the paths a selection resolves to, without reading |
+|                              | or writing them.                                         |
+| `--git[=BOOL]`               | Select Markdown files tracked by Git beneath the current |
+|                              | directory.                                               |
+| `--include-untracked[=BOOL]` | With `--git`, also select untracked files Git does       |
+|                              | not ignore.                                              |
+| `--md-exts EXT[,EXT...]`     | With `--git`, the extensions to select, replacing the    |
+|                              | default `md`, `mdc`, and `markdown`.                     |
+| `--allow-conflicted[=BOOL]`  | With `--git --in-place`, rewrite files that carry        |
+|                              | conflict markers during a merge, rebase, revert, or      |
+|                              | cherry-pick.                                             |
+| `--version`                  | Print the version and exit.                              |
 
 _Table 1: The command-line flags._
 
@@ -277,12 +285,23 @@ missing file at an automatic location is not an error; it simply contributes
 nothing. When no configuration is found and no variable is set, a run behaves
 exactly as it did before configuration existed.
 
-One asymmetry follows from the flags themselves. Every transformation switch is
-a bare presence flag, so the command line can turn a setting _on_ but cannot
-turn one _off_: `--breaks=false` is a usage error. A file or variable that
-enables a transformation is therefore disabled at the environment layer, which
-can express `false` — `MDTABLEFIX_BREAKS=false` beside `breaks = true` leaves
-breaks alone — and not by a typed flag.
+Every transformation switch takes an optional value, so a configuration can be
+overridden in either direction from the command line. A file stating
+`breaks = true` is turned off for one run by `--breaks=false`, and one stating
+`breaks = false` is turned on by typing `--breaks` alone or `--breaks=true`.
+The typed value outranks the file and the environment, as the precedence order
+above says.
+
+`--breaks=false` is therefore not a usage error, and this is the one place the
+command line gained a spelling rather than keeping its old surface exactly. The
+gain is additive: a switch typed alone still means `true`, a value must follow
+an equals sign so `--wrap false` keeps `false` as a positional argument, and a
+non-boolean value such as `--wrap=80` is still rejected with exit status `2`.
+
+The environment can express `false` too, which is the route that existed first:
+`MDTABLEFIX_BREAKS=false` beside `breaks = true` leaves breaks alone. The two
+routes agree, and a typed value still outranks the variable when both are
+present.
 
 ### Exit status
 
