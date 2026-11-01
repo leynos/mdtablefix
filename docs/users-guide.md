@@ -199,6 +199,12 @@ and `--list-files` still needs a typed `--git`, because a file argument cannot
 stand in for that flag. A bare `mdtablefix` with a configured `git = true` does
 select from the repository, which is the case configuration exists to serve.
 
+A typed `--git=false` is a typed flag but not an input: it states that no Git
+selection is wanted. A mode flag given with it and no file is rejected — with
+`--check requires --git or at least one file`, or
+`--list-files requires --git` — and exits 2, rather than falling back to
+standard input and, in a reporting mode, reporting nothing.
+
 A file supplies a key the same way the flag does. This file formats paragraphs,
 renumbers lists, and normalizes thematic breaks without any flag being typed:
 

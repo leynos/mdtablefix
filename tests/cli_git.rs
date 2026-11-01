@@ -259,6 +259,82 @@ fn a_git_only_flag_without_git_is_rejected(#[case] args: &[&str], #[case] flag: 
     );
 }
 
+/// A mode flag needs an input of its own, and `--git=false` is not one.
+///
+/// The `mode` group's `requires("inputs")` is satisfied by typing `--git`,
+/// whatever value is typed with it, so this path passed parsing while stating
+/// that no Git selection was wanted. Standard input was then read and, in a
+/// reporting mode, printed and exited 0 — a run that reports nothing and
+/// leaves a script believing it passed. Before the optional `=<BOOL>` value
+/// the state could not be expressed, which is why the group alone sufficed.
+///
+/// Input is supplied on standard input precisely because that is the fallback
+/// under test: a run that read it would print the formatted table here.
+///
+/// `--list-files` is deliberately absent: it is caught a step earlier by the
+/// `--list-files requires --git` rule, because reading paths is not something a
+/// file argument can stand in for either. These three are the modes that
+/// otherwise fell through to standard input.
+#[rstest]
+#[case("--check")]
+#[case("--diff")]
+#[case("--in-place")]
+fn a_mode_flag_with_git_false_and_no_file_is_rejected(#[case] mode: &str) {
+    let fixture = Fixture::new();
+
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("cargo binary")
+        .current_dir(fixture.root())
+        .args([mode, "--git=false"])
+        .write_stdin(RAGGED)
+        .output()
+        .expect("run mdtablefix");
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "stderr must drive the status"
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "a rejected run must print nothing to stdout: {:?}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(&format!("{mode} requires --git or at least one file")),
+        "the rejection must name the mode flag: {stderr}"
+    );
+}
+
+/// The same mode flags are accepted when `--git=true` or a file is supplied.
+///
+/// The positive control for the case above: a check that rejected every mode
+/// flag, or that ignored the value of `--git`, would pass a test that only
+/// asserted rejection. `--list-files` is used because it reads no document, so
+/// the assertion is about acceptance rather than about formatting.
+#[rstest]
+#[case(&["--list-files", "--git=true"])]
+#[case(&["--list-files", "--git"])]
+#[case(&["--check", "notes.md"])]
+fn a_mode_flag_with_a_usable_input_is_accepted(#[case] args: &[&str]) {
+    let fixture = Fixture::new();
+    fixture.track("notes.md", RAGGED);
+
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("cargo binary")
+        .current_dir(fixture.root())
+        .args(args)
+        .output()
+        .expect("run mdtablefix");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("requires --git or at least one file"),
+        "a usable input must not be rejected: {stderr}"
+    );
+}
+
 /// The default extension set is still the default when the flag is absent from
 /// a successful run, which is what makes the replacement above observable.
 #[test]

@@ -153,6 +153,22 @@ fn git_only_flags(cli: &Cli, matches: &clap::ArgMatches) -> [(&'static str, bool
     ]
 }
 
+/// The name of the mode flag the user typed, if any.
+///
+/// Reported by the flag rather than by [`Mode`], because the diagnostic tells a
+/// user which word to remove or supplement, and `--check` is the word they
+/// typed.
+fn typed_mode_flag(cli: &Cli) -> Option<&'static str> {
+    [
+        ("--in-place", cli.in_place),
+        ("--check", cli.check),
+        ("--diff", cli.diff),
+        ("--list-files", cli.list_files),
+    ]
+    .into_iter()
+    .find_map(|(name, typed)| typed.then_some(name))
+}
+
 impl Cli {
     /// Parses and enforces the dependencies `clap` cannot express here.
     ///
@@ -161,6 +177,13 @@ impl Cli {
     /// `Vec`, `--list-files a.md` is silently accepted with no `--git` in
     /// sight. So each dependency is checked after parsing, and reported as a
     /// clap error, which keeps the exit status at 2 and the usage footer.
+    ///
+    /// A mode flag also needs an input of its own. The `mode` group's
+    /// `requires("inputs")` is satisfied by *typing* `--git`, but typing
+    /// `--git=false` states that no Git selection is wanted, so `--check
+    /// --git=false` with no path would reach standard input and, printing
+    /// rather than reporting, exit 0. Before the optional `=<BOOL>` value that
+    /// state could not be expressed, which is why the group alone was enough.
     ///
     /// The matches are returned beside the parsed request because they are the
     /// only record of where each value came from, and configuration needs that
@@ -185,15 +208,29 @@ impl Cli {
             }
         }
 
+        if let Some(flag) = typed_mode_flag(&cli)
+            && cli.files.is_empty()
+            && !cli.git
+        {
+            Self::command()
+                .error(
+                    ErrorKind::MissingRequiredArgument,
+                    format!("{flag} requires --git or at least one file"),
+                )
+                .exit();
+        }
+
         (cli, matches)
     }
 
     /// The mode the flags select.
     ///
     /// The `mode` argument group already guarantees that at most one flag is
-    /// set, and its `requires("inputs")` guarantees that any flag at all comes
-    /// with a file argument, so these branches cannot disagree with the parser:
-    /// they only name the decision it made.
+    /// set, so these branches cannot disagree with the parser: they only name
+    /// the decision it made. That a mode flag also has a usable input is not
+    /// the group's to say — `requires("inputs")` accepts any typed `--git`,
+    /// including `--git=false` — and is enforced in
+    /// [`Cli::parse_validated`] instead.
     #[must_use]
     pub fn mode(&self) -> Mode {
         if self.in_place {

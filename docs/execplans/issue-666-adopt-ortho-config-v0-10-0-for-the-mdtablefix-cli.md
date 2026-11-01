@@ -71,11 +71,20 @@ suggestions; violation requires escalation, not workarounds.
 - `tests/snapshots/cli_git_help.snap` must pass byte-for-byte, unmodified. It
   is the pinned contract for `--help`, and an added visible flag or a changed
   usage line breaks it. A configuration-related flag, if added at all, must be
-  hidden from that snapshot.
+  hidden from that snapshot. Amended 2026-11-01: the snapshot was regenerated
+  once, because the optional `=<BOOL>` value was adopted and every switch's
+  help line changes with it. The amendment is the Decision log entry "give
+  every configurable switch an optional `=<BOOL>` value"; no further
+  regeneration is expected, and the constraint stands unmodified in every other
+  respect.
 - `Cli::parse_validated()` remains the only parser of process arguments. The
-  derive's generated parser must never see `std::env::args_os()`, because it
+  derive's generated parser must never see `std::env::args_os()`. Amended
+  2026-11-01: the reason this bullet originally gave — that the derive's parser
   would accept `--flag=false` for the existing plain switches, which changes
-  behaviour.
+  behaviour — no longer applies, because `Cli` now accepts that spelling too.
+  The constraint survives on its other grounds: the generated parser would add
+  a visible `--config-path` flag and would read the real process environment.
+  See the Decision log entry above.
 - No production code may read the process environment at run time. The
   taxonomy in [ADR 0012](../adrs/0012-environment-seam-taxonomy.md) forbids it,
   and `clippy.toml` fails the build on the six `std::env` methods. This
@@ -510,11 +519,38 @@ actual current state of the work.
       table row with the two abbreviations it had relied on spelled out below.
       Note for future edits to this file: markdownlint's MD049 requires
       asterisks for emphasis, so `_As built_` is refused.
-- [ ] CodeRabbit round nine on `4e0dc27`: pending. The CLI reported "0 of 10
-      remaining" with a rolling-hour reset on the first attempt, so the round
-      was deferred by a randomised window rather than retried immediately. The
-      deterministic gates were green on `4e0dc27` before the request — all six,
-      run sequentially — so only the review itself remains.
+- [x] (2026-11-01) CodeRabbit round nine, run against `20dda5c`: two findings,
+      both accepted and fixed. The first is documentation — the Constraints
+      section still called the `cli_git_help.snap` "byte-for-byte, unmodified"
+      invariant and the presence-only switch shape hard constraints, hours
+      after both were deliberately broken — and two "Amended 2026-11-01"
+      sentences now sit under the affected bullets, each naming the Decision
+      log entry "give every configurable switch an optional `=<BOOL>` value".
+      The second was a real behaviour hole the optional value opened: `--git`
+      joined the `inputs` group, so typing `--git=false` satisfied the `mode`
+      group's `requires("inputs")` while stating that no Git selection was
+      wanted, and `--check --git=false` with no path fell through to standard
+      input, printed the formatted table, and exited 0 — a reporting run that
+      reports nothing and leaves a script believing it passed. Confirmed on
+      the binary before any edit: the piped run printed the table and exited
+      0, where bare `--check` exits 2. Fixed by `typed_mode_flag()` and a
+      post-parse guard in `Cli::parse_validated` that rejects a typed mode flag
+      with no file and `git == false`, naming the flag the user wrote and
+      keeping `ErrorKind::MissingRequiredArgument` so the status stays 2 and
+      the usage footer is printed. `--list-files` is deliberately not routed
+      through the new rule: it is caught a step earlier by
+      `--list-files requires --git`, which is the more specific diagnostic, so
+      the new guard covers the three modes that would otherwise fall through
+      to standard input. Pinned by three rejection cases and a three-case
+      positive control in `tests/cli_git.rs`, the latter asserting only that
+      the message is absent so the check cannot pass by rejecting everything.
+      The users' guide paragraph on a typed `--git` now states both messages
+      and the exit status. `make check-fmt` (47 files unchanged),
+      `make markdownlint` (0 issues), `make nixie` and
+      `cargo test --test cli_git` (23 passed, 0 failed) re-run after the
+      edits. Logs: `/tmp/mdtablefix-gate/test-cli-git-r9.log`,
+      `check-fmt-issue-666-r9.out`, `markdownlint-issue-666-r9.out` and
+      `nixie-issue-666-r9.out`.
 - [x] (2026-10-27) The CodeScene record was wrong and is now corrected
       (`1596ad0`, `c87afa9`, `4e0dc27`). Two errors: the entry called the two
       surviving findings advisory when they also fail the critical
