@@ -709,7 +709,7 @@ actual current state of the work.
       members, and the `mdtablefix` `[[bin]]`'s own `required-features`. The
       walker that test needed moved to `tests/support/source_walk.rs`, because
       the rewritten test would otherwise have taken the file past the 400-line
-      cap. The second duplicated pair was a regression I introduced in
+      cap. The second duplicated pair was a regression introduced in
       `fe40ede`: two mode-input cases pushed `tests/cli_git.rs` to 445 lines.
       They now live in `tests/cli_git_mode_inputs.rs`, sharing
       `tests/support/cli_git_fixture.rs`; the pair was also strengthened, since
@@ -721,6 +721,39 @@ actual current state of the work.
       `src/config_error_tests.rs`, a process-level case in
       `tests/cli_config_failure_binary.rs`, and matching paragraphs in the users'
       guide and ADR 0014.
+
+- [x] (2026-11-01) CodeRabbit round seventeen, five minor findings, all
+      applied. Two were in `tests/support/cli_git_fixture.rs`: the module doc
+      spelled "initialised" and "neutralised", which the house rule writes
+      with `-ize`, and `command_in` scrubbed only `HOME` of the variables
+      discovery reads. The second was the more serious of the two — the module
+      doc claimed ambient configuration was neutralized while a developer's
+      exported `XDG_CONFIG_HOME` or `MDTABLEFIX_WRAP` could still reach the
+      child — so `command_in` now points `USERPROFILE`, `XDG_CONFIG_HOME`,
+      `XDG_CONFIG_DIRS`, `APPDATA` and `LOCALAPPDATA` at the fixture directory
+      and removes every inherited `MDTABLEFIX_*` variable by prefix, matching
+      what `tests/support/cli_config_fixture.rs` already did. The remaining
+      three were stale counts in prose: the provenance note said "two entries"
+      of the three rows it marks **wrong file**, and undercounted the
+      `users-guide.md` row as ×4 where the migration guide carries four inline
+      links and six reference definitions; the users' guide announced "Four
+      failures" over a five-bullet list. Both counts were re-derived from the
+      vendored file rather than adjusted by one, because a count nobody has
+      recounted is how the first two drifted. The first-person pronoun in
+      round sixteen's entry is gone as well. One gate caught a second
+      consequence of the scrub that the review did
+      not. `tests/env_access_suppressions.rs` rejects an item-scoped `expect`
+      of `disallowed_methods` anywhere but a named composition root, and
+      `command_in` in the Git fixture is a fourth one: it composes a child
+      environment for the same reason `Fixture::command` does, and it is not
+      reachable from the other fixture because a `#[path]` module is compiled
+      into each declaring binary and an item one of them never calls is dead
+      code. So `SANCTIONED_ROOTS` gains the entry, with the forwarding case
+      mutation-proved like its three predecessors, and ADR 0012's three
+      mentions of "three roots" — the audit line, the list, and the rule — and
+      the developers' guide's "two" are corrected to four. The alternative,
+      duplicating the scan in whichever file needed it, would have spread the
+      one read the policy exists to contain.
 
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting

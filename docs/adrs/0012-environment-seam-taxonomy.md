@@ -12,8 +12,8 @@ Accepted.
 
 `mdtablefix`'s production code reads nothing from the process environment. An
 audit of `src/`, `tests/`, and `test-macros/` found no call to `std::env::var`,
-`var_os`, `vars`, `vars_os`, `set_var`, or `remove_var` outside three
-sanctioned test composition roots, described under
+`var_os`, `vars`, `vars_os`, `set_var`, or `remove_var` outside four sanctioned
+test composition roots, described under
 [Permit one exception, scoped to an item](#permit-one-exception-scoped-to-an-item);
 the only other environment references are the compile-time
 `env!("CARGO_PKG_VERSION")` and `env!("CARGO_MANIFEST_DIR")` macros, which read
@@ -102,7 +102,7 @@ arrangement, a per-package `[lints.clippy]` table in each manifest and a second
 `--manifest-path test-macros/Cargo.toml` invocation in the `lint` recipe. The
 wider lint baseline was aligned with `netsuke` in issue #438.
 
-The test suite has three composition roots of its own, each carrying the
+The test suite has four composition roots of its own, each carrying the
 item-scoped `expect`. `write_failure_child` in `tests/rewrite_atomic.rs` is the
 child half of a test that re-execs this binary under `ulimit -f`, so the
 environment its parent composed is the only channel into that process.
@@ -124,6 +124,18 @@ exists for. It is deliberately a *read* that composes a child's environment
 rather than a mutation of the test process's own, which is the shape
 [Build child environments explicitly](#build-child-environments-explicitly)
 prescribes.
+
+`Fixture::command` in `tests/support/cli_git_fixture.rs` is the fourth, and it
+exists for the same reason one fixture over. The `--git` end-to-end tests spawn
+the binary in a scratch repository, and a developer's exported
+`MDTABLEFIX_ELLIPSIS` would change which files those tests report as needing a
+rewrite. The two fixtures are separate rather than one shared module because
+each is compiled into a different pair of test binaries: a `#[path]` module
+defines its items into every binary that declares it, so a single combined
+fixture would carry the configuration cases into the `git` binaries and the
+`git` tree into the configuration cases, and every item would have to be used
+from both. Two composition roots in two modules cost one list entry each and
+keep the two suites' helpers out of one another's compilation.
 
 ### Choose a seam by call-site count
 
@@ -151,7 +163,7 @@ variable or one precedence ladder.
 
 A direct read is permitted only at a genuine executable composition root: in
 the application, `main` or a function it calls directly to assemble the
-command-line tool; in the test suite, the three harness roots named under
+command-line tool; in the test suite, the four harness roots named under
 [Prohibit ambient access](#prohibit-ambient-access), each of which is a
 composition root for the same reason, having no caller in this repository to
 take the value as an argument from. Such a site carries

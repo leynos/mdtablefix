@@ -16,18 +16,23 @@ use camino::Utf8Path;
 
 /// The file and item of each sanctioned composition root.
 ///
-/// All three are executable roots that cannot be given a seam.
+/// Each is an executable root that cannot be given a seam.
 /// `write_failure_child` is re-executed by its parent, so the child's
 /// environment is the only channel in; `ambient_variable` reads
 /// `PROPTEST_CASES`, proptest's own knob, set by whoever runs the suite rather
-/// than by any caller in this repository; and `Fixture::command` enumerates
-/// the test process's environment to scrub it from the child it is about to
-/// spawn, which is what keeps a developer's exported
-/// `MDTABLEFIX_*` variable out of every process-level configuration test.
-pub const SANCTIONED_ROOTS: [(&str, &str); 3] = [
+/// than by any caller in this repository; and the two `command` builders —
+/// one in the configuration fixture, one in the Git fixture — enumerate the
+/// test process's environment to scrub it from the child they are about to
+/// spawn, which is what keeps a developer's exported `MDTABLEFIX_*` variable
+/// out of every process-level test. The builders are separate roots because
+/// they belong to separate fixtures: sharing one function between them would
+/// either be dead code in one of the binaries or a module every process-level
+/// test would have to declare.
+pub const SANCTIONED_ROOTS: [(&str, &str); 4] = [
     ("tests/rewrite_atomic.rs", "write_failure_child"),
     ("tests/support/idempotence_harness.rs", "ambient_variable"),
     ("tests/support/cli_config_fixture.rs", "command"),
+    ("tests/support/cli_git_fixture.rs", "command_in"),
 ];
 
 /// Return whether `path` is exactly `expected`, written with `/`.

@@ -43,26 +43,26 @@ prove — a re-sync would then show a diff on every line that carried one. The
 consequence is that a link followed from the local copy may land on the wrong
 file, or on nothing at all. This table is the mapping to use instead.
 
-| Link as written                                          | Appears in           | Local target                                                                                                                       |
-| -------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `v0-10-0-migration-guide.md`                             | user's guide (×2)    | `ortho-config-v0-10-0-migration-guide.md`, this directory                                                                          |
-| `users-guide.md`                                         | migration guide (×4) | **wrong file**: resolves to this repository's `docs/users-guide.md`, the `mdtablefix` guide. Wanted: `ortho-config-users-guide.md` |
-| `adrs/adr-0004-cargo-external-subcommand-entry-point.md` | user's guide         | unresolved: `docs/adrs/` holds this repository's own ADRs, and its 0004 is a different subject                                     |
-| `cargo-orthohelp-design.md`                              | user's guide         | unresolved: not vendored                                                                                                           |
-| `cargo-orthohelp-api-guide.md`                           | user's guide         | unresolved: not vendored                                                                                                           |
-| `v0-9-0-migration-guide.md`                              | user's guide         | unresolved: not vendored                                                                                                           |
-| `../examples/hello_world/`                               | user's guide (×2)    | unresolved: this repository has no `examples/` directory                                                                           |
-| `../ortho_l10n/README.md`                                | both (×2)            | unresolved: this repository has no `ortho_l10n/` directory                                                                         |
-| `../README.md#install-the-documentation-generator`       | user's guide         | **wrong file**: resolves to this repository's `README.md`, which has no such heading                                               |
-| `../CHANGELOG.md`                                        | user's guide         | **wrong file**: resolves to this repository's `CHANGELOG.md`, a different project's changelog                                      |
+| Link as written                                          | Appears in            | Local target                                                                                                                       |
+| -------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `v0-10-0-migration-guide.md`                             | user's guide (×2)     | `ortho-config-v0-10-0-migration-guide.md`, this directory                                                                          |
+| `users-guide.md`                                         | migration guide (×10) | **wrong file**: resolves to this repository's `docs/users-guide.md`, the `mdtablefix` guide. Wanted: `ortho-config-users-guide.md` |
+| `adrs/adr-0004-cargo-external-subcommand-entry-point.md` | user's guide          | unresolved: `docs/adrs/` holds this repository's own ADRs, and its 0004 is a different subject                                     |
+| `cargo-orthohelp-design.md`                              | user's guide          | unresolved: not vendored                                                                                                           |
+| `cargo-orthohelp-api-guide.md`                           | user's guide          | unresolved: not vendored                                                                                                           |
+| `v0-9-0-migration-guide.md`                              | user's guide          | unresolved: not vendored                                                                                                           |
+| `../examples/hello_world/`                               | user's guide (×2)     | unresolved: this repository has no `examples/` directory                                                                           |
+| `../ortho_l10n/README.md`                                | both (×2)             | unresolved: this repository has no `ortho_l10n/` directory                                                                         |
+| `../README.md#install-the-documentation-generator`       | user's guide          | **wrong file**: resolves to this repository's `README.md`, which has no such heading                                               |
+| `../CHANGELOG.md`                                        | user's guide          | **wrong file**: resolves to this repository's `CHANGELOG.md`, a different project's changelog                                      |
 
-The two entries marked **wrong file** are the ones worth knowing about, because
-they resolve *successfully* to a plausible document about something else. The
-rest fail visibly, which is merely inconvenient. An unresolved link is not a
-defect to be fixed by vendoring more of upstream: neither guide is linked into
-the build, and everything this project actually relies on is recorded in
-[ADR 0014](adrs/0014-configuration-layering.md) rather than borrowed from
-upstream's prose.
+The three entries marked **wrong file** are the ones worth knowing about,
+because they resolve *successfully* to a plausible document about something
+else. The rest fail visibly, which is merely inconvenient. An unresolved link
+is not a defect to be fixed by vendoring more of upstream: neither guide is
+linked into the build, and everything this project actually relies on is
+recorded in [ADR 0014](adrs/0014-configuration-layering.md) rather than
+borrowed from upstream's prose.
 
 ## Re-syncing
 

@@ -2,8 +2,8 @@
 //!
 //! Two integration-test files drive the binary against a repository — the flag
 //! grammar file and the mode-with-no-input file — and both need the same
-//! primitive: a temporary tree with `git` initialised, the ambient
-//! configuration neutralised, and a way to run the binary in it. Duplicating
+//! primitive: a temporary tree with `git` initialized, the ambient
+//! configuration neutralized, and a way to run the binary in it. Duplicating
 //! that would mean two fixtures that drift, and one of them silently testing a
 //! different environment.
 //!
@@ -166,10 +166,28 @@ pub fn run_in(directory: &Path, args: &[&str]) -> Run {
 /// gets, so a case that reaches for the builder is not thereby testing a
 /// different machine from its neighbours.
 ///
+/// Every directory the binary could discover a configuration file in is
+/// pointed at `directory`, so discovery finds whatever the test wrote there
+/// and nothing of the developer's. `XDG_CONFIG_DIRS` is set rather than
+/// omitted because an absent or all-empty value falls back to `/etc/xdg`,
+/// which belongs to the host. `HOME` and `USERPROFILE` are both set because
+/// discovery prefers whichever is non-empty and treats the other as a
+/// fallback.
+///
+/// The `MDTABLEFIX_*` variables are removed by prefix rather than by name.
+/// The set is defined by a prefix, so a fixed list of spellings cannot cover
+/// it, and an exported `MDTABLEFIX_WRAP=true` would otherwise change what a
+/// `--git` case observes. This is the one place the child's environment is
+/// composed, so the scan belongs here and nowhere else in this module.
+///
 /// # Panics
 ///
 /// Panics when the binary cannot be found, which is a broken build rather than
 /// a failed expectation.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the fixture is the composition root for its child's environment"
+)]
 pub fn command_in(directory: &Path) -> Command {
     let mut command = Command::cargo_bin("mdtablefix").expect("cargo binary");
     command
@@ -177,8 +195,30 @@ pub fn command_in(directory: &Path) -> Command {
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("HOME", directory)
+        .env("USERPROFILE", directory)
+        .env("XDG_CONFIG_HOME", directory)
+        .env("XDG_CONFIG_DIRS", directory)
+        .env("APPDATA", directory)
+        .env("LOCALAPPDATA", directory)
         .env("LC_ALL", "C")
         .env("LANGUAGE", "");
+    for (name, _) in std::env::vars_os() {
+        if carries_configuration_prefix(&name) {
+            command.env_remove(name);
+        }
+    }
 
     command
+}
+
+/// Whether `name` is one of the binary's configuration variables.
+///
+/// The comparison is case-insensitive because the two platforms this suite
+/// runs on disagree about case in environment names, and a variable the binary
+/// would read as `MDTABLEFIX_WRAP` must be removed however the shell spelled
+/// it.
+fn carries_configuration_prefix(name: &std::ffi::OsStr) -> bool {
+    name.to_string_lossy()
+        .to_lowercase()
+        .starts_with("mdtablefix_")
 }

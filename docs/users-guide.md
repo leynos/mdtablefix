@@ -264,7 +264,7 @@ and a list may be written with brackets (`[rst,xml]`), as a quoted list
 spaces but no commas (`rst xml`) is a single string, which is not a list, so
 the run fails rather than silently narrowing the selection.
 
-Four failures are worth recognizing, all of which exit `2` with the diagnostic
+Five failures are worth recognizing, all of which exit `2` with the diagnostic
 on standard error and nothing on standard output:
 
 - `MDTABLEFIX_CONFIG_PATH` names a file that does not exist. A named file is

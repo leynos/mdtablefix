@@ -1799,14 +1799,14 @@ Do not introduce a trait for one variable read by one caller. Each seam is
 owned by the module that needs its value and stays private to it.
 
 A direct read is permitted only at a genuine composition root: `main` or a
-function it calls directly to assemble the application, and the two
+function it calls directly to assemble the application, and the four
 test-harness roots described below, which are composition roots for the same
 reason. Such a site carries
 `#[expect(clippy::disallowed_methods, reason = "…")]` on the item itself, never
 `allow` and never a module- or crate-wide suppression. The expectation warns
 once the site is migrated, so the exception removes itself.
 
-A test harness has composition roots of its own, and the repository has two.
+A test harness has composition roots of its own, and the repository has four.
 `write_failure_child` in `tests/rewrite_atomic.rs` is the child half of a test
 that re-execs this test binary under `ulimit -f`: the process boundary is a
 fresh `main`, so the environment the parent composed is the only channel into
@@ -1814,7 +1814,13 @@ it and there is no argument to take instead. `ambient_variable` in
 `tests/support/idempotence_harness.rs` reads `PROPTEST_CASES`, proptest's own
 knob, set by whoever runs the suite rather than by a caller in this repository;
 `case_count` takes the reader as an argument so the fallback is exercised
-without it, which is the narrow reader closure from the table above.
+without it, which is the narrow reader closure from the table above. The two
+`command` builders, in `tests/support/cli_config_fixture.rs` and
+`tests/support/cli_git_fixture.rs`, enumerate the test process's environment to
+remove each `MDTABLEFIX_*` name from the child they are about to spawn. There
+is no caller to hand them a clean copy: the property under test is that the
+developer's exported variable does not reach the child, so an environment
+passed in from outside would let the fixture be handed one that never had it.
 
 ### Environment variables in subprocess tests
 

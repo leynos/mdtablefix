@@ -274,6 +274,7 @@ fn no_source_allows_a_policy_lint() -> Result<()> {
 #[case::write_failure_child(0)]
 #[case::ambient_variable(1)]
 #[case::cli_config_fixture(2)]
+#[case::cli_git_fixture(3)]
 fn a_sanctioned_expect_is_not_an_offence(#[case] index: usize) -> Result<()> {
     let (file, item) = SANCTIONED_ROOTS[index];
     let sanctioned = format!(
@@ -289,16 +290,24 @@ fn a_sanctioned_expect_is_not_an_offence(#[case] index: usize) -> Result<()> {
 }
 
 /// Scenario: the sanctioned attribute, written somewhere it was not sanctioned.
-/// Invariant: it is an offence. The two cases are the same attribute over the
-/// same function body, differing only in the file and the item it sits on,
-/// which is exactly the discrimination the rule claims to make. Without both,
-/// the rule could be satisfied by a reader that answered the same way whatever
-/// it was asked.
+/// Invariant: it is an offence. The first two cases are the same attribute
+/// over the same function body, differing only in the file and the item it
+/// sits on, which is exactly the discrimination the rule claims to make.
+/// Without both, the rule could be satisfied by a reader that answered the
+/// same way whatever it was asked.
 ///
 /// Mutation proof (2026-09-15), each applied alone and reverted: exempting
 /// every outer `expect`, as the scan did before, fails both cases with
 /// `expected an offence`; refusing every outer `expect` fails
 /// [`a_sanctioned_expect_is_not_an_offence`] on every root.
+///
+/// Mutation proof (2026-11-01) for the shared name: dropping the file test
+/// from `is_sanctioned`, so an item name alone sanctions a site, fails
+/// `the_right_item_in_the_wrong_file` and
+/// `the_configuration_builder_name_in_the_git_fixture` together and leaves the
+/// rest passing — which is what the third case is for, since the two fixtures'
+/// builders are spelled `command` and `command_in` and only one of each is
+/// documented.
 ///
 /// A third mutation was applied and is recorded as not discriminating, because
 /// a mutation that survives proves nothing and saying so is the point.
@@ -312,6 +321,14 @@ fn a_sanctioned_expect_is_not_an_offence(#[case] index: usize) -> Result<()> {
 #[rstest::rstest]
 #[case::the_right_item_in_the_wrong_file("src/lib.rs", "write_failure_child")]
 #[case::the_wrong_item_in_the_right_file("tests/rewrite_atomic.rs", "some_other_test")]
+// The two `command` builders share a name, so a rule that matched the item
+// alone would exempt the Git fixture's `command_in` too. Whether it does is
+// what this case asks: the name `command` is sanctioned only in the fixture
+// whose file is named beside it.
+#[case::the_configuration_builder_name_in_the_git_fixture(
+    "tests/support/cli_git_fixture.rs",
+    "command"
+)]
 fn a_sanctioned_expect_elsewhere_is_an_offence(
     #[case] file: &str,
     #[case] item: &str,
