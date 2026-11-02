@@ -3,8 +3,10 @@
 //! Every case here drives the same env-source seam as the precedence table in
 //! [`super::config_tests`], and none of them touches the process environment.
 //! They are split from that module because the table is about *which* layer
-//! wins and these are about the *failure* vocabulary — a different contract,
-//! and one that would otherwise grow the table's file past the line limit.
+//! wins and these are about what a source may and may not carry — the failure
+//! vocabulary, plus the one setting configuration is refused — a different
+//! contract, and one that would otherwise grow the table's file past the line
+//! limit.
 
 use std::path::PathBuf;
 
@@ -187,6 +189,52 @@ fn an_extends_key_is_refused_before_the_parent_is_read() {
         !rendered.contains("parent-that-must-not-be-read"),
         "the diagnostic must not name the parent: {rendered}"
     );
+}
+
+/// A file and the environment cannot turn off the conflict guard.
+///
+/// `allow_conflicted` is the one setting the schema deliberately omits; see
+/// [`schema::CONFIGURED_ARGUMENTS`](super::schema::CONFIGURED_ARGUMENTS). A
+/// committed `.mdtablefix.toml` that switched it on would let an
+/// `--git --in-place` run rewrite text across unresolved conflict markers in a
+/// tree the user only checked out, so both non-command-line layers are checked
+/// here and neither may reach it.
+///
+/// The flag itself still works, which is what makes this a narrowing rather
+/// than a loss: the last case types it and expects it to be honoured. It lives
+/// here rather than beside the precedence table because it is the same claim
+/// as the refusals above — a source the run reads, and a key it may not carry.
+#[rstest::rstest]
+#[case::file("allow_conflicted = true\n", None, false)]
+#[case::environment(
+    "",
+    Some(("MDTABLEFIX_ALLOW_CONFLICTED", "true")),
+    false
+)]
+#[case::command_line("", None, true)]
+fn only_the_command_line_can_allow_a_conflicted_rewrite(
+    #[case] contents: &str,
+    #[case] variable: Option<(&str, &str)>,
+    #[case] expected: bool,
+) {
+    let fixture = Fixture::new();
+    let mut environment = fixture.environment();
+    if !contents.is_empty() {
+        environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select(contents));
+    }
+    if let Some((name, value)) = variable {
+        environment.insert(name, value);
+    }
+
+    let argv = if expected {
+        vec!["mdtablefix", "--allow-conflicted"]
+    } else {
+        vec!["mdtablefix"]
+    };
+
+    let settings = resolve(&argv, &environment).expect("the layers resolve");
+
+    assert_eq!(settings.allow_conflicted, expected);
 }
 
 /// The refusal applies to a discovered file, not only a selected one.

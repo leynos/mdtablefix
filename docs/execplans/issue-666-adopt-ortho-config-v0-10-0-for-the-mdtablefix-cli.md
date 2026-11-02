@@ -928,6 +928,19 @@ actual current state of the work.
       remaining duplicated failure-test pairs, now one `rstest` table each.
       Decisions recorded; ADR 0014 and the users' guide state the exclusion and
       its reason.
+- [x] (2026-11-02) CodeRabbit round twenty-eight on `6cdb7c0`: two stale
+      counts. The users' guide still said "three Git selection switches" in its
+      summary of the configurable keys, and the ExecPlan still said "eleven
+      configurable switches" / "the twelfth setting" and "twelve `MDTABLEFIX_*`
+      variables". All now say two, ten, eleven and eleven respectively, and the
+      prefix comment in `tests/support/cli_config_fixture.rs` follows.
+- [x] (2026-11-02) CodeRabbit round twenty-nine on `17b6b30`: one finding
+      reported twice — the round-twenty-seven test left `src/config_tests.rs` at
+      408 lines, past the 400-line cap. The case moved to
+      `src/config_error_tests.rs`, which now carries the refusals alongside the
+      failure vocabulary: 365 and 313 lines respectively, with both module
+      documents updated to say so. No assertion changed; the config subset still
+      reports 141 passing.
 
 ## Surprises & discoveries
 
@@ -1802,6 +1815,16 @@ fully verified, and named five gaps. Each is answered below.
   exact-message assertion rather than a substring, because the message is the
   only rendering that names the key a user must fix. Date/Author: 2026-11-02,
   implementation agent.
+- Decision (accepted, CodeRabbit round twenty-nine): the round-twenty-seven
+  case `only_the_command_line_can_allow_a_conflicted_rewrite` moved from
+  `src/config_tests.rs` to `src/config_error_tests.rs`. Rationale: adding it
+  took the precedence table's file to 408 lines, past the 400-line cap
+  `AGENTS.md` sets, and the case belongs with the refusals anyway — both
+  modules now answer what a source the run reads may and may not carry, whereas
+  the precedence module answers which layer wins. No assertion changed and the
+  moved table keeps its own fixture. Evidence: 365 and 313 lines;
+  `cargo test --bin mdtablefix -- config` still reports 141 passing, with 19 of
+  them in `config::error_tests`. Date/Author: 2026-11-02, implementation agent.
 
 ## Outcomes & retrospective
 

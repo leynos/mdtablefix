@@ -31,8 +31,9 @@
 //! dotfile is a Project candidate; a `mdtablefix/config.toml` there is not a
 //! candidate at all, so its presence would change nothing.
 //!
-//! The error surface lives in `super::error_tests`, so this module
-//! stays the precedence table it is named for.
+//! The error surface, and the cases about what configuration may not reach,
+//! live in `super::error_tests`, so this module stays the precedence table it
+//! is named for.
 
 use rstest::rstest;
 
@@ -361,48 +362,4 @@ fn a_typed_false_outranks_a_configured_true(
     let settings = resolve(&argv, &environment).expect("the layers resolve");
 
     assert_eq!(observed(key, &settings), "false");
-}
-
-/// A file and the environment cannot turn off the conflict guard.
-///
-/// `allow_conflicted` is the one setting the schema deliberately omits; see
-/// [`schema::CONFIGURED_ARGUMENTS`](super::schema::CONFIGURED_ARGUMENTS). A
-/// committed `.mdtablefix.toml` that switched it on would let an
-/// `--git --in-place` run rewrite text across unresolved conflict markers in a
-/// tree the user only checked out, so both non-command-line layers are checked
-/// here and neither may reach it.
-///
-/// The flag itself still works, which is what makes this a narrowing rather
-/// than a loss: the last case types it and expects it to be honoured.
-#[rstest]
-#[case::file("allow_conflicted = true\n", None, false)]
-#[case::environment(
-    "",
-    Some(("MDTABLEFIX_ALLOW_CONFLICTED", "true")),
-    false
-)]
-#[case::command_line("", None, true)]
-fn only_the_command_line_can_allow_a_conflicted_rewrite(
-    #[case] contents: &str,
-    #[case] variable: Option<(&str, &str)>,
-    #[case] expected: bool,
-) {
-    let fixture = Fixture::new();
-    let mut environment = fixture.environment();
-    if !contents.is_empty() {
-        environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select(contents));
-    }
-    if let Some((name, value)) = variable {
-        environment.insert(name, value);
-    }
-
-    let argv = if expected {
-        vec!["mdtablefix", "--allow-conflicted"]
-    } else {
-        vec!["mdtablefix"]
-    };
-
-    let settings = resolve(&argv, &environment).expect("the layers resolve");
-
-    assert_eq!(settings.allow_conflicted, expected);
 }
