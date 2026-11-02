@@ -131,12 +131,14 @@ impl Settings {
 
 /// Everything that can go wrong while resolving configuration.
 ///
-/// Two variants, both with a producer. The framework's own vocabulary
-/// distinguishes a file that failed to load from a merge that failed, but both
-/// arrive here as an [`OrthoError`]: its variants are opaque enough that
-/// re-splitting them would invent distinctions the framework does not promise
-/// to keep. The path a file error names is inside the wrapped error's own
-/// message, so the diagnostic still says which file to fix.
+/// Three variants, each with a producer. `UnsupportedExtends` is this module's
+/// own refusal, raised before the framework reads any file; the other two come
+/// from outside it. The framework's own vocabulary distinguishes a file that
+/// failed to load from a merge that failed, but both arrive here as an
+/// [`OrthoError`]: its variants are opaque enough that re-splitting them would
+/// invent distinctions the framework does not promise to keep. The path a file
+/// error names is inside the wrapped error's own message, so the diagnostic
+/// still says which file to fix.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     /// A configuration source supplied a value that cannot be used.

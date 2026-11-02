@@ -866,7 +866,7 @@ actual current state of the work.
       flag, no builder option, no policy option, and both `FileLayerOutcome::
       selected` and `chain_layers` call `load_config_file_as_chain` before any
       caller can inspect the result. A relative parent is joined onto the
-      declaring file's directory and canonicalised, so `..` climbs out of the
+      declaring file's directory and canonicalized, so `..` climbs out of the
       working directory, and an absolute parent is honoured as written. Reading
       is not the danger by itself; printing is. The loader validates TOML with a
       parser whose `Display` quotes the offending source line, and `src/main.rs`
@@ -1401,7 +1401,9 @@ plan status to `BLOCKED` until the deviation is accepted.
   from a file or the environment never passed through clap's `value_parser`, so
   `extension_filter` parses it and reports the key. The path a selected file
   error names is inside the wrapped error's own message, so the diagnostic
-  still says which file to fix. Date/Author: 2026-10-27, implementation agent.
+  still says which file to fix. A third variant, `UnsupportedExtends`, was
+  added later by the `extends` refusal decision recorded in the Decision log
+  under round twenty-four. Date/Author: 2026-10-27, implementation agent.
 - Decision (EP-M3 adjustment `e`): the typed-flag accessor is a private
   `typed_bool(matches, id, value)` plus `is_typed(matches, id)` in
   `src/config.rs`, not a `Cli` method. Rationale: the plan offers
@@ -2890,6 +2892,13 @@ pub enum ConfigError {
     /// A configuration source supplied a value that cannot be used.
     #[error("invalid configuration value for {key}: {message}")]
     InvalidValue { key: String, message: String },
+    /// A configuration file declares an `extends` parent.
+    #[error(
+        "configuration file '{}' uses 'extends', which this tool does not support: \
+         state the settings directly in one file",
+        path.display()
+    )]
+    UnsupportedExtends { path: std::path::PathBuf },
     /// The layered merge rejected the combination of sources.
     #[error("cannot resolve configuration: {0}")]
     Merge(#[from] std::sync::Arc<ortho_config::OrthoError>),
@@ -2900,10 +2909,13 @@ pub enum ConfigError {
 code actually declares. Three declarations changed during EP-M3 and the changes
 are recorded in the Decision log rather than left as drift:
 
-- `ConfigError` has two variants, not four. There is no `Unreadable`: the
+- `ConfigError` has three variants, not four. There is no `Unreadable`: the
   framework reports a file it cannot read as `OrthoError::File`, so a variant
   of this module's own would duplicate the framework's work and invent a
-  distinction it does not promise to keep. Decision `d`.
+  distinction it does not promise to keep. Decision `d`. The third,
+  `UnsupportedExtends { path }`, is the `extends` refusal added in round
+  twenty-four; it is raised before the framework reads any file, so unlike the
+  other two it has a producer in this module.
 - The typed-flag accessor is not a method on `Cli`. It is the private pair
   `typed_bool(matches, id, value)` and `is_typed(matches, id)` in
   `src/config.rs`, because `ArgMatches` is where provenance lives and `Cli`

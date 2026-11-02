@@ -30,16 +30,26 @@ fn a_missing_selected_file_is_an_error() {
     );
 }
 
-/// A selected file that declares no `extends` key still loads.
+/// A selected file the `extends` refusal must not reject still loads.
 ///
-/// The positive control for the `extends` refusal: a refusal that fired on
-/// every selected file, rather than only on a declaration, would fail here.
-#[test]
-fn a_selected_file_without_extends_still_loads() {
+/// These are the positive controls for the refusal, and each rules out a
+/// different over-eager implementation. A refusal that fired on every selected
+/// file fails the plain case; one that searched the text rather than the parsed
+/// table fails the comment case; one that matched the key at any depth fails
+/// the nested case; and one that rejected an unrecognized key fails the unknown
+/// case, which is what a newer version's file would carry. Every file here
+/// states `wrap = true` at the top level, so a load that silently applied
+/// nothing would fail too.
+#[rstest::rstest]
+#[case::plain("wrap = true\n")]
+#[case::comment("# this file does not use extends\nwrap = true\n")]
+#[case::nested("wrap = true\n[section]\nextends = \"base.toml\"\n")]
+#[case::unknown_key("unknown = 1\nwrap = true\n")]
+fn a_selected_file_without_a_declaration_still_loads(#[case] contents: &str) {
     let fixture = Fixture::new();
-    let environment = fixture.selecting("wrap = true\n");
+    let environment = fixture.selecting(contents);
 
-    let settings = resolve(&["mdtablefix"], &environment).expect("the file loads");
+    let settings = resolve(&["mdtablefix"], &environment).expect("the file is not refused");
 
     assert!(settings.opts.wrap);
 }
@@ -212,7 +222,7 @@ fn an_extends_key_in_a_discovered_file_is_refused() {
 /// A candidate reached through a symlink is judged by its target's contents.
 ///
 /// The pre-scan and the loader must agree about which file a path names. They
-/// agree only because both canonicalise before reading: a read that did not
+/// agree only because both canonicalize before reading: a read that did not
 /// resolve the link first would fail here, and a failure is reported as "no
 /// `extends`", which would let the loader follow the link and expand the chain.
 ///
@@ -238,46 +248,6 @@ fn a_candidate_reached_through_a_symlink_is_judged_by_its_target() {
         matches!(&error, ConfigError::UnsupportedExtends { .. }),
         "the pre-scan must judge the target, not the link: {error:?}"
     );
-}
-
-///
-/// The check reads the parsed top-level table rather than searching the text,
-/// so a comment or a string mentioning the key is ordinary content. Without
-/// this case a grep-shaped implementation would pass every case above.
-#[test]
-fn the_word_extends_in_a_comment_is_not_a_declaration() {
-    let fixture = Fixture::new();
-    let environment = fixture.selecting("# this file does not use extends\nwrap = true\n");
-
-    let settings = resolve(&["mdtablefix"], &environment).expect("the comment is not a key");
-
-    assert!(settings.opts.wrap);
-}
-
-/// A nested `extends` belongs to no layer loader and is left alone.
-///
-/// Only a top-level key starts a chain — the loader asks the merged view for
-/// `extends` — so a table that happens to have that name under a section is a
-/// value the schema ignores, like any other unknown key.
-#[test]
-fn a_nested_extends_key_is_not_a_declaration() {
-    let fixture = Fixture::new();
-    let environment = fixture.selecting("wrap = true\n[section]\nextends = \"base.toml\"\n");
-
-    let settings = resolve(&["mdtablefix"], &environment).expect("the nested key is inert");
-
-    assert!(settings.opts.wrap);
-}
-
-/// A key the schema does not know is ignored, so a newer file still loads.
-#[test]
-fn an_unknown_key_is_ignored() {
-    let fixture = Fixture::new();
-    let environment = fixture.selecting("unknown = 1\nwrap = true\n");
-
-    let settings = resolve(&["mdtablefix"], &environment).expect("the file resolves");
-
-    assert!(settings.opts.wrap);
 }
 
 /// An empty selector value is unset, so automatic discovery still runs.

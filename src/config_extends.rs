@@ -29,7 +29,7 @@
 //! discovery and the same environment source to both, so the two cannot disagree
 //! about *where* to look.
 //!
-//! It also reads each file the way the loader does — canonicalise, then read
+//! It also reads each file the way the loader does — canonicalize, then read
 //! through the parent directory's capability — so the two cannot disagree about
 //! *which* file a path names either. Without that agreement a symlinked
 //! candidate would be refused by one and followed by the other, and whichever
@@ -92,7 +92,7 @@ fn selected_path(lookup: &dyn EnvSource) -> Option<PathBuf> {
 
 /// Whether `path` is valid TOML declaring a top-level `extends` key.
 ///
-/// The path is canonicalised first, exactly as [`ortho_config::file::loader`]
+/// The path is canonicalized first, exactly as [`ortho_config::file::loader`]
 /// does before it opens anything. Resolution and reading then agree about which
 /// file is meant, so a candidate reached through a symlink is judged by its
 /// target's contents rather than by the link, and a path that does not resolve
@@ -122,7 +122,7 @@ fn declares_extends(path: &Path) -> bool {
 /// when a component of that path is a symlink to somewhere else. This mirrors
 /// the loader's own `open_parent_dir_and_name`, which is what makes the
 /// pre-scan's view of a file the same as the loader's view: the same
-/// canonicalisation, then the same capability-scoped read.
+/// canonicalization, then the same capability-scoped read.
 fn read_file(path: &Path) -> io::Result<String> {
     let parent = path
         .parent()
