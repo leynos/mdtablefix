@@ -996,6 +996,17 @@ actual current state of the work.
       `cargo check --target x86_64-pc-windows-msvc --all-targets
       --all-features` — which is the compile half of that job and needs no
       Windows host — and fixed by gating the import. `e5fc271`.
+- [x] (2026-11-02) The CodeScene check fails on every commit of this branch,
+      including the ones predating this session. It is advisory: the
+      repository's only required status check is `build-test`. Checked rather
+      than assumed, because a score can move either way. `cs delta origin/main
+      HEAD` reports the same finding on `src/config_error_tests.rs` —
+      string-heavy arguments at 46.2% against a 39% threshold — with
+      `old-score: null`, which means the file is new on the branch; the score is
+      a property of a whole file that did not exist before, not of any one
+      edit. The text-typed argument count in that file is unchanged at ten
+      across this session's additions, which is what you would expect from a
+      table whose cases take `fn(&Path, &Path)`.
 
 ## Surprises & discoveries
 
