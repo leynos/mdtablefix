@@ -188,16 +188,28 @@ only after they have been parsed, which is too late.
 `src/config_extends.rs` therefore checks first. It computes the files the
 policy is about to load — the selected path when `MDTABLEFIX_CONFIG_PATH` names
 one, otherwise the automatic candidates the policy will walk — and reads each
-the way the loader does: `ortho_config::file::canonicalise` first, then the
-capability-oriented `cap_std` directory handle. It refuses any whose parsed
-top-level table contains `extends`. Resolution and reading both match the
-loader deliberately, so the two cannot disagree about which file a path names;
-a candidate reached through a symlink is judged by its target's contents, and a
-read failure means the same thing either side. Reading is safe because the
-check reads only the declaring file, never a parent; a file it cannot resolve,
-read or parse is left to the loader, so those failures keep the diagnostics
-already documented. A rejected file produces exit status 2 and names itself,
-not the parent.
+the way the loader does, in the loader's order. It asks the candidate's parent
+directory, opened as a `cap_std` capability, for the entry's metadata, and only
+a regular file that the capability accepts is then canonicalized with
+`ortho_config::file::canonicalise` and read through that same handle. It
+refuses any whose parsed top-level table contains `extends`.
+
+The order is the whole of the agreement, and getting it wrong is not cosmetic.
+The loader stats before it canonicalizes, so a symlink whose target leaves the
+candidate's directory, or an entry that is not a regular file, is refused there
+without a byte being read. A pre-scan that canonicalized first would follow
+such a link and read a file the loader never would — and one that opened the
+candidate rather than statting it would block forever on a FIFO. Repeating the
+loader's sequence keeps the two from disagreeing about which files are in play:
+a same-directory relative symlink is judged by its target's contents on both
+sides, while an escaping one or a non-regular entry is left to the loader,
+whose diagnostic is path-only and names no content.
+
+Reading is safe because the check reads only the declaring file, never a
+parent; a file the loader will not read, or cannot resolve, read or parse, is
+likewise left to the loader, so those failures keep the diagnostics already
+documented. A rejected file produces exit status 2 and names itself, not the
+parent.
 
 This costs no compatibility: inheritance was never documented for this tool,
 its schema is a flat list of switches, and a file that wants to share settings

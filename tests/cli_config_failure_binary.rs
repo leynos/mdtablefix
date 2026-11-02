@@ -17,6 +17,10 @@ mod fixture;
 #[path = "support/permission_denial.rs"]
 mod permission_denial;
 
+#[cfg(unix)]
+#[path = "support/candidate_refusals.rs"]
+mod candidate_refusals;
+
 use fixture::{Fixture, RAGGED, assert_clean_success, assert_failure};
 #[cfg(unix)]
 use permission_denial::{allow_read, deny_read, permissions_are_ignored};

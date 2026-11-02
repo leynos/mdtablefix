@@ -941,6 +941,45 @@ actual current state of the work.
       failure vocabulary: 365 and 313 lines respectively, with both module
       documents updated to say so. No assertion changed; the config subset still
       reports 141 passing.
+- [x] (2026-11-02) CodeRabbit round thirty on `dc91166`: two findings about the
+      same stale passage in the EP-M5 outcome record. The entry that describes
+      what `0d12ec2` shipped said "four failures" and "nine `FileAndEnv` cells".
+      Both were true when written and neither describes the current guide: the
+      optional `=<BOOL>` value adopted 2026-11-01 removed the asymmetry the
+      entry names, and two later rejections took the failure list from four to
+      six. Resolved by correcting the one factual figure ("ten") and adding a
+      dated reconciliation paragraph beside the record rather than rewriting it,
+      so the entry stays honest about what that commit contained.
+- [x] (2026-11-02) CodeRabbit round thirty-one on `d30201b`: two findings, one
+      of them major. The minor one was real and is fixed: the `ConfigError`
+      documentation linked `[`config_extends`]`, but the module is declared `mod
+      extends` behind `#[path = "config_extends.rs"]`, so the intra-doc link did
+      not resolve.
+      The major finding claimed a symlinked project `config.toml` could make a
+      malformed out-of-tree file reach the loader, whose TOML diagnostic quotes
+      a source line. That mechanism does not reproduce, and the finding was
+      verified against both the dependency source and a live probe before
+      anything was changed. `ortho_config`'s `file_exists_and_is_regular` asks
+      the candidate's *parent-directory capability* for the entry's metadata
+      before canonicalizing anything (`file/loader.rs:46-63`, via
+      `Dir::metadata`, which follows a link only inside the directory). An
+      escaping symlink is refused there as `a path led outside of the
+      filesystem` and is never parsed, so no content is echoed; a directory is
+      refused as `configuration path is not a regular file`; and a
+      same-directory relative link is followed on both sides.
+      Probing it did expose two genuine defects in the pre-scan, which
+      canonicalized *first* and so read files the loader never would. A symlink
+      climbing out of the checkout to a file that validly declares `extends` was
+      reported as this tool's `UnsupportedExtends` refusal — the wrong
+      diagnostic, and the target had been read to produce it. Worse, a **FIFO**
+      named `.mdtablefix.toml` blocked the run forever, because the pre-scan
+      opened the candidate instead of statting it; the loader rejects such an
+      entry unread. `declares_extends` now performs the loader's sequence: open
+      the parent as a capability, stat the unresolved name, and only then
+      canonicalize and read. Both defects are pinned at the unit level and at
+      the process level, and both regression tests were shown to fail with the
+      gate removed — the symlink case reporting `extends`, the FIFO case killed
+      at the 20-second ceiling.
 
 ## Surprises & discoveries
 
@@ -1825,6 +1864,28 @@ fully verified, and named five gaps. Each is answered below.
   moved table keeps its own fixture. Evidence: 365 and 313 lines;
   `cargo test --bin mdtablefix -- config` still reports 141 passing, with 19 of
   them in `config::error_tests`. Date/Author: 2026-11-02, implementation agent.
+- Decision (accepted, CodeRabbit round thirty-one): the pre-scan repeats the
+  loader's read sequence instead of canonicalizing first. Rationale: the
+  finding as filed — that a malformed out-of-tree file could reach the loader
+  and have a source line quoted from it — does not reproduce, and was not
+  accepted on assertion. `ortho_config`'s `file_exists_and_is_regular` stats
+  the unresolved name through the candidate's parent-directory capability
+  *before* `load_config_file_inner` canonicalizes, so an escaping symlink is
+  refused path-only by `Dir::metadata` (`a path led outside of the filesystem`)
+  and its bytes are never parsed. Probing that gate did find two real
+  divergences in `declares_extends`, which canonicalized first: an escaping
+  link to valid TOML declaring `extends` was reported as this tool's own
+  refusal after the target had been read, and a FIFO candidate blocked the run
+  indefinitely where the loader rejects it unread. Both follow from the same
+  ordering mistake, so `is_loadable_candidate` now performs the loader's
+  stat-then-canonicalize-then-read sequence through one parent capability.
+  Evidence: `src/config_extends.rs`; four live probes against the built binary
+  (escaping link, FIFO, same-directory link declaring `extends`, same-directory
+  link to a plain settings file); two unit cases in `src/config_error_tests.rs`
+  and two process-level cases in `tests/support/candidate_refusals.rs`; both
+  regression tests shown to fail when the guard is removed. ADR 0014 and the
+  users' guide were corrected to describe the metadata-first order and its
+  consequences. Date/Author: 2026-11-02, implementation agent.
 
 ## Outcomes & retrospective
 

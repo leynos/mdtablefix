@@ -8,7 +8,7 @@
 //! contract, and one that would otherwise grow the table's file past the line
 //! limit.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::{
     ConfigError,
@@ -254,10 +254,10 @@ fn an_extends_key_in_a_discovered_file_is_refused() {
 
 /// A candidate reached through a symlink is judged by its target's contents.
 ///
-/// The pre-scan and the loader must agree about which file a path names. They
-/// agree only because both canonicalize before reading: a read that did not
-/// resolve the link first would fail here, and a failure is reported as "no
-/// `extends`", which would let the loader follow the link and expand the chain.
+/// The pre-scan and the loader must agree about which file a path names. A
+/// same-directory link stays inside the capability both open, so both follow
+/// it; a read that stopped at the link itself would see no `extends` and let
+/// the loader expand the chain.
 ///
 /// The target is deliberately valid TOML that declares `extends`, so the file
 /// is loadable by the loader and refused only by this module. A malformed file
@@ -266,12 +266,17 @@ fn an_extends_key_in_a_discovered_file_is_refused() {
 #[test]
 fn a_candidate_reached_through_a_symlink_is_judged_by_its_target() {
     let fixture = Fixture::new();
-    let target = fixture.root().join("dotfiles.toml");
-    write(&target, "extends = \"somewhere.toml\"\n");
     let link = fixture.base("xdg").join("mdtablefix").join("config.toml");
-    std::fs::create_dir_all(link.parent().expect("the link has a parent"))
-        .expect("create the configuration directory");
-    std::os::unix::fs::symlink(&target, &link).expect("create the symlink");
+    let directory = link.parent().expect("the link has a parent").to_path_buf();
+    std::fs::create_dir_all(&directory).expect("create the configuration directory");
+    write(
+        &directory.join("dotfiles.toml"),
+        "extends = \"somewhere.toml\"\n",
+    );
+    // A relative target, because the capability both sides open follows one
+    // inside its own directory and refuses an absolute path even when that
+    // path names the same directory.
+    std::os::unix::fs::symlink("dotfiles.toml", &link).expect("create the symlink");
     let environment = fixture.environment();
 
     let error = resolve(&["mdtablefix"], &environment)
@@ -281,6 +286,63 @@ fn a_candidate_reached_through_a_symlink_is_judged_by_its_target() {
         matches!(&error, ConfigError::UnsupportedExtends { .. }),
         "the pre-scan must judge the target, not the link: {error:?}"
     );
+}
+
+/// A candidate the loader will refuse is not read by the pre-scan.
+///
+/// The loader asks its parent-directory capability for the candidate's
+/// metadata before it canonicalizes anything, so a link that escapes the
+/// directory, or an entry that is not a regular file, is refused without its
+/// bytes being read. The pre-scan must do the same or it would disagree with
+/// the loader about which files are in play.
+///
+/// This checks the symptom that made the divergence observable: the target is
+/// valid TOML declaring `extends`, which the pre-scan used to report as its own
+/// refusal. The loader never gets that far, so the error must be the loader's
+/// own file error — and, crucially, must not be `UnsupportedExtends`.
+///
+/// A FIFO is the second case. It is not a regular file either, and a pre-scan
+/// that opened it rather than statting it would block forever; the assertion
+/// here would then never run, which is why this is worth pinning rather than
+/// leaving to inspection.
+#[cfg(unix)]
+#[rstest::rstest]
+#[case::escaping_symlink(escaping_symlink)]
+#[case::fifo(fifo)]
+fn a_candidate_the_loader_would_refuse_is_left_to_the_loader(#[case] install: fn(&Path, &Path)) {
+    let fixture = Fixture::new();
+    let target = fixture.base("outside").join("elsewhere.toml");
+    write(&target, "extends = \"parent.toml\"\nwrap = true\n");
+    let candidate = fixture.base("xdg").join("mdtablefix").join("config.toml");
+    std::fs::create_dir_all(candidate.parent().expect("the candidate has a parent"))
+        .expect("create the configuration directory");
+    install(&candidate, &target);
+    let environment = fixture.environment();
+
+    let error = resolve(&["mdtablefix"], &environment)
+        .expect_err("the loader refuses a candidate it will not read");
+
+    assert!(
+        !matches!(&error, ConfigError::UnsupportedExtends { .. }),
+        "the pre-scan must not read this candidate: {error:?}"
+    );
+}
+
+/// Installs a link that climbs out of the candidate's directory.
+#[cfg(unix)]
+fn escaping_symlink(candidate: &Path, target: &Path) {
+    std::os::unix::fs::symlink(target, candidate).expect("create the symlink");
+}
+
+/// Installs a FIFO, which is not a regular file.
+#[cfg(unix)]
+fn fifo(candidate: &Path, _target: &Path) {
+    let status = std::process::Command::new("mkfifo")
+        .arg(candidate)
+        .status()
+        .expect("run mkfifo");
+
+    assert!(status.success(), "mkfifo failed: {status}");
 }
 
 /// An empty selector value is unset, so automatic discovery still runs.

@@ -318,6 +318,13 @@ on standard error and nothing on standard output:
   then print a line of that file into a log. Refusing the key closes the route
   entirely.
 
+  Only files this tool would actually load are examined. A candidate that is
+  not a regular file, or a symbolic link whose target leaves the directory the
+  candidate names, is reported by the configuration loader itself — naming the
+  path and the reason, and quoting no content — rather than being treated as a
+  declaration. A relative link to a file in the same directory is followed, so
+  a dotfile repository can link `config.toml` to a checked-in file.
+
 An unknown key is ignored, so a file written for a newer version still loads. A
 missing file at an automatic location is not an error; it simply contributes
 nothing. When no configuration is found and no variable is set, a run behaves

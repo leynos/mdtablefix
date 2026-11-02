@@ -29,13 +29,18 @@
 //! discovery and the same environment source to both, so the two cannot disagree
 //! about *where* to look.
 //!
-//! It also reads each file the way the loader does — canonicalize, then read
-//! through the parent directory's capability — so the two cannot disagree about
-//! *which* file a path names either. Without that agreement a symlinked
-//! candidate would be refused by one and followed by the other, and whichever
-//! way the difference fell the pre-scan would be looking at the wrong bytes.
+//! It also reads each file the way the loader does, in the loader's order: ask
+//! the parent-directory capability for the candidate's metadata without
+//! resolving the link, then canonicalize, then read through that capability.
+//! The order is load-bearing. Canonicalizing first would read a symlink's
+//! target even when the target escapes the candidate's own directory, which the
+//! loader refuses unread; and opening the candidate before statting it would
+//! block forever on a FIFO the loader rejects. Either way the pre-scan would be
+//! looking at bytes the loader never would, so it repeats the sequence rather
+//! than approximating it.
 
 use std::{
+    ffi::OsString,
     io,
     path::{Path, PathBuf},
 };
@@ -51,10 +56,11 @@ const EXTENDS_KEY: &str = "extends";
 /// Rejects any configuration file the policy would load that declares `extends`.
 ///
 /// The check runs before resolution, so a refused file stops the run rather
-/// than being loaded and reported afterwards. A file that cannot be read or is
-/// not valid TOML is left alone: the loader meets it next and reports it with
-/// the diagnostic this tool already documents, so the pre-scan changes nothing
-/// about how those failures look.
+/// than being loaded and reported afterwards. A file the loader will not read —
+/// absent, outside the directory the candidate names, not a regular file — and
+/// one that is not valid TOML are all left alone: the loader meets them next
+/// and reports them with the diagnostic this tool already documents, so the
+/// pre-scan changes nothing about how those failures look.
 pub(super) fn refuse(
     discovery: &ConfigDiscovery,
     lookup: &dyn EnvSource,
@@ -92,16 +98,26 @@ fn selected_path(lookup: &dyn EnvSource) -> Option<PathBuf> {
 
 /// Whether `path` is valid TOML declaring a top-level `extends` key.
 ///
-/// The path is canonicalized first, exactly as [`ortho_config::file::loader`]
-/// does before it opens anything. Resolution and reading then agree about which
-/// file is meant, so a candidate reached through a symlink is judged by its
-/// target's contents rather than by the link, and a path that does not resolve
-/// is left for the loader to report in its own words.
+/// The loader does two things before it parses anything, and this repeats both
+/// in its order. It first asks its parent-directory capability for the
+/// candidate's metadata *without* resolving the link, and only then
+/// canonicalizes and reads what that resolves to. A candidate the loader would
+/// refuse — one outside the directory it names, or one that is not a regular
+/// file — is therefore left alone here as well, and the loader reports it in
+/// the words this tool already documents.
+///
+/// Getting that order wrong is not cosmetic. Canonicalizing first would read a
+/// symlink's target even when the target lies outside the candidate's
+/// directory, which the loader never does; and opening a candidate rather than
+/// statting it would block forever on a FIFO that the loader rejects unread.
 ///
 /// A type other than string still counts: `extends = 5` is refused here rather
 /// than left for the loader to reject, because the key is the thing this module
 /// exists to keep out of the loader's reach.
 fn declares_extends(path: &Path) -> bool {
+    if !is_loadable_candidate(path) {
+        return false;
+    }
     let Ok(resolved) = canonicalise(path) else {
         return false;
     };
@@ -115,23 +131,43 @@ fn declares_extends(path: &Path) -> bool {
     document.get(EXTENDS_KEY).is_some()
 }
 
-/// Reads a file relative to its own parent directory.
+/// Whether the loader would go on to read `path` at all.
+///
+/// This mirrors `file_exists_and_is_regular` exactly: the same
+/// `open_parent_dir_and_name`, the same metadata query on the unresolved name.
+/// The capability is what enforces the boundary — a symlink is followed only
+/// when its target stays inside the directory — so the pre-scan follows one in
+/// precisely the cases the loader will.
+fn is_loadable_candidate(path: &Path) -> bool {
+    let Some((directory, file_name)) = parent_capability(path) else {
+        return false;
+    };
+
+    matches!(directory.metadata(file_name), Ok(metadata) if metadata.is_file())
+}
+
+/// Opens `path`'s parent as a capability, with the bare name inside it.
 ///
 /// The parent is opened as a capability rather than the file being opened by
 /// absolute path, so the read is confined to the directory the path names even
-/// when a component of that path is a symlink to somewhere else. This mirrors
-/// the loader's own `open_parent_dir_and_name`, which is what makes the
-/// pre-scan's view of a file the same as the loader's view: the same
-/// canonicalization, then the same capability-scoped read.
-fn read_file(path: &Path) -> io::Result<String> {
+/// when a component of that path is a symlink to somewhere else. Returning the
+/// pair lets the metadata query and the read share one resolution step, so
+/// they cannot disagree about which entry is meant.
+fn parent_capability(path: &Path) -> Option<(Dir, OsString)> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    let file_name = path
-        .file_name()
+    let file_name = path.file_name()?.to_owned();
+    let directory = Dir::open_ambient_dir(parent, ambient_authority()).ok()?;
+
+    Some((directory, file_name))
+}
+
+/// Reads `path` through its parent directory's capability.
+fn read_file(path: &Path) -> io::Result<String> {
+    let (directory, file_name) = parent_capability(path)
         .ok_or_else(|| io::Error::other("configuration path has no file name"))?;
-    let directory = Dir::open_ambient_dir(parent, ambient_authority())?;
 
     directory.read_to_string(file_name)
 }

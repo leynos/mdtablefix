@@ -157,7 +157,7 @@ pub enum ConfigError {
     /// Inheritance is refused rather than supported: the loader reads the
     /// parent before any check could see it, and a parent that is malformed
     /// TOML would print one of its lines to standard error. See
-    /// [`config_extends`].
+    /// [`extends`].
     #[error(
         "configuration file '{}' uses 'extends', which this tool does not support: \
          state the settings directly in one file",
