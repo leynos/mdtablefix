@@ -8,7 +8,10 @@
 //! contract, and one that would otherwise grow the table's file past the line
 //! limit.
 
-use std::path::{Path, PathBuf};
+// `Path` is named only by the symlink and FIFO installers, which are Unix-only.
+#[cfg(unix)]
+use std::path::Path;
+use std::path::PathBuf;
 
 use super::{
     ConfigError,
