@@ -90,7 +90,7 @@ impl Settings {
         Self::resolve_with_sources(
             cli,
             matches,
-            process_env_source(),
+            &process_env_source(),
             process_scan_env_source(),
         )
     }
@@ -109,7 +109,7 @@ impl Settings {
     pub fn resolve_with_sources(
         cli: &Cli,
         matches: &ArgMatches,
-        lookup: SharedEnvSource,
+        lookup: &SharedEnvSource,
         scan: SharedScanEnvSource,
     ) -> Result<Self, ConfigError> {
         let config = merged_config(cli, matches, lookup, scan)?;
@@ -147,6 +147,21 @@ pub enum ConfigError {
         /// Why the value was rejected.
         message: String,
     },
+    /// A configuration file declares an `extends` parent.
+    ///
+    /// Inheritance is refused rather than supported: the loader reads the
+    /// parent before any check could see it, and a parent that is malformed
+    /// TOML would print one of its lines to standard error. See
+    /// [`config_extends`].
+    #[error(
+        "configuration file '{}' uses 'extends', which this tool does not support: \
+         state the settings directly in one file",
+        path.display()
+    )]
+    UnsupportedExtends {
+        /// The file that declared the key.
+        path: std::path::PathBuf,
+    },
     /// The layered merge rejected the combination of sources.
     #[error("cannot resolve configuration: {0}")]
     Merge(#[from] Arc<OrthoError>),
@@ -163,22 +178,26 @@ pub enum ConfigError {
 fn merged_config(
     cli: &Cli,
     matches: &ArgMatches,
-    lookup: SharedEnvSource,
+    lookup: &SharedEnvSource,
     scan: SharedScanEnvSource,
 ) -> Result<ConfigFile, ConfigError> {
     let mut errors: Vec<Arc<OrthoError>> = Vec::new();
     let mut composer = MergeComposer::new();
 
-    let policy =
-        ConfigFilePolicy::from_builder(ConfigDiscovery::builder(APP_NAME).env_source(lookup))
-            .selectors([ConfigPathSelector::env(SELECTOR_VARIABLE)])
-            .explicit_mode(ExplicitMode::RequiredExclusive)
-            .automatic_mode(AutomaticMode::StackScopes)
-            .scope_order([
-                DiscoveryScope::System,
-                DiscoveryScope::User,
-                DiscoveryScope::Project,
-            ]);
+    // The builder is cloned so the refusal and the policy are built from one
+    // description: a second `ConfigDiscovery::builder(APP_NAME)` call would be
+    // equal today and could drift tomorrow.
+    let builder = ConfigDiscovery::builder(APP_NAME).env_source(Arc::clone(lookup));
+    extends::refuse(&builder.clone().build(), lookup.as_ref())?;
+    let policy = ConfigFilePolicy::from_builder(builder)
+        .selectors([ConfigPathSelector::env(SELECTOR_VARIABLE)])
+        .explicit_mode(ExplicitMode::RequiredExclusive)
+        .automatic_mode(AutomaticMode::StackScopes)
+        .scope_order([
+            DiscoveryScope::System,
+            DiscoveryScope::User,
+            DiscoveryScope::Project,
+        ]);
 
     let outcome = policy.resolve_layers();
     errors.extend(promoted_discovery_errors(&outcome));
@@ -331,6 +350,8 @@ fn extension_filter(config: &ConfigFile, cli: &Cli) -> Result<ExtensionFilter, C
 #[cfg(test)]
 #[path = "config_error_tests.rs"]
 mod error_tests;
+#[path = "config_extends.rs"]
+mod extends;
 #[path = "config_schema.rs"]
 mod schema;
 #[cfg(test)]

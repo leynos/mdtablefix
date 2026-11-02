@@ -152,10 +152,44 @@ would report each error twice in the all-empty case, because the framework
 already returns them itself when nothing loaded. Both accessors are public
 upstream for exactly this kind of consumer check.
 
-The loader also honours an `extends` key, resolving a relative parent against
-the declaring file and applying parents before children. This is inherited
-rather than designed, and it is recorded so documentation describes what the
-tool actually does.
+### Refuse the inherited `extends` key
+
+The loader honours an `extends` key: a file naming a parent has the parent read
+and merged beneath it. This feature is inherited rather than designed, and it
+is refused outright, before any file is loaded.
+
+The reason is a disclosure path. A relative parent resolves against the
+declaring file's directory, so `..` leaves the working directory, and an
+absolute parent is honoured as written. The loader parses every file it reads
+with a validating TOML parser whose diagnostic quotes the offending source
+line, and `src/main.rs` prints configuration diagnostics to standard error. A
+`.mdtablefix.toml` committed to a repository could therefore name an unrelated
+file — a credentials file is not valid TOML, which is precisely what makes it
+echo — and one line of that file would appear in a CI log. The read alone is
+bad; printing is what makes it a leak.
+
+No supported knob closes this from outside. Version 0.10.0 has no feature flag,
+no builder or policy option, and both the selected-file and automatic paths
+expand the chain unconditionally through `load_config_file_as_chain`, before a
+consumer can observe the files involved. `FileLayerOutcome` exposes the layers
+only after they have been parsed, which is too late.
+
+`src/config_extends.rs` therefore checks first. It computes the files the
+policy is about to load — the selected path when `MDTABLEFIX_CONFIG_PATH` names
+one, otherwise the automatic candidates the policy will walk — reads each with
+the capability-oriented `cap_std` directory handle, and refuses any whose
+parsed top-level table contains `extends`. Reading is safe because the check
+reads only the declaring file, never a parent; a file it cannot read or parse
+is left to the loader, so those failures keep the diagnostics already
+documented. A rejected file produces exit status 2 and names itself, not the
+parent.
+
+This costs no compatibility: inheritance was never documented for this tool,
+its schema is a flat list of switches, and a file that wants to share settings
+can state them directly. The check is also narrow by construction. It matches a
+top-level key with exactly that spelling, so a comment that mentions the word,
+or a nested table that happens to use that name, still loads — the second is
+ordinary unknown configuration that the schema already ignores.
 
 ### Read TOML and nothing else
 

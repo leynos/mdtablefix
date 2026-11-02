@@ -54,6 +54,94 @@ fn a_malformed_selected_file_exits_two_with_no_standard_output() {
     );
 }
 
+/// An `extends` parent outside the working directory is refused unread.
+///
+/// The parent is deliberately *not* valid TOML: were it read, the loader would
+/// quote its first line in the diagnostic, which is the disclosure this
+/// refusal exists to prevent. Its bytes stand in for a credentials file. The
+/// assertion that the marker never appears is therefore the contract, not an
+/// incidental detail — a pass that merely checked the exit status would be
+/// satisfied by the very leak being closed.
+///
+/// The parent lives in a second temporary directory *beside* the fixture tree,
+/// and the `..` in the configuration file therefore really does climb out of
+/// the working directory to a file that exists. Both temporary directories
+/// share a parent, which is what lets one relative path reach the other. A
+/// parent written inside the tree would leave the `..` pointing at nothing,
+/// and the refusal could then be mistaken for a resolution failure that never
+/// read anything because there was nothing to read.
+#[test]
+fn an_extends_parent_outside_the_tree_is_refused_without_being_read() {
+    let fixture = Fixture::new();
+    let neighbouring = tempfile::tempdir().expect("create a directory beside the fixture tree");
+    let neighbour = neighbouring
+        .path()
+        .file_name()
+        .expect("the temporary directory has a name")
+        .to_str()
+        .expect("the name is valid UTF-8");
+    std::fs::write(
+        neighbouring.path().join("credentials"),
+        "aws_secret_access_key = hunter2\n",
+    )
+    .expect("write the credential file");
+    fixture.write(
+        ".mdtablefix.toml",
+        &format!("extends = \"../{neighbour}/credentials\"\nwrap = true\n"),
+    );
+
+    // The non-vacuity check: resolved from the working directory, the relative
+    // parent really is a readable file. Without this the run would fail for the
+    // uninteresting reason that there was nothing to leak.
+    let reachable = fixture
+        .root()
+        .join("..")
+        .join(neighbour)
+        .join("credentials");
+    assert!(
+        reachable.is_file(),
+        "the parent must be readable, or the refusal proves nothing: {}",
+        reachable.display()
+    );
+
+    let run = fixture.run(&[], "a...b\n");
+
+    assert_eq!(
+        run.status, 2,
+        "stdout: {} stderr: {}",
+        run.stdout, run.stderr
+    );
+    assert_eq!(run.stdout, "", "the diagnostic belongs on stderr");
+    assert!(
+        run.stderr.contains("does not support"),
+        "the diagnostic names the refusal: {}",
+        run.stderr
+    );
+    assert!(
+        !run.stderr.contains("hunter2"),
+        "the parent's content must never reach the log: {}",
+        run.stderr
+    );
+}
+
+/// The refusal is keyed on the parsed structure, not on the text.
+///
+/// A file that mentions the key in a comment or as a nested value is ordinary
+/// configuration, and refusing it would make an unexplained failure out of a
+/// document the schema ignores.
+#[test]
+fn a_mention_of_extends_without_the_key_loads_normally() {
+    let fixture = Fixture::new();
+    fixture.write(
+        ".mdtablefix.toml",
+        "# this repository does not use extends\n[notes]\nextends = \"unused\"\n",
+    );
+
+    let run = fixture.run(&[], "a...b\n");
+
+    assert_clean_success(&run, "a...b\n");
+}
+
 /// A malformed project file is reported even when a user file loaded.
 ///
 /// The framework classifies an automatic candidate as optional and withholds an

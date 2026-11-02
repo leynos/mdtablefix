@@ -140,5 +140,5 @@ pub(super) fn resolve(argv: &[&str], environment: &MapEnv) -> Result<Settings, C
     let lookup: Arc<dyn EnvSource> = Arc::new(environment.clone());
     let scan: Arc<dyn ScanEnvSource> = Arc::new(environment.clone());
 
-    Settings::resolve_with_sources(&cli, &matches, lookup, scan)
+    Settings::resolve_with_sources(&cli, &matches, &lookup, scan)
 }

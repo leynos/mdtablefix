@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use super::{
     ConfigError,
-    test_support::{Fixture, resolve},
+    test_support::{Fixture, resolve, write},
 };
 
 /// A selected file that does not exist is an error, not a silent skip.
@@ -28,6 +28,17 @@ fn a_missing_selected_file_is_an_error() {
             .contains("required configuration file not found"),
         "{error}"
     );
+}
+
+/// A selected file that is not valid TOML is reported as a configuration error.
+#[test]
+fn a_selected_file_without_extends_still_loads() {
+    let fixture = Fixture::new();
+    let environment = fixture.selecting("wrap = true\n");
+
+    let settings = resolve(&["mdtablefix"], &environment).expect("the file loads");
+
+    assert!(settings.opts.wrap);
 }
 
 /// A selected file that is not valid TOML is reported as a configuration error.
@@ -147,6 +158,82 @@ fn an_empty_extension_list_is_an_error() {
         "invalid configuration value for md_exts: the extension list must name at least one \
          extension"
     );
+}
+
+/// An `extends` key is refused before the parent is opened.
+///
+/// The parent is written beside the declaring file and is valid TOML, so the
+/// refusal cannot be explained by a path that resolves to nothing or by a
+/// parent the loader could not parse: the only reason this run fails is that
+/// the key itself is refused. The diagnostic names the declaring file and
+/// never the parent, so nothing derived from the parent's bytes can reach it.
+///
+/// The `..` form of the disclosure is covered at the process level, where the
+/// parent really does live outside the working directory.
+#[test]
+fn an_extends_key_is_refused_before_the_parent_is_read() {
+    let fixture = Fixture::new();
+    let parent = fixture.root().join("parent-that-must-not-be-read.toml");
+    write(&parent, "wrap = true\n");
+    let environment = fixture.selecting("extends = \"parent-that-must-not-be-read.toml\"\n");
+
+    let error = resolve(&["mdtablefix"], &environment).expect_err("inheritances are refused");
+
+    let rendered = error.to_string();
+    assert!(
+        matches!(&error, ConfigError::UnsupportedExtends { .. }),
+        "{error:?}"
+    );
+    assert!(rendered.contains("does not support"), "{rendered}");
+    assert!(
+        !rendered.contains("parent-that-must-not-be-read"),
+        "the diagnostic must not name the parent: {rendered}"
+    );
+}
+
+/// The refusal applies to a discovered file, not only a selected one.
+#[test]
+fn an_extends_key_in_a_discovered_file_is_refused() {
+    let fixture = Fixture::new();
+    fixture.discover("extends = \"base.toml\"\n");
+
+    let error = resolve(&["mdtablefix"], &fixture.environment())
+        .expect_err("a discovered inheritance is refused");
+
+    assert!(
+        matches!(&error, ConfigError::UnsupportedExtends { .. }),
+        "{error:?}"
+    );
+}
+
+/// A file whose text contains the word `extends` outside a key is not refused.
+///
+/// The check reads the parsed top-level table rather than searching the text,
+/// so a comment or a string mentioning the key is ordinary content. Without
+/// this case a grep-shaped implementation would pass every case above.
+#[test]
+fn the_word_extends_in_a_comment_is_not_a_declaration() {
+    let fixture = Fixture::new();
+    let environment = fixture.selecting("# this file does not use extends\nwrap = true\n");
+
+    let settings = resolve(&["mdtablefix"], &environment).expect("the comment is not a key");
+
+    assert!(settings.opts.wrap);
+}
+
+/// A nested `extends` belongs to no layer loader and is left alone.
+///
+/// Only a top-level key starts a chain — the loader asks the merged view for
+/// `extends` — so a table that happens to have that name under a section is a
+/// value the schema ignores, like any other unknown key.
+#[test]
+fn a_nested_extends_key_is_not_a_declaration() {
+    let fixture = Fixture::new();
+    let environment = fixture.selecting("wrap = true\n[section]\nextends = \"base.toml\"\n");
+
+    let settings = resolve(&["mdtablefix"], &environment).expect("the nested key is inert");
+
+    assert!(settings.opts.wrap);
 }
 
 /// A key the schema does not know is ignored, so a newer file still loads.

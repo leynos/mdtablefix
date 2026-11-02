@@ -50,8 +50,9 @@ const FRAMEWORK: &str = "ortho_config";
 /// Every one is declared from `src/main.rs` and from nowhere else. The test
 /// modules are `#[path]` modules of `config`, so they follow that file's
 /// ownership and cannot be reached from the library either.
-const BINARY_ONLY: [&str; 5] = [
+const BINARY_ONLY: [&str; 6] = [
     "src/config.rs",
+    "src/config_extends.rs",
     "src/config_schema.rs",
     "src/config_error_tests.rs",
     "src/config_test_support.rs",

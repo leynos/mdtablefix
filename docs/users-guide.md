@@ -271,7 +271,7 @@ and a list may be written with brackets (`[rst,xml]`), as a quoted list
 spaces but no commas (`rst xml`) is a single string, which is not a list, so
 the run fails rather than silently narrowing the selection.
 
-Five failures are worth recognizing, all of which exit `2` with the diagnostic
+Six failures are worth recognizing, all of which exit `2` with the diagnostic
 on standard error and nothing on standard output:
 
 - `MDTABLEFIX_CONFIG_PATH` names a file that does not exist. A named file is
@@ -298,6 +298,17 @@ on standard error and nothing on standard output:
   nothing would end a `--git` run with an empty result the user could not
   explain from the file they wrote. The command line cannot express this case,
   because `--md-exts` takes at least one value.
+- A file uses `extends` to name a parent configuration. This tool does not
+  support inheritance, and it refuses the key before the parent is opened. The
+  diagnostic names the file that declared it and nothing else. State the
+  settings in one file instead.
+
+  The refusal is a safeguard rather than a restriction for its own sake. A
+  parent path may point anywhere the invoking user can read, including outside
+  the working directory, and the parser quotes a source line when a file is not
+  valid TOML. A committed `.mdtablefix.toml` naming an unrelated file could
+  then print a line of that file into a log. Refusing the key closes the route
+  entirely.
 
 An unknown key is ignored, so a file written for a newer version still loads. A
 missing file at an automatic location is not an error; it simply contributes

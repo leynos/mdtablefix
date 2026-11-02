@@ -859,7 +859,39 @@ actual current state of the work.
       is restored. The plural survives only in the ExecPlans, which are
       historical records of the wording in force when each was written.
 
-- Decision (accepted): refuse a macro whose arguments write `mod`, rather than
+- [x] (2026-11-01) CodeRabbit round twenty-four on `e620e01`: two findings on
+      the same subject, and the primary one was implemented rather than
+      documented. The `extends` key was never a documented feature of this
+      tool, but `ortho_config` 0.10.0 expands it unconditionally: no feature
+      flag, no builder option, no policy option, and both `FileLayerOutcome::
+      selected` and `chain_layers` call `load_config_file_as_chain` before any
+      caller can inspect the result. A relative parent is joined onto the
+      declaring file's directory and canonicalised, so `..` climbs out of the
+      working directory, and an absolute parent is honoured as written. Reading
+      is not the danger by itself; printing is. The loader validates TOML with a
+      parser whose `Display` quotes the offending source line, and `src/main.rs`
+      prints configuration errors to standard error at exit 2, so a committed
+      `.mdtablefix.toml` naming an unrelated file would put one of its lines
+      into the log of any run started in that directory. Reproduced live before
+      the fix at `/tmp/ext4`, where `extends = "../secrets.toml"` printed a
+      fabricated credential line. The refusal is built on the one hook the
+      library does expose: `ConfigDiscovery::candidates()` is public and is
+      exactly the set the policy expands, so `src/config_extends.rs` reads those
+      files first and rejects any top-level `extends` before resolution. A
+      selector that names a path is exclusive, and the pre-scan mirrors that
+      rule, so a broken file elsewhere cannot fail a run whose selector names a
+      good one. The check parses rather than greps, so a comment or a nested key
+      is not a match, and a file that cannot be read or parsed is left to the
+      existing diagnostics unchanged. Tests: four unit cases in
+      `src/config_error_tests.rs` (the negative control, the refused selected
+      file, the refused discovered file, and the comment plus nested-key
+      negatives) and two process-level cases in
+      `tests/cli_config_failure_binary.rs`, one of which asserts that the
+      parent's bytes never reach stderr. Suites run: `cargo test --bin
+      mdtablefix` (371 passed) and `cargo test --test cli_config_failure_binary`
+      (11 passed); the process-level case pins the geometry with a reachability
+      assertion, so it cannot pass merely because the `..` dangles.
+
   skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while
   every file the walk reads stays clean — the same hole `#[path]` resolution
