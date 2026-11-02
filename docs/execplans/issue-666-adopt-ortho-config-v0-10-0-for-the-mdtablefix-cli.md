@@ -2232,7 +2232,7 @@ invariants to the required behaviour.
   merely that parsing succeeded, and the file-only and environment-only cells
   differ in value from each other and from the default so a layer silently
   dropped would change an assertion. Both controls were run: reversing the
-  layer order in `merged_config` failed exactly the nine `FileAndEnv` cells and
+  layer order in `merged_config` failed exactly the ten `FileAndEnv` cells and
   no others, and a probe naming the framework in `src/wrap.rs` failed INV-LIB's
   detector; both were reverted.
 - Obligation: INV-TYPED.
@@ -2481,18 +2481,29 @@ tolerance, and the enable-but-not-disable asymmetry. It covers four failures
 rather than the three the plan named, because measurement found a fourth: a
 value of the wrong type is reported by the merge, after the file has been read,
 so its diagnostic does not repeat the path — the users' guide says so, and a
-user who reads only the quoted text should know which setting to look at. The
-discovery list became a table rather than prose because ten distinct locations
-are involved, and each was probed in an isolated tree before the table was
-written. The "Configuration layering" section of `docs/developers-guide.md`
-sits as the plan asked, immediately after the "Environment access policy"
-section and its "Environment variables in subprocess tests" and "Stub scripts
-in subprocess tests" subsections, and before "Coverage publication belongs to
-`main`"; it covers the binary-only module and the test that guards it, the
-`cli` feature and what it does and does not separate, the hand-composed layers,
-the `resolve` / `resolve_with_sources` split, the two provenance rules, and the
-residual dependency on the working directory. Run every gate. Commit. Push.
-Open the draft pull request. Do not merge.
+user who reads only the quoted text should know which setting to look at.
+
+That passage is a dated record of what shipped in `0d12ec2`, not a description
+of the current guide, and two later decisions superseded parts of it. The
+asymmetry it names lasted until the optional `=<BOOL>` value was adopted on
+2026-11-01, which lets a typed `--flag=false` turn a configured switch off; the
+`extends` refusal added in round twenty-four and the empty-extension-list
+rejection added since then take the failure list from four to the six the guide
+now states. The section was verified as built at the time and is left as
+written so the record stays honest about what that commit contained.
+
+The discovery list became a table rather than prose because ten distinct
+locations are involved, and each was probed in an isolated tree before the
+table was written. The "Configuration layering" section of
+`docs/developers-guide.md` sits as the plan asked, immediately after the
+"Environment access policy" section and its "Environment variables in
+subprocess tests" and "Stub scripts in subprocess tests" subsections, and
+before "Coverage publication belongs to `main`"; it covers the binary-only
+module and the test that guards it, the `cli` feature and what it does and does
+not separate, the hand-composed layers, the `resolve` / `resolve_with_sources`
+split, the two provenance rules, and the residual dependency on the working
+directory. Run every gate. Commit. Push. Open the draft pull request. Do not
+merge.
 
 ## Milestones and plateaus
 
