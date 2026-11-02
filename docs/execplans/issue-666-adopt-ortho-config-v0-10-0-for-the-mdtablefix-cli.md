@@ -980,6 +980,22 @@ actual current state of the work.
       the process level, and both regression tests were shown to fail with the
       gate removed — the symlink case reporting `extends`, the FIFO case killed
       at the 20-second ceiling.
+- [x] (2026-11-02) CodeRabbit round thirty-two on `edf7dbd`: no findings. The
+      review read forty files, including the new
+      `tests/support/candidate_refusals.rs` and the rewritten pre-scan, and
+      raised nothing. The gate run that preceded it was green on all six
+      targets, and the one documentation repair needed — a blank line inside
+      the round-31 entry that made CommonMark read the following continuation
+      as an indented code block, and so made markdownlint reject every fenced
+      block in the file — was fixed before the review was requested.
+- [x] (2026-11-02) The Windows job on `edf7dbd` failed, and it was this work's
+      fault. `src/config_error_tests.rs` imported `Path` alongside `PathBuf`,
+      but `Path` is named only by the symlink and FIFO installers, both
+      `#[cfg(unix)]`; under the job's `-D warnings` the import is dead off
+      Unix and the test target did not compile. Reproduced locally with
+      `cargo check --target x86_64-pc-windows-msvc --all-targets
+      --all-features` — which is the compile half of that job and needs no
+      Windows host — and fixed by gating the import. `e5fc271`.
 
 ## Surprises & discoveries
 
