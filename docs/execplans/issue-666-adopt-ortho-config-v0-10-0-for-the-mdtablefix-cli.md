@@ -1007,6 +1007,12 @@ actual current state of the work.
       edit. The text-typed argument count in that file is unchanged at ten
       across this session's additions, which is what you would expect from a
       table whose cases take `fn(&Path, &Path)`.
+- [x] (2026-11-02) CI on `57c8900` is green apart from that advisory check.
+      `build-test`, `verify`, all four `binstall packaging` targets and
+      `atomic write contract (windows)` all pass; the Windows suite took
+      10m41s and ran the full `cargo test --all-features`, which is the job
+      that failed on `edf7dbd` and the one the gated import fixes. Run
+      41460799010.
 
 ## Surprises & discoveries
 
