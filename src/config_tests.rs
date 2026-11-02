@@ -6,7 +6,7 @@
 //! `docs/adrs/0012-environment-seam-taxonomy.md`.
 //!
 //! The precedence table names every key the schema carries, in both
-//! polarities. Ten switches and the `md_exts` list state `true` (or a value)
+//! polarities. Nine switches and the `md_exts` list state `true` (or a value)
 //! in the file and the opposite in the environment, so they witness the file
 //! applying, the environment overriding the file, and — in the `AllThree`
 //! cells, which write all three layers — the command line overriding the
@@ -70,8 +70,6 @@ enum Key {
     Git,
     /// The `include_untracked` switch.
     IncludeUntracked,
-    /// The `allow_conflicted` switch.
-    AllowConflicted,
 }
 
 /// How many layers state a value in one row of the precedence table.
@@ -129,7 +127,6 @@ fn file_contents(key: Key) -> &'static str {
         Key::MdExts => "md_exts = [\"toml\"]\n",
         Key::Git => "git = true\n",
         Key::IncludeUntracked => "include_untracked = true\n",
-        Key::AllowConflicted => "allow_conflicted = true\n",
     }
 }
 
@@ -150,7 +147,6 @@ fn variable(key: Key) -> (&'static str, &'static str) {
         Key::MdExts => ("MDTABLEFIX_MD_EXTS", "[rst, xml]"),
         Key::Git => ("MDTABLEFIX_GIT", "false"),
         Key::IncludeUntracked => ("MDTABLEFIX_INCLUDE_UNTRACKED", "false"),
-        Key::AllowConflicted => ("MDTABLEFIX_ALLOW_CONFLICTED", "false"),
     }
 }
 
@@ -171,7 +167,6 @@ fn typed_flags(key: Key) -> &'static [&'static str] {
         Key::MdExts => &["--md-exts", "yaml"],
         Key::Git => &["--git"],
         Key::IncludeUntracked => &["--include-untracked"],
-        Key::AllowConflicted => &["--allow-conflicted"],
     }
 }
 
@@ -181,7 +176,7 @@ fn typed_flags(key: Key) -> &'static [&'static str] {
 /// reader can check the table against the documented precedence order without
 /// running it.
 ///
-/// The ten switches that state `true` in the file share one arm, because their
+/// The nine switches that state `true` in the file share one arm, because their
 /// table is the same: the file applies alone and under a typed flag, and the
 /// environment's `false` wins wherever it is set. Stating that once keeps the
 /// two deliberate contrasts below it — `headings`, whose file value is `false`,
@@ -200,8 +195,7 @@ fn expected(key: Key, scenario: Scenario) -> &'static str {
         | Key::Footnotes
         | Key::CodeEmphasis
         | Key::Git
-        | Key::IncludeUntracked
-        | Key::AllowConflicted => match scenario {
+        | Key::IncludeUntracked => match scenario {
             Scenario::Defaults | Scenario::EnvOnly | Scenario::FileAndEnv => "false",
             Scenario::FileOnly | Scenario::AllThree => "true",
         },
@@ -232,13 +226,12 @@ fn observed(key: Key, settings: &Settings) -> String {
         Key::MdExts => settings.md_exts.iter().collect::<Vec<_>>().join(","),
         Key::Git => settings.git.to_string(),
         Key::IncludeUntracked => settings.include_untracked.to_string(),
-        Key::AllowConflicted => settings.allow_conflicted.to_string(),
     }
 }
 
 /// Every key resolves to the most-preferred layer that states it.
 ///
-/// 12 keys by 5 source combinations by 2 file supplies, so a layer that was
+/// 11 keys by 5 source combinations by 2 file supplies, so a layer that was
 /// silently dropped, or one that outranked the wrong neighbour, changes at
 /// least one assertion. Each file supply is exercised because the selector
 /// short-circuits automatic discovery, and the two must compose identically.
@@ -255,8 +248,7 @@ fn a_key_resolves_to_the_most_preferred_layer_that_states_it(
         Key::Headings,
         Key::MdExts,
         Key::Git,
-        Key::IncludeUntracked,
-        Key::AllowConflicted
+        Key::IncludeUntracked
     )]
     key: Key,
     #[values(
@@ -354,8 +346,7 @@ fn a_typed_false_outranks_a_configured_true(
         Key::CodeEmphasis,
         Key::Headings,
         Key::Git,
-        Key::IncludeUntracked,
-        Key::AllowConflicted
+        Key::IncludeUntracked
     )]
     key: Key,
 ) {
@@ -370,4 +361,48 @@ fn a_typed_false_outranks_a_configured_true(
     let settings = resolve(&argv, &environment).expect("the layers resolve");
 
     assert_eq!(observed(key, &settings), "false");
+}
+
+/// A file and the environment cannot turn off the conflict guard.
+///
+/// `allow_conflicted` is the one setting the schema deliberately omits; see
+/// [`schema::CONFIGURED_ARGUMENTS`](super::schema::CONFIGURED_ARGUMENTS). A
+/// committed `.mdtablefix.toml` that switched it on would let an
+/// `--git --in-place` run rewrite text across unresolved conflict markers in a
+/// tree the user only checked out, so both non-command-line layers are checked
+/// here and neither may reach it.
+///
+/// The flag itself still works, which is what makes this a narrowing rather
+/// than a loss: the last case types it and expects it to be honoured.
+#[rstest]
+#[case::file("allow_conflicted = true\n", None, false)]
+#[case::environment(
+    "",
+    Some(("MDTABLEFIX_ALLOW_CONFLICTED", "true")),
+    false
+)]
+#[case::command_line("", None, true)]
+fn only_the_command_line_can_allow_a_conflicted_rewrite(
+    #[case] contents: &str,
+    #[case] variable: Option<(&str, &str)>,
+    #[case] expected: bool,
+) {
+    let fixture = Fixture::new();
+    let mut environment = fixture.environment();
+    if !contents.is_empty() {
+        environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select(contents));
+    }
+    if let Some((name, value)) = variable {
+        environment.insert(name, value);
+    }
+
+    let argv = if expected {
+        vec!["mdtablefix", "--allow-conflicted"]
+    } else {
+        vec!["mdtablefix"]
+    };
+
+    let settings = resolve(&argv, &environment).expect("the layers resolve");
+
+    assert_eq!(settings.allow_conflicted, expected);
 }

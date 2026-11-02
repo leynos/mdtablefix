@@ -54,18 +54,25 @@ fn a_selected_file_without_a_declaration_still_loads(#[case] contents: &str) {
     assert!(settings.opts.wrap);
 }
 
-/// A selected file that is not valid TOML is reported as a configuration error.
-#[test]
-fn a_malformed_selected_file_is_an_error() {
+/// A selected file the merge cannot use is reported, not silently skipped.
+///
+/// Two shapes, both reaching the same `ConfigError::Merge`: TOML that does not
+/// parse, and a value whose type the schema cannot accept. A file is selected
+/// rather than discovered in both cases, so the failure is the file's own
+/// rather than a promotion of a withheld automatic-candidate error.
+#[rstest::rstest]
+#[case::malformed("wrap = \n", "cannot resolve configuration")]
+#[case::wrong_type("wrap = \"notabool\"\n", "expected a boolean")]
+fn a_selected_file_that_cannot_be_merged_is_an_error(
+    #[case] contents: &str,
+    #[case] fragment: &str,
+) {
     let fixture = Fixture::new();
-    let environment = fixture.selecting("wrap = \n");
+    let environment = fixture.selecting(contents);
 
-    let error = resolve(&["mdtablefix"], &environment).expect_err("the file is malformed");
+    let error = resolve(&["mdtablefix"], &environment).expect_err("the file cannot be merged");
 
-    assert!(
-        error.to_string().contains("cannot resolve configuration"),
-        "{error}"
-    );
+    assert!(error.to_string().contains(fragment), "{error}");
 }
 
 /// A malformed discovered file is reported even when another scope loaded.
@@ -113,64 +120,42 @@ fn an_absent_discovered_candidate_is_not_an_error() {
     assert!(settings.opts.ellipsis);
 }
 
-/// A value of the wrong type is rejected rather than coerced.
-#[test]
-fn a_value_of_the_wrong_type_is_an_error() {
-    let fixture = Fixture::new();
-    let environment = fixture.selecting("wrap = \"notabool\"\n");
-
-    let error = resolve(&["mdtablefix"], &environment).expect_err("the value is not a boolean");
-
-    assert!(error.to_string().contains("expected a boolean"), "{error}");
-}
-
-/// An extension the parser would reject names the key it came from.
+/// A configured extension list this tool cannot use names the key it came from.
 ///
 /// A configured list did not pass through clap's `value_parser`, so this is the
-/// only place the user learns which setting to fix.
-#[test]
-fn an_extension_the_parser_rejects_names_its_key() {
+/// only place the user learns which setting to fix; the key appears in both the
+/// variant and the rendered message. Two entries are reachable from a file and
+/// not from the command line, which is why the checks live here:
+///
+/// - a member the parser rejects, which the typed `--md-exts` would have refused at parse time; and
+/// - an empty list, which is valid TOML whose every member (there are none) parses, so only an
+///   explicit length check catches it. Left alone it would build an empty filter and a `--git` run
+///   would report a selection of nothing — a result the user could not explain from the file they
+///   wrote, and one they would more likely read as "no files need changing" than as a mistake.
+///   `--md-exts` takes at least one value, so the command line cannot reach the state.
+#[rstest::rstest]
+#[case::unparseable(
+    "md_exts = [\"a.b\"]\n",
+    "invalid configuration value for md_exts: extension \"a.b\" contains a dot"
+)]
+#[case::empty(
+    "md_exts = []\n",
+    "invalid configuration value for md_exts: the extension list must name at least one extension"
+)]
+fn a_configured_extension_list_names_the_key_it_came_from(
+    #[case] contents: &str,
+    #[case] message: &str,
+) {
     let fixture = Fixture::new();
-    let environment = fixture.selecting("md_exts = [\"a.b\"]\n");
+    let environment = fixture.selecting(contents);
 
-    let error = resolve(&["mdtablefix"], &environment).expect_err("the extension is invalid");
+    let error = resolve(&["mdtablefix"], &environment).expect_err("the list is unusable");
 
     assert!(
         matches!(&error, ConfigError::InvalidValue { key, .. } if key == "md_exts"),
         "{error:?}"
     );
-    assert_eq!(
-        error.to_string(),
-        "invalid configuration value for md_exts: extension \"a.b\" contains a dot"
-    );
-}
-
-/// An empty extension list is rejected rather than selecting nothing.
-///
-/// The list is valid TOML and every one of its zero members parses, so only an
-/// explicit length check catches it. Left alone it would build an empty filter
-/// and a `--git` run would report a selection of nothing — a result the user
-/// could not explain from the file they wrote, and one they would more likely
-/// read as "no files need changing" than as a mistake.
-///
-/// The command line cannot reach this state, because `--md-exts` takes at least
-/// one value, which is why the guard belongs here rather than in the parser.
-#[test]
-fn an_empty_extension_list_is_an_error() {
-    let fixture = Fixture::new();
-    let environment = fixture.selecting("md_exts = []\n");
-
-    let error = resolve(&["mdtablefix"], &environment).expect_err("the list names no extension");
-
-    assert!(
-        matches!(&error, ConfigError::InvalidValue { key, .. } if key == "md_exts"),
-        "{error:?}"
-    );
-    assert_eq!(
-        error.to_string(),
-        "invalid configuration value for md_exts: the extension list must name at least one \
-         extension"
-    );
+    assert_eq!(error.to_string(), message);
 }
 
 /// An `extends` key is refused before the parent is opened.

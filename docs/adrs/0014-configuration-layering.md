@@ -70,14 +70,25 @@ The schema therefore holds:
 - the eight transformation switches — `wrap`, `renumber`, `breaks`, `ellipsis`,
   `fences`, `footnotes`, `code_emphasis`, and `headings`;
 - `md_exts`, the extension list a Git selection keeps; and
-- `git`, `include_untracked`, and `allow_conflicted`, the Git selection's own
-  switches.
+- `git` and `include_untracked`, the two Git selection switches that decide
+  which files a run reads.
 
 It does not hold the mode — `in_place`, `check`, `diff`, or `list_files` — and
 it does not hold the positional file arguments. A file that silently switched a
 bare `mdtablefix notes.md` into an in-place rewrite would be a destructive
 surprise caused by a file the user forgot existed. The paths are the user's
 statement of what to act on, which a file cannot make on their behalf.
+
+It does not hold `--allow-conflicted` either, and that exclusion is the same
+argument one step further. The flag does not select or format anything: it
+switches off the conflict guard, which refuses to rewrite a file carrying
+conflict markers while a merge, rebase, revert, or cherry-pick is paused. A
+committed file that turned it on would let an `--git --in-place` run
+restructure text across an unresolved boundary in a tree the user had merely
+checked out, and the guard exists precisely because that rewrite corrupts a
+resolution the user is still making. Configuration may state *how* the tool
+formats and *which* files it reads; it may not withdraw a safety check from an
+operation the user did not ask it to perform. The flag itself is untouched.
 
 `git` is the one selection setting that can be configured, because "format the
 tracked Markdown of this repository" is a property of the repository rather

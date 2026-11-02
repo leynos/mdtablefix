@@ -264,12 +264,20 @@ Every setting also has an environment variable, spelled `MDTABLEFIX_` followed
 by the key in upper case: `MDTABLEFIX_WRAP`, `MDTABLEFIX_RENUMBER`,
 `MDTABLEFIX_BREAKS`, `MDTABLEFIX_ELLIPSIS`, `MDTABLEFIX_FENCES`,
 `MDTABLEFIX_FOOTNOTES`, `MDTABLEFIX_CODE_EMPHASIS`, `MDTABLEFIX_HEADINGS`,
-`MDTABLEFIX_MD_EXTS`, `MDTABLEFIX_GIT`, `MDTABLEFIX_INCLUDE_UNTRACKED`, and
-`MDTABLEFIX_ALLOW_CONFLICTED`. A boolean takes `true` or `false` in any case,
-and a list may be written with brackets (`[rst,xml]`), as a quoted list
-(`["rst"]`), or as bare comma-separated words (`rst,xml`). A list written with
-spaces but no commas (`rst xml`) is a single string, which is not a list, so
-the run fails rather than silently narrowing the selection.
+`MDTABLEFIX_MD_EXTS`, `MDTABLEFIX_GIT`, and `MDTABLEFIX_INCLUDE_UNTRACKED`. A
+boolean takes `true` or `false` in any case, and a list may be written with
+brackets (`[rst,xml]`), as a quoted list (`["rst"]`), or as bare
+comma-separated words (`rst,xml`). A list written with spaces but no commas
+(`rst xml`) is a single string, which is not a list, so the run fails rather
+than silently narrowing the selection.
+
+`--allow-conflicted` is the one switch neither a file nor the environment can
+supply, and it is deliberately excluded. The other Git switches decide _which_
+files a run reads; this one decides whether the conflict guard applies to them.
+A committed `.mdtablefix.toml` that switched it on would let an
+`--git --in-place` run rewrite text across unresolved conflict markers in a
+tree the user had merely checked out. The flag itself is unchanged, so the
+escape hatch is still there for a user who types it.
 
 Six failures are worth recognizing, all of which exit `2` with the diagnostic
 on standard error and nothing on standard output:

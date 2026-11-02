@@ -122,7 +122,10 @@ impl Settings {
             // configured `git` rather than being silently overridden by it.
             git: config.git.unwrap_or(cli.selects_from_git()) && cli.files.is_empty(),
             include_untracked: config.include_untracked.unwrap_or(cli.includes_untracked()),
-            allow_conflicted: config.allow_conflicted.unwrap_or(cli.allows_conflicted()),
+            // The conflict guard's override is an invocation, not a setting:
+            // a committed file must not be able to disable a safety check on
+            // the user's behalf. See `schema::CONFIGURED_ARGUMENTS`.
+            allow_conflicted: cli.allows_conflicted(),
             mode: cli.mode(),
             files: cli.files.clone(),
         })
@@ -284,7 +287,6 @@ fn command_line_layer(
             .then(|| cli.extensions().iter().map(str::to_owned).collect()),
         git: typed_bool(matches, "git", cli.selects_from_git()),
         include_untracked: typed_bool(matches, "include_untracked", cli.includes_untracked()),
-        allow_conflicted: typed_bool(matches, "allow_conflicted", cli.allows_conflicted()),
     };
 
     // `sanitize_value` drops the `None`s, so the layer carries exactly the

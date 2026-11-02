@@ -591,7 +591,7 @@ actual current state of the work.
       separate case, `an_empty_selected_file_leaves_every_default_in_place`,
       which short-circuits discovery rather than exercising it; INV-PRECEDENCE
       still said five keys and 50 cells, when `src/config_tests.rs` covers
-      twelve keys × five source combinations × two file supplies, 120 cells;
+      eleven keys × five source combinations × two file supplies, 110 cells;
       and INV-PRECEDENCE listed "an explicitly configured `--config-path`
       value" as a layer, when the design adds no such option and
       `MDTABLEFIX_CONFIG_PATH` selects a file rather than forming a layer of
@@ -891,6 +891,43 @@ actual current state of the work.
       mdtablefix` (371 passed) and `cargo test --test cli_config_failure_binary`
       (11 passed); the process-level case pins the geometry with a reachability
       assertion, so it cannot pass merely because the `..` is a dead link.
+- [x] (2026-11-02) CodeRabbit round twenty-five on `5518cd5`: two findings that
+      contradicted each other on the same site. One wanted the pre-scan to read
+      through a `cap_std` capability handle; the other wanted it to canonicalize
+      before reading. Reading the vendored loader settled it — `loader.rs`
+      canonicalizes at `file::canonicalise` and then reads through
+      `open_parent_dir_and_name`, which opens the parent with
+      `Dir::open_ambient_dir`, so the loader is canonicalise-then-cap_std and
+      the two findings describe its two halves rather than rivals. Both are now
+      applied, which also dissolves the first finding's premise: once
+      canonicalized, the pre-scan and the loader cannot disagree about which
+      file is being read, so a symlinked candidate is judged by its target. A
+      live probe confirmed the loader is confined — a symlinked file declaring
+      `extends` outside the tree produced cap-std's "a path led outside of the
+      filesystem" from the loader itself. Tests: the symlink case in
+      `src/config_error_tests.rs`, and the process-level `..` case rebuilt so
+      the parent is a genuinely neighbouring directory with a reachability
+      assertion. Suites run: `cli_config_binary` (23), `cli_config_dependency_contract`
+      (6), `cli_config_failure_binary` (11), and the binary unit target (372).
+- [x] (2026-11-02) CodeRabbit round twenty-six on `5782976`: five findings.
+      Four were mechanical — one `rstest` table replacing four positive
+      controls, and `canonicalise` → `canonicalize` in prose where the identifier
+      is not being quoted — and the fifth corrected the ExecPlan, which still
+      described two `ConfigError` variants and needed `UnsupportedExtends` in
+      its declaration block. Gates: `check-fmt`, `lint`, `markdownlint`,
+      `nixie` and `test` all green, the last reporting 3076 passed.
+- [x] (2026-11-02) CodeRabbit round twenty-seven on `6977d7e`: three findings,
+      one of them substantive. A committed `.mdtablefix.toml` could set
+      `allow_conflicted = true`, which disables the conflict guard
+      `git_inputs::guard` installs for `--git --in-place`; a user merely
+      checking out a repository could then have unresolved conflict markers
+      restructured. The key is removed from the schema and from
+      `CONFIGURED_ARGUMENTS`, so neither a file nor `MDTABLEFIX_ALLOW_CONFLICTED`
+      can reach it, while the flag itself is unchanged. The other two were the
+      stale `ConfigError` count in the Plan-of-work passage and the two
+      remaining duplicated failure-test pairs, now one `rstest` table each.
+      Decisions recorded; ADR 0014 and the users' guide state the exclusion and
+      its reason.
 
 ## Surprises & discoveries
 
@@ -1085,7 +1122,7 @@ Document with evidence so future work benefits.
   drove `--version` to avoid needing a positional file, and both passed with
   exit 0 even though the configuration they supplied was invalid. Impact: every
   test asserting a configuration-resolution outcome now runs a real formatting
-  job, which is why `an_extension_the_parser_rejects_names_its_key` and
+  job, which is why `a_configured_extension_list_names_the_key_it_came_from` and
   `a_configured_extension_list_is_not_a_typed_flag` feed `RAGGED` on standard
   input. Both doc comments state the reasoning, so the vacuous spelling is not
   reintroduced.
@@ -1740,6 +1777,31 @@ fully verified, and named five gaps. Each is answered below.
   0014's "Keep the library free of the framework" and the developers' guide
   both stated the old conclusion and were corrected rather than left to
   contradict the manifest. Date/Author: 2026-11-01, implementation agent.
+- Decision (accepted, CodeRabbit round twenty-seven): `allow_conflicted` is
+  removed from the configuration schema, so a file or a `MDTABLEFIX_*` variable
+  can no longer switch off the conflict guard. Rationale: the ADR's
+  setting/invocation test asks whether a committed file may make a choice on
+  the invoking user's behalf. The other Git switches answer by deciding *which*
+  files a run reads; this one decides whether a safety check applies to them,
+  and the check exists because rewriting a file mid-merge corrupts a resolution
+  the user is still making. A `.mdtablefix.toml` that enabled it would turn a
+  `--git --in-place` run in a merely checked-out tree into exactly the
+  destructive surprise ADR 0014 excludes the mode and the file arguments to
+  prevent, so the key joins them on the invocation side of the line. The flag
+  itself is unchanged, which is what makes this a narrowing rather than a lost
+  feature. Evidence: the table is now eleven keys and 110 cells;
+  `only_the_command_line_can_allow_a_conflicted_rewrite` states that a file and
+  the environment cannot reach it while a typed flag still can; ADR 0014 and
+  the users' guide both record the exclusion and its reason. Date/Author:
+  2026-11-02, implementation agent.
+- Decision (accepted, CodeRabbit round twenty-seven): the round-twenty-six
+  refactor continues — the two failure cases and the two `md_exts` cases are
+  now one `rstest` table each. Rationale: each pair differed only in the file
+  contents and the fragment asserted, and the repository's testing guidance
+  asks for duplicated tests to be parameterized. The `md_exts` table keeps an
+  exact-message assertion rather than a substring, because the message is the
+  only rendering that names the key a user must fix. Date/Author: 2026-11-02,
+  implementation agent.
 
 ## Outcomes & retrospective
 
@@ -2133,21 +2195,21 @@ invariants to the required behaviour.
   Method: parameterized `rstest` table over source combinations, using injected
   sources only. Rationale: the partition is finite and small; a table makes
   each cell's meaning explicit and makes a missing combination visible. Domain:
-  twelve keys (`wrap`, `renumber`, `breaks`, `ellipsis`, `fences`, `footnotes`,
-  `code_emphasis`, `headings`, `md_exts`, `git`, `include_untracked`,
-  `allow_conflicted`) across five source combinations (defaults only, file
-  only, environment only, file and environment, all three including the command
-  line), with the file supplied both through discovery and through an explicit
+  eleven keys (`wrap`, `renumber`, `breaks`, `ellipsis`, `fences`, `footnotes`,
+  `code_emphasis`, `headings`, `md_exts`, `git`, `include_untracked`) across
+  five source combinations (defaults only, file only, environment only, file
+  and environment, all three including the command line), with the file
+  supplied both through discovery and through an explicit
   `MDTABLEFIX_CONFIG_PATH`. Artefact: `src/config_tests.rs` with a `MapEnv` and
   a temporary TOML file — not `tests/cli_config.rs`, because `mod config` is
   binary-only; see `Decision log` deviation `a`. Evidence: the table fails
   before the wiring lands, because the configuration module does not exist;
-  after the wiring, all 120 cells pass (12 keys × 5 source combinations × 2
+  after the wiring, all 110 cells pass (11 keys × 5 source combinations × 2
   file supplies). Non-vacuity: each cell asserts the *resolved* value, not
   merely that parsing succeeded, and the file-only and environment-only cells
   differ in value from each other and from the default so a layer silently
   dropped would change an assertion. Both controls were run: reversing the
-  layer order in `merged_config` failed exactly the ten `FileAndEnv` cells and
+  layer order in `merged_config` failed exactly the nine `FileAndEnv` cells and
   no others, and a probe naming the framework in `src/wrap.rs` failed INV-LIB's
   detector; both were reverted.
 - Obligation: INV-TYPED.
@@ -2356,10 +2418,12 @@ carries. The module holds:
   `ConfigFile::merge_from_layers`.
 - `ConfigError`, a `thiserror` enum with variants for an unreadable selected
   file, a malformed file, an invalid value, and an environment-layer failure,
-  each carrying the path or variable name that produced it. (As built, two
-  variants: `InvalidValue` and `Merge`. A malformed file and an unreadable one
-  both arrive as an `OrthoError` from the framework, so a separate variant per
-  cause would restate the framework's own taxonomy. Decision `d`.)
+  each carrying the path or variable name that produced it. (As built, three
+  variants: `InvalidValue`, `UnsupportedExtends`, and `Merge`. A malformed file
+  and an unreadable one both arrive as an `OrthoError` from the framework, so a
+  separate variant per cause would restate the framework's own taxonomy —
+  Decision `d`. `UnsupportedExtends` is the later `extends` refusal, whose own
+  Decision-log entry records it.)
 
 `src/main.rs`'s `run()` changes from calling `Cli::parse_validated()` alone to
 calling it and then `Settings::resolve`, mapping a `ConfigError` to

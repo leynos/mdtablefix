@@ -36,11 +36,12 @@ const CLEAN: &str = "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n";
 /// and [`every_transformation_switch_changes_its_witness`] proves that each
 /// witness line is one its switch really edits.
 ///
-/// The three switches that do *not* appear are `git`, `include_untracked` and
-/// `allow_conflicted`: all describe which files a run reads, not what it does
-/// to a stream, so a run reading standard input cannot witness them. They are
-/// covered by the precedence table in `src/config_tests.rs`, and `git`
-/// additionally by [`a_configured_git_selection_runs_without_the_flag`].
+/// The two switches that do *not* appear are `git` and `include_untracked`:
+/// both describe which files a run reads, not what it does to a stream, so a
+/// run reading standard input cannot witness them. They are covered by the
+/// precedence table in `src/config_tests.rs`, and `git` additionally by
+/// [`a_configured_git_selection_runs_without_the_flag`]. A third switch,
+/// `--allow-conflicted`, is not configurable at all; see ADR 0014.
 const DEFAULTS_WITNESS: &str = concat!(
     "A paragraph that is short.\n",
     "\n",

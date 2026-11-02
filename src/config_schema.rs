@@ -41,7 +41,17 @@ pub(crate) const ENV_SEPARATOR: &str = "__";
 /// [`clap::ArgMatches::value_source`] is keyed by identifier. The list is the
 /// set [`ConfigFile`] mirrors; an argument outside it is an invocation rather
 /// than a setting, and never reaches the command-line layer.
-pub(crate) const CONFIGURED_ARGUMENTS: [&str; 12] = [
+///
+/// `allow_conflicted` is deliberately absent, and is the one Git switch that
+/// is. The others decide *which* files a run reads; this one decides whether a
+/// safety guard applies to them. A committed file that switched it on would
+/// let an `--git --in-place` run rewrite text across unresolved conflict
+/// markers in a tree the user merely checked out — the destructive surprise
+/// `docs/adrs/0014-configuration-layering.md` keeps out of configuration, and
+/// the same argument by which that record leaves the mode and the file
+/// arguments to the command line. The flag itself is unchanged; only the
+/// file's and the environment's reach over it is withdrawn.
+pub(crate) const CONFIGURED_ARGUMENTS: [&str; 11] = [
     "wrap",
     "renumber",
     "breaks",
@@ -53,7 +63,6 @@ pub(crate) const CONFIGURED_ARGUMENTS: [&str; 12] = [
     "md_exts",
     "git",
     "include_untracked",
-    "allow_conflicted",
 ];
 
 /// The configuration schema, as the derive and serde see it.
@@ -109,7 +118,4 @@ pub struct ConfigFile {
     /// Whether untracked, unignored files are selected too.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_untracked: Option<bool>,
-    /// Whether files carrying conflict markers may be rewritten.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub allow_conflicted: Option<bool>,
 }
