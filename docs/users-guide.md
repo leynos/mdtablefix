@@ -189,8 +189,8 @@ A repository that formats the same way on every run can state its rule set once
 in a configuration file or an environment variable instead of repeating the
 flags. Configuration supplies _settings_ — what the tool does — and never the
 mode or the file arguments, which stay the invocation's own business. The
-configurable keys are the eight transformation switches, `md_exts`, and the
-three Git selection switches.
+configurable keys are the eight transformation switches, `md_exts`, and the two
+Git selection switches, `git` and `include_untracked`.
 
 A configured `git = true` is a setting, not a typed flag, so it does not
 satisfy the input requirement that every mode carries. `--check`, `--diff`, and

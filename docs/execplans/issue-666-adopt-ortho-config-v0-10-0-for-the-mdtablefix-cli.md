@@ -1909,8 +1909,8 @@ depends on `--in-place` staying valueless.
 `FormatOpts` is the eight-flag rule set flattened into `Cli`: `--wrap`,
 `--renumber`, `--breaks`, `--ellipsis`, `--fences`, `--footnotes`,
 `--code-emphasis`, and `--headings`, each a `bool` with the same bundle, so
-each of the eleven configurable switches accepts `--flag`, `--flag=true`, and
-`--flag=false` while rejecting `--flag=80`. The twelfth setting, `md_exts`,
+each of the ten configurable switches accepts `--flag`, `--flag=true`, and
+`--flag=false` while rejecting `--flag=80`. The eleventh setting, `md_exts`,
 takes a list rather than a boolean and is unaffected.
 `From<FormatOpts> for Options` carries them into the library.
 
@@ -2452,7 +2452,7 @@ EP-M5, the documentation and delivery. As built on 2026-10-27 (`0d12ec2`), the
 "Configuration" section of `docs/users-guide.md` sits after "Selecting files
 from Git" and before "Exit status" and covers what may be configured (settings,
 never the mode or the file arguments), a TOML example, an ordered discovery
-table, the precedence order with the layering rule, the twelve `MDTABLEFIX_*`
+table, the precedence order with the layering rule, the eleven `MDTABLEFIX_*`
 variables, the value dialect, the four failures worth recognizing, unknown-key
 tolerance, and the enable-but-not-disable asymmetry. It covers four failures
 rather than the three the plan named, because measurement found a fourth: a

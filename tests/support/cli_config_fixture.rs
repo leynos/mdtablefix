@@ -52,7 +52,7 @@ pub const RAGGED: &str = "|A|B|\n|---|---|\n|1|2|\n";
 
 /// The prefix every configuration variable shares, in lower case.
 ///
-/// Wide enough to cover the selector and each of the twelve keys
+/// Wide enough to cover the selector and each of the eleven keys
 /// `ConfigFile` carries, which is deliberate: the provider matches the prefix
 /// itself, so a match on a full name would miss a key the schema gains later.
 const CONFIGURATION_PREFIX: &str = "mdtablefix_";
