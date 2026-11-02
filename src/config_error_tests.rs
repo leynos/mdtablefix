@@ -30,7 +30,10 @@ fn a_missing_selected_file_is_an_error() {
     );
 }
 
-/// A selected file that is not valid TOML is reported as a configuration error.
+/// A selected file that declares no `extends` key still loads.
+///
+/// The positive control for the `extends` refusal: a refusal that fired on
+/// every selected file, rather than only on a declaration, would fail here.
 #[test]
 fn a_selected_file_without_extends_still_loads() {
     let fixture = Fixture::new();
@@ -206,7 +209,37 @@ fn an_extends_key_in_a_discovered_file_is_refused() {
     );
 }
 
-/// A file whose text contains the word `extends` outside a key is not refused.
+/// A candidate reached through a symlink is judged by its target's contents.
+///
+/// The pre-scan and the loader must agree about which file a path names. They
+/// agree only because both canonicalise before reading: a read that did not
+/// resolve the link first would fail here, and a failure is reported as "no
+/// `extends`", which would let the loader follow the link and expand the chain.
+///
+/// The target is deliberately valid TOML that declares `extends`, so the file
+/// is loadable by the loader and refused only by this module. A malformed file
+/// would prove nothing, because the loader would reject it too.
+#[cfg(unix)]
+#[test]
+fn a_candidate_reached_through_a_symlink_is_judged_by_its_target() {
+    let fixture = Fixture::new();
+    let target = fixture.root().join("dotfiles.toml");
+    write(&target, "extends = \"somewhere.toml\"\n");
+    let link = fixture.base("xdg").join("mdtablefix").join("config.toml");
+    std::fs::create_dir_all(link.parent().expect("the link has a parent"))
+        .expect("create the configuration directory");
+    std::os::unix::fs::symlink(&target, &link).expect("create the symlink");
+    let environment = fixture.environment();
+
+    let error = resolve(&["mdtablefix"], &environment)
+        .expect_err("a symlinked declaration is refused like any other");
+
+    assert!(
+        matches!(&error, ConfigError::UnsupportedExtends { .. }),
+        "the pre-scan must judge the target, not the link: {error:?}"
+    );
+}
+
 ///
 /// The check reads the parsed top-level table rather than searching the text,
 /// so a comment or a string mentioning the key is ordinary content. Without

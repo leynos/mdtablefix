@@ -28,6 +28,12 @@
 //! discovered candidates consulted. [`super::merged_config`] passes the same
 //! discovery and the same environment source to both, so the two cannot disagree
 //! about *where* to look.
+//!
+//! It also reads each file the way the loader does — canonicalise, then read
+//! through the parent directory's capability — so the two cannot disagree about
+//! *which* file a path names either. Without that agreement a symlinked
+//! candidate would be refused by one and followed by the other, and whichever
+//! way the difference fell the pre-scan would be looking at the wrong bytes.
 
 use std::{
     io,
@@ -35,7 +41,7 @@ use std::{
 };
 
 use cap_std::{ambient_authority, fs::Dir};
-use ortho_config::{ConfigDiscovery, EnvSource, toml};
+use ortho_config::{ConfigDiscovery, EnvSource, file::canonicalise, toml};
 
 use super::{ConfigError, schema::SELECTOR_VARIABLE};
 
@@ -86,11 +92,20 @@ fn selected_path(lookup: &dyn EnvSource) -> Option<PathBuf> {
 
 /// Whether `path` is valid TOML declaring a top-level `extends` key.
 ///
+/// The path is canonicalised first, exactly as [`ortho_config::file::loader`]
+/// does before it opens anything. Resolution and reading then agree about which
+/// file is meant, so a candidate reached through a symlink is judged by its
+/// target's contents rather than by the link, and a path that does not resolve
+/// is left for the loader to report in its own words.
+///
 /// A type other than string still counts: `extends = 5` is refused here rather
 /// than left for the loader to reject, because the key is the thing this module
 /// exists to keep out of the loader's reach.
 fn declares_extends(path: &Path) -> bool {
-    let Ok(text) = read_file(path) else {
+    let Ok(resolved) = canonicalise(path) else {
+        return false;
+    };
+    let Ok(text) = read_file(&resolved) else {
         return false;
     };
     let Ok(document) = toml::from_str::<toml::Value>(&text) else {
@@ -104,9 +119,10 @@ fn declares_extends(path: &Path) -> bool {
 ///
 /// The parent is opened as a capability rather than the file being opened by
 /// absolute path, so the read is confined to the directory the path names even
-/// when a component of that path is a symlink to somewhere else. This is the
-/// same shape `src/driver/run.rs` uses for the files it formats, and it keeps
-/// `std::fs` out of the binary's configuration code.
+/// when a component of that path is a symlink to somewhere else. This mirrors
+/// the loader's own `open_parent_dir_and_name`, which is what makes the
+/// pre-scan's view of a file the same as the loader's view: the same
+/// canonicalisation, then the same capability-scoped read.
 fn read_file(path: &Path) -> io::Result<String> {
     let parent = path
         .parent()

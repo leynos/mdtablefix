@@ -1888,15 +1888,16 @@ deterministically.
 ## Configuration layering
 
 `src/config.rs` is a binary-only module: `src/main.rs` declares it and
-`src/lib.rs` does not, so the reusable library never names `ortho_config`. Four
+`src/lib.rs` does not, so the reusable library never names `ortho_config`. Five
 more files belong to it. `src/config_schema.rs` holds the schema and the
 constants, split out because the resolution logic and the type it folds over
-read better apart. Three `#[path]` modules follow their declaring file: the
+read better apart. Four `#[path]` modules follow their declaring file: the
 shared fixture `src/config_test_support.rs`, the resolution table in
-`src/config_tests.rs`, and the failure cases in `src/config_error_tests.rs`.
+`src/config_tests.rs`, the failure cases in `src/config_error_tests.rs`, and the
+`extends` refusal in `src/config_extends.rs`.
 
 `tests/cli_config_dependency_contract.rs` holds that boundary by scanning every
-file under `src/` for the framework's name and allowing it only in those five
+file under `src/` for the framework's name and allowing it only in those six
 files, so a new module that names the framework fails the suite until it is
 declared binary-only as well. The list is a constant in the test, and adding a
 file to it is a deliberate statement that the file cannot be reached from

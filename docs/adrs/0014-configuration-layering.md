@@ -176,13 +176,17 @@ only after they have been parsed, which is too late.
 
 `src/config_extends.rs` therefore checks first. It computes the files the
 policy is about to load — the selected path when `MDTABLEFIX_CONFIG_PATH` names
-one, otherwise the automatic candidates the policy will walk — reads each with
-the capability-oriented `cap_std` directory handle, and refuses any whose
-parsed top-level table contains `extends`. Reading is safe because the check
-reads only the declaring file, never a parent; a file it cannot read or parse
-is left to the loader, so those failures keep the diagnostics already
-documented. A rejected file produces exit status 2 and names itself, not the
-parent.
+one, otherwise the automatic candidates the policy will walk — and reads each
+the way the loader does: `ortho_config::file::canonicalise` first, then the
+capability-oriented `cap_std` directory handle. It refuses any whose parsed
+top-level table contains `extends`. Resolution and reading both match the
+loader deliberately, so the two cannot disagree about which file a path names;
+a candidate reached through a symlink is judged by its target's contents, and a
+read failure means the same thing either side. Reading is safe because the
+check reads only the declaring file, never a parent; a file it cannot resolve,
+read or parse is left to the loader, so those failures keep the diagnostics
+already documented. A rejected file produces exit status 2 and names itself,
+not the parent.
 
 This costs no compatibility: inheritance was never documented for this tool,
 its schema is a flat list of switches, and a file that wants to share settings

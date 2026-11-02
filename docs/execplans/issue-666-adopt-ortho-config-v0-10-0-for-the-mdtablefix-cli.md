@@ -890,21 +890,7 @@ actual current state of the work.
       parent's bytes never reach stderr. Suites run: `cargo test --bin
       mdtablefix` (371 passed) and `cargo test --test cli_config_failure_binary`
       (11 passed); the process-level case pins the geometry with a reachability
-      assertion, so it cannot pass merely because the `..` dangles.
-
-  skip it. Rationale: the walker expands nothing, so an invocation emitting
-  `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while
-  every file the walk reads stays clean — the same hole `#[path]` resolution
-  was added to close, one level deeper. The rule is a token test, not a name
-  list, so it needs no maintenance as macros come and go, and it is narrow
-  enough that `anyhow!("no mod here")` and `module!` are not offences. A
-  `macro_rules!` definition is reported by `visit_item_macro` so the diagnostic
-  names the macro instead of `macro_rules`. Residual gap, recorded rather than
-  hidden: an invocation with an empty or `mod`-free body cannot be
-  distinguished from any other by a walk that does not expand macros, so a
-  macro defined elsewhere and invoked as `sneak!()` remains undetectable;
-  closing it would need the compiler's own expansion, which this test cannot
-  obtain. Date/Author: 2026-10-27, implementation agent.
+      assertion, so it cannot pass merely because the `..` is a dead link.
 
 ## Surprises & discoveries
 
@@ -1242,6 +1228,20 @@ For an architecture deviation, name the affected upstream identifiers, impacts,
 options, required upstream-document changes, and approving authority. Set the
 plan status to `BLOCKED` until the deviation is accepted.
 
+- Decision (accepted): refuse a macro whose arguments write `mod`, rather
+  than skip it. Rationale: the walker expands nothing, so an invocation emitting
+  `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file
+  while every file the walk reads stays clean — the same hole `#[path]`
+  resolution was added to close, one level deeper. The rule is a token test,
+  not a name list, so it needs no maintenance as macros come and go, and it is
+  narrow enough that `anyhow!("no mod here")` and `module!` are not offences. A
+  `macro_rules!` definition is reported by `visit_item_macro` so the diagnostic
+  names the macro instead of `macro_rules`. Residual gap, recorded rather than
+  hidden: an invocation with an empty or `mod`-free body cannot be
+  distinguished from any other by a walk that does not expand macros, so a
+  macro defined elsewhere and invoked as `sneak!()` remains undetectable;
+  closing it would need the compiler's own expansion, which this test cannot
+  obtain. Date/Author: 2026-10-27, implementation agent.
 - Decision: keep `Cli::parse_validated()` as the only parser of process
   arguments, and never call a derive-generated `load_from_iter*` entry point.
   Rationale: the generated parser would accept `--wrap=false` and every other
