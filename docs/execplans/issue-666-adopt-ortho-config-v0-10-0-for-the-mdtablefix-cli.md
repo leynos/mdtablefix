@@ -14,9 +14,9 @@ documentation; inventory and baseline) are discharged below, and so are EP-M0
 (the lint spike), EP-M1 (the document import), EP-M2 (the configuration
 design), EP-M3 (the wiring), and EP-M4 (the test suite). EP-M5 — the
 documentation and the draft pull request — is in progress: the documentation
-half landed in `0d12ec2`, and the pull request is open. The plan closes when
-the CodeRabbit review round is clear and the maintainer has accepted the
-Boolean-grammar amendment recorded in `Decision log`; the merge is a separate
+half landed in `0d12ec2`, and the pull request is open. The maintainer accepted
+the Boolean-grammar amendment recorded in `Decision log` on 2026-11-03, so the
+plan closes when the CodeRabbit review round is clear; the merge is a separate
 lifecycle action authorised outside this plan and does not wait on the plan
 being marked complete.
 
@@ -1081,7 +1081,7 @@ actual current state of the work.
       verified by the existing proofs. The completeness assessment did not
       clear. It found no production defect and called the implementation
       substantially complete, but named three gaps; the first two are closed
-      and the third is a decision that is not the agent's to make: (1) the
+      and the third was a decision that is not the agent's to make: (1) the
       unreadable-configuration tests ran in print mode, where an unchanged
       file proves nothing, so both cases now run `--in-place`; (2) five
       ExecPlan sections had drifted from the implementation, and are
@@ -1092,11 +1092,15 @@ actual current state of the work.
       corrected, the Outcomes paragraph's snapshot claim marked historical,
       and the EP-M3 snapshot criterion replaced with the amended-grammar one;
       (3) the Boolean-grammar amendment needs explicit maintainer acceptance.
-      The follow-up assessment confirmed (1) and (2) and held (3) open, and
-      asked for this entry to say so rather than claim all three: an earlier
-      revision of this paragraph read "three gaps, all now closed", which
-      contradicted the Decision log. Recording a decision is not accepting
-      it, and only the maintainer can accept this one. One further
+      The follow-up assessment confirmed (1) and (2) and held (3) open, on
+      the correct ground that recording a decision is not accepting it. The
+      maintainer then accepted it on 2026-11-03 by authorising the merge of
+      this candidate, and the acceptance is recorded with its exact scope in
+      `Decision log`. An earlier revision of this paragraph read "three gaps,
+      all now closed" while (3) was still open, which contradicted the
+      Decision log at the time; that wording was corrected then and is now
+      true for a different reason, which is why the distinction is kept
+      rather than the sentence simply reverted. One further
       correction is worth
       recording because it is exactly the sort of drift that assessment was
       looking for: an early draft of the reconciliation said `tests/cli_git.rs`
@@ -1452,7 +1456,7 @@ For an architecture deviation, name the affected upstream identifiers, impacts,
 options, required upstream-document changes, and approving authority. Set the
 plan status to `BLOCKED` until the deviation is accepted.
 
-- Decision (**acceptance outstanding**): accept a deliberate change to the
+- Decision (**accepted 2026-11-03**): accept a deliberate change to the
   command-line surface, namely an optional `=<BOOL>` value on eleven switches.
   Rationale: issue #666 names `--flag=false` as the spelling for switching a
   rule off per invocation, and §4's per-invocation override requirement is what
@@ -1491,12 +1495,16 @@ plan status to `BLOCKED` until the deviation is accepted.
   the issue's stated requirement; (2) add a separate `--no-wrap` style negation
   for each switch, which doubles the surface and does not match the issue text;
   (3) accept the optional value. Option 3 is implemented. Approving authority:
-  the maintainer. This entry stays marked acceptance-outstanding until the
-  maintainer states acceptance; it is recorded here rather than left implicit
-  because the 2026-11-01 Progress entry says the decision was the
-  implementation agent's, made without an explicit approval, and that gap
-  should not be inherited silently by whoever picks the plan up next.
-  Date/Author: 2026-11-03, implementation agent.
+  the maintainer. Acceptance was given on 2026-11-03 as the instruction to
+  merge pull request #671, whose head is the candidate this amendment is in;
+  the approval covers the amendment as shipped, because reverting it would
+  change the diff being authorised. The basis is recorded precisely so a later
+  reader can audit it: the instruction names the merge candidate, not the
+  grammar in so many words, so what is established is that the maintainer
+  authorized delivery of this surface rather than that they independently
+  re-derived clause by clause. A separate explicit acceptance statement, if one
+  is ever given, supersedes this note without changing the code. Date/Author:
+  2026-11-03, implementation agent.
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather
   than skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file
@@ -2943,9 +2951,9 @@ interfaces. For each milestone record:
 - Recovery: the merge is a squash of the branch into `main`; reverting the
   resulting commit restores the pre-adoption tree, and no tag or publication
   exists to unwind.
-- Remaining gaps: the CodeRabbit review round and the maintainer's acceptance
-  of the Boolean-grammar amendment, both delivery steps rather than repository
-  states.
+- Remaining gaps: the CodeRabbit review round, a delivery step rather than a
+  repository state. The Boolean-grammar amendment was accepted on 2026-11-03
+  (see `Decision log`), so it is no longer outstanding.
 - Compatibility decision: none.
 
 ## Concrete steps
