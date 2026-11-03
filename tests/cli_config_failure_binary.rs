@@ -249,23 +249,31 @@ fn an_unusable_extension_list_names_its_key(
 /// permission bits — root, or an unprivileged one holding `CAP_DAC_OVERRIDE` —
 /// cannot induce the failure at all; that is reported as a skip rather than
 /// asserted, since an assertion that never fails would be vacuous.
+///
+/// Both cases rewrite in place. A print-mode run would leave the input alone
+/// after a successful configuration load too, so an unchanged file there would
+/// prove nothing about the failure; `--in-place` makes the assertion
+/// discriminating — a run that had resolved its configuration would rewrite
+/// the document, and only a failure before the driver can leave it intact.
 #[cfg(unix)]
 #[rstest::rstest]
-#[case::selected("selected.locked.toml", Some("selected.locked.toml"))]
-#[case::discovered(".mdtablefix.toml", None)]
+#[case::selected("selected.locked.toml", true)]
+#[case::discovered(".mdtablefix.toml", false)]
 fn an_unreadable_configuration_file_is_an_error_exit_two(
-    #[case] locked: &str,
-    #[case] selection: Option<&str>,
+    #[case] locked: &'static str,
+    #[case] is_selected: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let fixture = Fixture::new();
     fixture.write("xdg/mdtablefix/config.toml", "ellipsis = true\n");
     let path = fixture.write(locked, "wrap = true\n");
     fixture.write("drift.md", RAGGED);
+    let flags = ["--in-place", "drift.md"];
     deny_read(&path);
 
-    let run = match selection {
-        Some(selected) => fixture.run_selected(&fixture.root().join(selected), &["drift.md"], ""),
-        None => fixture.run(&["drift.md"], ""),
+    let run = if is_selected {
+        fixture.run_selected(&fixture.root().join(locked), &flags, "")
+    } else {
+        fixture.run(&flags, "")
     };
     let permissions_ignored = permissions_are_ignored(&path);
     allow_read(&path);

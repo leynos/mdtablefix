@@ -1066,6 +1066,38 @@ actual current state of the work.
       with `setsid nohup`; none was lost to a test failure, and no gate was
       weakened, skipped or retried for a passing result.
 
+- [x] (2026-11-03) Hosted CI is green on `38539fa` and both ExecPlan
+      assessments were run. Every check passes on that head:
+      `build-test` (the only required check), all four binstall targets, the
+      Windows whole-suite job, `verify`, the Verus workflow, the CodeScene
+      check, and Gecko. The proof assessment cleared: `coderabbitai[bot]`
+      confirmed the justified `not applicable`, having independently checked
+      that `verus/lib.rs` binds the production bodies, that the five kernel
+      files have identical blob identities at base and head, and that no
+      commit in the 59-commit range touches them. It added one caution worth
+      keeping: do not describe the configuration integration as formally
+      verified by the existing proofs. The completeness assessment did not
+      clear. It found no production defect and called the implementation
+      substantially complete, but named three gaps, all now closed: (1) the
+      unreadable-configuration tests ran in print mode, where an unchanged
+      file proves nothing, so both cases now run `--in-place`; (2) five
+      ExecPlan sections had drifted from the implementation, and are
+      reconciled — `LEM-FIRSTWINS` replaced by the implemented
+      `StackScopes`/`LEM-SCOPE-ORDER`, `INV-NOCONFIG` restated against the
+      `DEFAULTS_WITNESS`/`DEFAULTS_ANSWER` pair and its negative control, the
+      unreadable-file obligation renamed to the merged table and its evidence
+      corrected, the Outcomes paragraph's snapshot claim marked historical,
+      and the EP-M3 snapshot criterion replaced with the amended-grammar one;
+      (3) the Boolean-grammar amendment needed explicit maintainer acceptance,
+      which is now recorded as an acceptance-outstanding `Decision log` entry
+      naming the impacts, the rejected alternatives, and the approving
+      authority. One further correction is worth recording because it is
+      exactly the sort of drift that assessment was looking for: an early
+      draft of the reconciliation said `tests/cli_git.rs` regenerates the
+      snapshot from the measured help, which is false — it pins the rendering
+      with `insta` — and the paragraph was corrected before it shipped.
+      Date/Author: 2026-11-03, implementation agent.
+
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
@@ -1402,6 +1434,50 @@ For an architecture deviation, name the affected upstream identifiers, impacts,
 options, required upstream-document changes, and approving authority. Set the
 plan status to `BLOCKED` until the deviation is accepted.
 
+- Decision (**acceptance outstanding**): accept a deliberate change to the
+  command-line surface, namely an optional `=<BOOL>` value on eleven switches.
+  Rationale: TOR-REQ-666-x asks that a configured `true` be overridable per
+  invocation, and issue #666 names `--flag=false` as the spelling for it. With
+  `ArgAction::SetTrue` and a bare `bool`, `--wrap` is already taken to mean
+  "true" and no value can be attached, so the only way to state "false" on the
+  command line is to give every configurable switch an optional value; there is
+  no narrower spelling that reaches the same requirement. The eleven are the
+  ten configurable switches plus `--allow-conflicted`. The last is
+  schema-absent — a file cannot set it — but it is accepted per invocation
+  exactly as the others are and shares their flag type, so leaving it valueless
+  would have made it the one boolean flag whose spelling differed for no reason
+  a user could see. Impact, stated plainly because it is user-visible:
+  - Every argument vector that worked before is still accepted with the same
+    meaning. `--wrap`, `--wrap=true`, and `--wrap=false` all parse; the only
+    newly accepted spelling is `--flag=false` (and its `=true` twin).
+  - `--help` now renders each switch as `--flag[=<BOOL>]` with `[possible
+    values: true, false]`, which reflowed the option column of
+    `tests/snapshots/cli_git_help.snap`. The `[default: false]` that
+    `ArgAction::SetTrue` would also introduce is deliberately hidden by a named
+    `hide_default_value` constant, because it would state a *layer* rather than
+    the command line: a file setting `wrap = true` would contradict the printed
+    default.
+  - One diagnostic changed text: `--wrap=80` now reports `invalid value '80'`
+    from the boolean parser instead of `unexpected value '80'` from the
+    "takes no value" check. The exit status is 2 in both cases, and
+    `tests/wrap/cli.rs` pins the new wording.
+  - The four mode flags (`--in-place`, `--check`, `--diff`, `--list-files`) do
+    **not** take the optional value. They are invocations rather than settings,
+    and `in_place_without_inputs_is_rejected` depends on `--in-place` staying
+    valueless.
+  What is deliberately *not* claimed anywhere in this plan or the PR body: that
+  the command-line surface is unchanged. It is not. The narrower claim that
+  holds is that no previously valid invocation changed meaning. Options if this
+  decision were rejected: (1) accept no per-invocation override, which fails
+  the issue's stated requirement; (2) add a separate `--no-wrap` style negation
+  for each switch, which doubles the surface and does not match the issue text;
+  (3) accept the optional value. Option 3 is implemented. Approving authority:
+  the maintainer. This entry stays marked acceptance-outstanding until the
+  maintainer states acceptance; it is recorded here rather than left implicit
+  because the 2026-11-01 Progress entry says the decision was the
+  implementation agent's, made without an explicit approval, and that gap
+  should not be inherited silently by whoever picks the plan up next.
+  Date/Author: 2026-11-03, implementation agent.
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather
   than skip it. Rationale: the walker expands nothing, so an invocation emitting
   `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file
@@ -2001,20 +2077,26 @@ EP-M2 to EP-M4 are complete, and together they retire the plan's central
 assumption: the framework can be adopted without its generated parser.
 `MergeComposer` plus the derive-emitted `merge_from_layers` gives the layer
 composition the design wanted, and the command line keeps
-`Cli::parse_validated` as its only parser, so the `--help` snapshot is
-byte-identical to the base commit. Three adjustments were needed and all three
-are in `Decision log`: `parse_validated` returns the `ArgMatches` beside the
-`Cli` (adjustment `a`), `FormatOpts` gains three derives so settings compare as
-values (adjustment `b`), and the execution half of `run()` moves to
-`src/driver/run.rs` to stay under the 400-line cap (adjustment `c`). EP-M4 then
-found one deviation worth naming: the in-process tables had to live in
-`src/config_tests.rs`, declared by a `#[path]` module from the binary-only
-`src/config.rs`, because `mod config` is never declared from `src/lib.rs` and a
-`tests/` target could not reach it (deviation `a`). What would be done
-differently: the discovery probe should have rebuilt its tree per case from the
-start, and every claim about a diagnostic should have been produced by running
-the binary before it was written down — both are recorded under
-`Surprises & discoveries` because both cost a false pass.
+`Cli::parse_validated` as its only parser, so the framework added no
+`--config-path` flag and no generated parser to the surface. (This paragraph
+originally said the `--help` snapshot was byte-identical to the base commit.
+That was true when written and is now historical: the 2026-11-01 amendment gave
+every switch an optional `=<BOOL>` value, which necessarily rewrote the
+snapshot. The claim that survives is the narrower and more useful one — the
+framework itself contributed nothing to the surface, and the one rewrite came
+from the amendment, which `Decision log` records.) Three adjustments were
+needed and all three are in `Decision log`: `parse_validated` returns the
+`ArgMatches` beside the `Cli` (adjustment `a`), `FormatOpts` gains three
+derives so settings compare as values (adjustment `b`), and the execution half
+of `run()` moves to `src/driver/run.rs` to stay under the 400-line cap
+(adjustment `c`). EP-M4 then found one deviation worth naming: the in-process
+tables had to live in `src/config_tests.rs`, declared by a `#[path]` module
+from the binary-only `src/config.rs`, because `mod config` is never declared
+from `src/lib.rs` and a `tests/` target could not reach it (deviation `a`).
+What would be done differently: the discovery probe should have rebuilt its
+tree per case from the start, and every claim about a diagnostic should have
+been produced by running the binary before it was written down — both are
+recorded under `Surprises & discoveries` because both cost a false pass.
 
 EP-M5 is in progress. The guides are written and their claims measured; the
 draft pull request is open. The outstanding work is the CodeRabbit round.
@@ -2324,9 +2406,21 @@ invariants to the required behaviour.
   `merge_from_layers` folds layers left to right so the last writer wins.
   Proven upstream by the `MergeComposer` documentation test; this plan relies
   on it as an axiom and adds a test that pins the observable consequence.
-- LEM-FIRSTWINS: under `AutomaticMode::FirstWins`, the candidate walk returns
-  at most one layer, the most-preferred candidate that exists, so there is no
-  ordering ambiguity to resolve.
+- LEM-FIRSTWINS: superseded by the 2026-11-01 amendment. The implementation
+  uses `AutomaticMode::StackScopes` for automatic discovery, so the candidate
+  walk may return more than one layer and the scope order is what resolves them;
+  `FirstWins` survives only as the rejected alternative recorded in ADR
+  0014. The consequence is proved observably by
+  `src/config_tests.rs::a_user_file_outranks_a_system_file`, which writes both
+  scopes with opposite values and asserts the user scope wins, in both
+  polarities, so a run that stacked them the wrong way round fails.
+- LEM-SCOPE-ORDER: `StackScopes` orders layers by scope, and
+  `MDTABLEFIX_CONFIG_PATH` short-circuits discovery entirely under
+  `RequiredExclusive`, so a selected file composes in the same precedence
+  position as the discovered one it replaces. Proven by
+  `src/config_tests.rs::a_key_resolves_to_the_most_preferred_layer_that_states_it`,
+  which exercises every schema key through both supplies and requires the same
+  resolved value from each.
 - LEM-CLAP-DEFAULT: clap's `ValueSource::DefaultValue` is exactly the
   condition under which a flag was not typed, and it is available for every
   flag this plan consults.
@@ -2346,20 +2440,31 @@ invariants to the required behaviour.
   configuration base directories all point into a temporary tree, with no
   selector, no `MDTABLEFIX_*` variable, and no candidate anywhere discovery
   reaches. Artefact: `tests/cli_config_binary.rs`'s
-  `a_run_with_no_configuration_at_all_formats_as_it_always_did`, plus the
-  unchanged `tests/snapshots/cli_git_help.snap` and the unchanged existing
-  suites. Evidence: `cargo test --workspace` passes with the snapshot
-  unmodified; the case asserts standard output equal to the expected rendering
-  character for character, empty standard error, and exit status 0.
-  Non-vacuity: the expected output is the aligned three-line table `CLEAN`, the
-  input is the ragged three-line table `RAGGED`, and the two differ in every
-  cell, so a run that echoed its input, produced nothing, or aligned
-  differently would fail. Reverting the wiring is not a meaningful control here
-  — the module is what supplies the merge — so the control is the pre-change
-  output, recorded in the test as the constant `CLEAN`. Deviation from the
-  planned differential case: the base binary is not built, because the case
-  pins the exact bytes instead, which is the same claim without a second
-  compilation. Recorded in `Decision log` deviation `a`.
+  `a_run_with_no_configuration_at_all_formats_as_it_always_did`, plus
+  `every_transformation_switch_changes_its_witness` (its negative control), and
+  the existing suites. Evidence: the case asserts standard output equal to
+  `DEFAULTS_ANSWER` character for character, empty standard error, and exit
+  status 0. The help snapshot is *not* part of this evidence: the 2026-11-01
+  amendment made every switch accept `=<BOOL>`, which necessarily rewrote
+  `tests/snapshots/cli_git_help.snap`, so the snapshot's current content is the
+  amended grammar rather than a preserved artifact. What the snapshot still
+  pins is the usage line, the argument description, and the `--md-exts` default
+  rendering, none of which the amendment changed. Non-vacuity:
+  `DEFAULTS_WITNESS` carries one line for each defaulted transformation — a
+  paragraph long enough to reflow, a run of `1.` items, a `***` break, `...`, a
+  `~~~~` fence, `docs.1`, an emphasised code span, and a Setext pair — and
+  `DEFAULTS_ANSWER` is that input byte for byte, because every one of those
+  defaults is off. The witness therefore discriminates in the direction that
+  matters: a default that had flipped, or a pass that started reaching a line
+  it used to skip, changes at least one byte. Its negative control runs each
+  line under its own switch and requires the output to differ, so "the default
+  leaves it alone" cannot be satisfied by an implementation whose passes are
+  all inert. Table alignment is the one transformation on by default, and the
+  witness deliberately holds no table; `RAGGED` covers alignment separately in
+  the failure and no-configuration file suites. Deviation from the planned
+  differential case: the base binary is not built, because the case pins the
+  exact bytes instead, which is the same claim without a second compilation.
+  Recorded in `Decision log` deviation `a`.
 - Obligation: INV-PRECEDENCE.
   Method: parameterized `rstest` table over source combinations, using injected
   sources only. Rationale: the partition is finite and small; a table makes
@@ -2419,12 +2524,17 @@ invariants to the required behaviour.
   its own evidence, and only a real permission bit produces one. Domain: a
   selected file that exists but cannot be read, and a discovered project file
   that cannot be read beside a valid user file. Artefact:
-  `an_unreadable_selected_file_exits_two_with_no_standard_output` and
-  `an_unreadable_project_file_is_reported_beside_a_valid_user_file` in
-  `tests/cli_config_failure_binary.rs`, added 2026-11-01. Evidence: both exit
-  2, leave standard output empty, name the file, and state the permission
-  failure; the selected case also proves the positional input was not
-  rewritten. Non-vacuity: a process that ignores permission bits cannot fail a
+  `an_unreadable_configuration_file_is_an_error_exit_two` in
+  `tests/cli_config_failure_binary.rs`, a two-case `#[rstest]` table added
+  2026-11-01 and merged from two separate tests on 2026-11-03, whose cases
+  differ in which file is locked and whether the run reaches it by the selector
+  or by discovery. Evidence: both exit 2, leave standard output empty, name the
+  file, and state the permission failure. Both also run with
+  `--in-place drift.md`, so the unchanged-bytes assertion is discriminating: a
+  print-mode run would leave the input alone after a *successful* configuration
+  load too, whereas `--in-place` means any run that resolved its configuration
+  would rewrite the document, and only a failure before the driver can leave it
+  intact. Non-vacuity: a process that ignores permission bits cannot fail a
   read on them, so each test probes the denied file and *reports a skip* rather
   than passing silently; the observed result under a runner that honours the
   bits is asserted, so the tests are evidence only where they actually ran. The
@@ -2723,8 +2833,20 @@ interfaces. For each milestone record:
   TOR-CON-666-1.
 - Acceptance evidence: `make check-fmt`, `make lint`, `make test`,
   `make markdownlint`, and `make nixie` pass;
-  `tests/snapshots/cli_git_help.snap` is byte-identical to the base commit;
-  `cargo tree --invert ortho_config` names only the root package.
+  `cargo tree --invert ortho_config` names only the root package. The criterion
+  as originally written also required `tests/snapshots/cli_git_help.snap` to be
+  byte-identical to the base commit. That criterion was retired by the
+  2026-11-01 Boolean-grammar amendment, which changed the switch spellings and
+  therefore the snapshot by design; the replacement criterion is that the
+  snapshot matches the amended grammar exactly and that the usage line and the
+  `--md-exts` default rendering it pins are unchanged from the base. Both hold:
+  the base-to-head snapshot diff is confined to `[=<BOOL>]` suffixes,
+  `[possible values: true, false]` notes, and the column re-alignment those
+  force; the usage line `Usage: mdtablefix [OPTIONS] [FILES]...` and
+  `[default: md,mdc,markdown]` are byte-identical. `tests/cli_git.rs` pins the
+  rendering by running the real binary with `--help` and asserting the
+  snapshot, so a future drift fails the test rather than being silently
+  recorded.
 - Conformance check:
   - Requirements satisfied: TOR-REQ-666-4 and TOR-REQ-666-5.
   - Design still followed: ADR 0014's decisions are what the code implements.

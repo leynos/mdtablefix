@@ -5,13 +5,20 @@
 //! here reads or mutates the process environment. See
 //! `docs/adrs/0012-environment-seam-taxonomy.md`.
 //!
-//! The precedence table names every key the schema carries, in both
-//! polarities. Nine switches and the `md_exts` list state `true` (or a value)
-//! in the file and the opposite in the environment, so they witness the file
-//! applying, the environment overriding the file, and — in the `AllThree`
-//! cells, which write all three layers — the command line overriding the
-//! environment. `headings` carries the opposite polarity, so it witnesses the
-//! environment applying on its own and overriding an explicit file `false`.
+//! The precedence table names every key the schema carries. Nine switches and
+//! the `md_exts` list state `true` (or a value) in the file and the opposite in
+//! the environment, so they witness the file applying, the environment
+//! overriding the file, and — in the `AllThree` cells, which write all three
+//! layers — the command line overriding the environment. `headings` carries the
+//! opposite polarity, so it witnesses the environment applying on its own and
+//! overriding an explicit file `false`.
+//!
+//! Read that precisely: the table exercises both Boolean directions *across*
+//! keys, not both for each key. A single switch is written in one file
+//! polarity here, so what a row proves is that this key resolves to the layer
+//! the precedence order says it should — not that the switch behaves
+//! symmetrically in both directions.
+//!
 //! The table is generated rather than sampled: the merge is emitted from the
 //! schema, so a key left out of it would never fail, it would simply never be
 //! exercised, and [`expected`] states each cell's value for a reader to check
@@ -100,7 +107,7 @@ enum Supply {
 /// The file a test writes when it needs `key` configured *true*.
 ///
 /// Every switch states `true`. [`file_contents`] states `headings` as `false`
-/// so the precedence table exercises both polarities, but a case that types
+/// so the table as a whole exercises both polarities, but a case that types
 /// `false` and asserts `false` needs this spelling: with the file already
 /// saying `false`, the assertion would hold whether or not the typed value had
 /// been read.
@@ -113,8 +120,10 @@ fn true_file(key: Key) -> &'static str {
 
 /// The file a row writes, in TOML, for `key`.
 ///
-/// Every switch states `true` except `headings`, which states `false` so the
-/// table exercises both polarities rather than only one.
+/// Every switch states `true` except `headings`, which states `false` so that,
+/// read across all keys, the table exercises both polarities rather than only
+/// one. No single key is written both ways here; that is
+/// [`a_typed_false_outranks_a_configured_true`]'s job.
 fn file_contents(key: Key) -> &'static str {
     match key {
         Key::Wrap => "wrap = true\n",
