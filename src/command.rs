@@ -164,6 +164,16 @@ fn typed_mode_flag(cli: &Cli) -> Option<&'static str> {
     .find_map(|(name, typed)| typed.then_some(name))
 }
 
+/// Whether nothing names what the run should act on.
+///
+/// A mode flag has to have an input, and the mode group's `requires("inputs")`
+/// is satisfied by *typing* `--git` — even `--git=false`, which states that no
+/// Git selection is wanted. So the input is judged here, from the parsed
+/// value, rather than by the group. Keeping the tests together lets the
+/// diagnostic read as one sentence: it is only raised when a mode was typed
+/// *and* there is nothing for it to act on.
+fn has_no_input(cli: &Cli) -> bool { cli.files.is_empty() && !cli.git }
+
 impl Cli {
     /// Parses and enforces the dependencies `clap` cannot express here.
     ///
@@ -204,8 +214,7 @@ impl Cli {
         }
 
         if let Some(flag) = typed_mode_flag(&cli)
-            && cli.files.is_empty()
-            && !cli.git
+            && has_no_input(&cli)
         {
             Self::command()
                 .error(

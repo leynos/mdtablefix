@@ -227,7 +227,7 @@ fn a_typed_extension_list_without_git_exits_two() {
 
     let run = fixture.run_selected(&empty, &["--md-exts", "toml"], "");
 
-    assert_failure(&run, 2, "--md-exts requires --git");
+    assert_failure(&run, 2, &["--md-exts requires --git"]);
 }
 
 /// A configured extension list is not a typed flag, so it needs no `--git`.
@@ -260,7 +260,7 @@ fn a_configured_git_selection_runs_without_the_flag() {
 
     let run = fixture.run_selected(&config, &[], RAGGED);
 
-    assert_failure(&run, 2, "git ls-files");
+    assert_failure(&run, 2, &["git ls-files"]);
 }
 
 /// A configured `git` does not satisfy clap's `inputs` group.
@@ -275,7 +275,7 @@ fn a_configured_git_selection_does_not_satisfy_the_inputs_group() {
 
     let run = fixture.run_selected(&config, &["--list-files"], "");
 
-    assert_failure(&run, 2, "required arguments were not provided");
+    assert_failure(&run, 2, &["required arguments were not provided"]);
 }
 
 /// A positional path outranks a configured `git`, and no repository is touched.
@@ -384,5 +384,5 @@ fn a_non_boolean_switch_value_is_a_usage_error() {
 
     let run = fixture.run(&["--wrap=80"], "alpha beta\n");
 
-    assert_failure(&run, 2, "'80'");
+    assert_failure(&run, 2, &["'80'"]);
 }

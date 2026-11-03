@@ -1013,6 +1013,58 @@ actual current state of the work.
       10m41s and ran the full `cargo test --all-features`, which is the job
       that failed on `edf7dbd` and the one the gated import fixes. Run
       41460799010.
+- [x] (2026-11-02) CodeScene cleared, superseding the 2026-10-27 entry that
+      called the string-heavy findings "accepted, not cleared". That entry
+      reasoned from the rule's threshold to the conclusion that clearing it
+      would mean reshaping nearly every signature; measured against `cs check`
+      instead of by hand, that was wrong on three counts. The rule counts only
+      `&str` and `String` parameters — not `&'static str`, not
+      `impl AsRef<…>`, not `&Path` — so a parameter that already accepted a
+      borrowed string could sometimes be widened at the call site for free.
+      The reported inventory on `8b2d3db` was four files, not two:
+      `cli_config_failure_binary.rs` at 8.55 with two rules,
+      `config_error_tests.rs`, `config_test_support.rs` and
+      `cli_config_fixture.rs` at 9.69 each with one, plus an advisory on
+      `command.rs`. All five now measure clean at 10.00 locally, from this
+      worktree and from a scratch repository holding only the changed files:
+      - `config_test_support.rs` replaced three near-identical installers with
+      one `place(Scope, &str)`, where `Scope` is an enum naming the three
+      discovery scopes. That is the framework's own vocabulary, and it
+      removes the duplication the methods existed to express.
+      - `config_error_tests.rs` migrated to `Scope`, and its `#[case]`
+      parameters became `&'static str`. A table case is a compile-time
+      constant, so this states what the case already is rather than
+      working around a ratio.
+      - `cli_config_fixture.rs` widened `write` to `impl AsRef<[u8]>` and
+      `assert_failure` to take `needles: &[&str]`. The second is the
+      substantive change: a diagnostic about a file often has to name
+      both the file and the reason, and the old single-needle signature
+      forced each test to choose one or to assert the rest separately.
+      - `cli_config_failure_binary.rs` routes those multi-needle claims through
+      the widened helper, and collapses the two unix unreadable-file
+      tests into one `#[rstest]` table whose cases differ only in which
+      file is locked and how the run reaches it — the duplication the
+      check had flagged at 8.55. The two extension-list tests collapsed
+      the same way, and their bodies now differ only in the configured
+      contents and the needle.
+      The ablation matters for honesty: each clearing was traced to one
+      specific edit measured in isolation, so none of them is a trivial
+      function added to dilute an average, a threshold raised, or a rule
+      suppressed. No `Suppress` was clicked and no directive was added.
+- [x] (2026-11-03) All five deterministic gates pass on the repaired tree.
+      `make check-fmt` reports 47 files unchanged, `make lint` is clean with
+      `-D warnings`, `make markdownlint` finds 0 issues in 47 files, and
+      `make nixie` validates every diagram. `make test` passes in full: 22
+      suite results `ok`, and the trybuild target `tests/compile.rs` reports
+      `10 passed; 0 failed`. The compile target is the instructive part — it
+      took 5149 s, because each of its ten UI fixtures is its own cargo build
+      and the host's compile-slot queue stood between 100 and 370 requests
+      deep throughout. Hosted CI runs the same target on a machine whose
+      compiler admission is not shared with three other agents' worktrees,
+      so this is a local queueing cost, not the suite's cost. Three local
+      attempts were lost to harness time limits before the run was detached
+      with `setsid nohup`; none was lost to a test failure, and no gate was
+      weakened, skipped or retried for a passing result.
 
 ## Surprises & discoveries
 

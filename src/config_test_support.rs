@@ -22,6 +22,36 @@ use tempfile::TempDir;
 use super::{ConfigError, Settings};
 use crate::command::Cli;
 
+/// The three scopes a test can install a configuration file into.
+///
+/// These are the framework's own scope names, not this fixture's invention:
+/// `XDG_CONFIG_DIRS` is the System scope and `XDG_CONFIG_HOME` the User one,
+/// and a file a selector names stands where the Project scope would. A test
+/// cannot reach the Project scope itself, because the framework derives that
+/// root from the process working directory; the process-level suite covers it
+/// instead. Naming the scopes once lets a single installer serve all three,
+/// rather than three methods that differ only in which directory they choose.
+#[derive(Clone, Copy)]
+pub(super) enum Scope {
+    /// The least-preferred discovered scope.
+    System,
+    /// The discovered scope applied between System and Project.
+    User,
+    /// A free-standing file a selector names.
+    Selected,
+}
+
+impl Scope {
+    /// The path this fixture installs a file for `self` at.
+    fn path_in(self, fixture: &Fixture) -> PathBuf {
+        match self {
+            Self::System => fixture.base("dirs").join("mdtablefix").join("config.toml"),
+            Self::User => fixture.base("xdg").join("mdtablefix").join("config.toml"),
+            Self::Selected => fixture.root().join("selected.toml"),
+        }
+    }
+}
+
 /// A temporary tree holding every directory discovery consults.
 pub(super) struct Fixture {
     /// Deleted when the test ends.
@@ -62,29 +92,12 @@ impl Fixture {
             .with_var("LOCALAPPDATA", self.base("local"))
     }
 
-    /// Writes `contents` where automatic discovery finds it as a user file.
+    /// Writes `contents` where `scope` puts it, creating its directories.
     ///
-    /// `XDG_CONFIG_HOME` is the User scope, so this file is applied after any
-    /// System-scope file and before the Project one.
-    pub(super) fn discover(&self, contents: &str) {
-        let path = self.base("xdg").join("mdtablefix").join("config.toml");
-        write(&path, contents);
-    }
-
-    /// Writes `contents` where automatic discovery finds it as a system file.
-    ///
-    /// `XDG_CONFIG_DIRS` is the System scope, the least-preferred of the three.
-    /// A test cannot place a file in the Project scope, because the framework
-    /// always derives that root from the process working directory; the
-    /// process-level suite covers that scope instead.
-    pub(super) fn discover_system(&self, contents: &str) {
-        let path = self.base("dirs").join("mdtablefix").join("config.toml");
-        write(&path, contents);
-    }
-
-    /// Writes `contents` to a free-standing file for the selector to name.
-    pub(super) fn select(&self, contents: &str) -> PathBuf {
-        let path = self.root().join("selected.toml");
+    /// The path is returned because a case that drives the selector has to name
+    /// it, while a case that relies on discovery needs only the side effect.
+    pub(super) fn place(&self, scope: Scope, contents: &str) -> PathBuf {
+        let path = scope.path_in(self);
         write(&path, contents);
 
         path
@@ -102,7 +115,10 @@ impl Fixture {
     /// directly instead: neither is a *contents* a test can pass here.
     pub(super) fn selecting(&self, contents: &str) -> MapEnv {
         let mut environment = self.environment();
-        environment.insert("MDTABLEFIX_CONFIG_PATH", self.select(contents));
+        environment.insert(
+            "MDTABLEFIX_CONFIG_PATH",
+            self.place(Scope::Selected, contents),
+        );
 
         environment
     }

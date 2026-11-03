@@ -39,7 +39,7 @@ use rstest::rstest;
 
 use super::{
     Settings,
-    test_support::{Fixture, resolve},
+    test_support::{Fixture, Scope, resolve},
 };
 
 /// The settings keys the precedence table covers.
@@ -271,9 +271,14 @@ fn a_key_resolves_to_the_most_preferred_layer_that_states_it(
     ) {
         let contents = file_contents(key);
         match supply {
-            Supply::Discovery => fixture.discover(contents),
+            Supply::Discovery => {
+                fixture.place(Scope::User, contents);
+            }
             Supply::Selector => {
-                environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select(contents));
+                environment.insert(
+                    "MDTABLEFIX_CONFIG_PATH",
+                    fixture.place(Scope::Selected, contents),
+                );
             }
         }
     }
@@ -311,8 +316,8 @@ fn a_user_file_outranks_a_system_file(
     #[case] expected: &str,
 ) {
     let fixture = Fixture::new();
-    fixture.discover_system(system);
-    fixture.discover(user);
+    fixture.place(Scope::System, system);
+    fixture.place(Scope::User, user);
 
     let settings = resolve(&["mdtablefix"], &fixture.environment()).expect("the layers resolve");
 
@@ -353,7 +358,10 @@ fn a_typed_false_outranks_a_configured_true(
 ) {
     let fixture = Fixture::new();
     let mut environment = fixture.environment();
-    environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select(true_file(key)));
+    environment.insert(
+        "MDTABLEFIX_CONFIG_PATH",
+        fixture.place(Scope::Selected, true_file(key)),
+    );
 
     let typed = typed_flags(key);
     let negated = format!("{}=false", typed[0]);

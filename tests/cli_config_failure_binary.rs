@@ -33,7 +33,7 @@ fn a_missing_selected_file_exits_two_with_no_standard_output() {
 
     let run = fixture.run_selected(&missing, &["--check", "drift.md"], "");
 
-    assert_failure(&run, 2, "required configuration file not found");
+    assert_failure(&run, 2, &["required configuration file not found"]);
 }
 
 /// A selected file that is not valid TOML is an error, exit 2.
@@ -44,17 +44,10 @@ fn a_malformed_selected_file_exits_two_with_no_standard_output() {
 
     let run = fixture.run_selected(&config, &["--check", "drift.md"], "");
 
-    assert_eq!(run.status, 2);
-    assert_eq!(run.stdout, "");
-    assert!(
-        run.stderr.contains("cannot resolve configuration"),
-        "stderr: {}",
-        run.stderr
-    );
-    assert!(
-        run.stderr.contains("TOML parse error"),
-        "the diagnostic names the parse failure: {}",
-        run.stderr
+    assert_failure(
+        &run,
+        2,
+        &["cannot resolve configuration", "TOML parse error"],
     );
 }
 
@@ -91,7 +84,7 @@ fn an_extends_parent_outside_the_tree_is_refused_without_being_read() {
     .expect("write the credential file");
     fixture.write(
         ".mdtablefix.toml",
-        &format!("extends = \"../{neighbour}/credentials\"\nwrap = true\n"),
+        format!("extends = \"../{neighbour}/credentials\"\nwrap = true\n"),
     );
 
     // The non-vacuity check: resolved from the working directory, the relative
@@ -110,17 +103,9 @@ fn an_extends_parent_outside_the_tree_is_refused_without_being_read() {
 
     let run = fixture.run(&[], "a...b\n");
 
-    assert_eq!(
-        run.status, 2,
-        "stdout: {} stderr: {}",
-        run.stdout, run.stderr
-    );
-    assert_eq!(run.stdout, "", "the diagnostic belongs on stderr");
-    assert!(
-        run.stderr.contains("does not support"),
-        "the diagnostic names the refusal: {}",
-        run.stderr
-    );
+    assert_failure(&run, 2, &["does not support"]);
+    // The disclosure the refusal exists to prevent, checked separately because
+    // it is an absence rather than another needle.
     assert!(
         !run.stderr.contains("hunter2"),
         "the parent's content must never reach the log: {}",
@@ -165,22 +150,7 @@ fn a_malformed_project_file_is_reported_beside_a_valid_user_file() {
 
     let run = fixture.run(&[], "a...b\n");
 
-    assert_eq!(
-        run.status, 2,
-        "stdout: {} stderr: {}",
-        run.stdout, run.stderr
-    );
-    assert_eq!(run.stdout, "", "the diagnostic belongs on stderr");
-    assert!(
-        run.stderr.contains(".mdtablefix.toml"),
-        "the diagnostic names the broken file: {}",
-        run.stderr
-    );
-    assert!(
-        run.stderr.contains("TOML parse error"),
-        "stderr: {}",
-        run.stderr
-    );
+    assert_failure(&run, 2, &[".mdtablefix.toml", "TOML parse error"]);
 }
 
 /// A valid project file beside a valid user file is not an error.
@@ -217,14 +187,20 @@ fn an_untypable_environment_value_exits_two() {
             .args(["--git", "--list-files"]),
     );
 
-    assert_failure(&run, 2, "expected a sequence");
+    assert_failure(&run, 2, &["expected a sequence"]);
 }
 
-/// A value the extension parser rejects names its key, exit 2.
+/// A configured extension list the tool cannot use names its key, exit 2.
 ///
-/// The list passes the merge — it is a sequence of strings — and is rejected
-/// afterwards by the same parser `--md-exts` uses, which is why the diagnostic
-/// names the key rather than relaying a TOML or type error.
+/// Both cases pass the merge — the list is a sequence of strings — and are
+/// rejected afterwards by the same parser `--md-exts` uses, which is why the
+/// diagnostic names the key rather than relaying a TOML or type error. A
+/// rejected member is one the typed `--md-exts` would have refused at parse
+/// time. An empty list is valid TOML whose every member — there are none —
+/// parses, so only the explicit length check catches it; without that check a
+/// `--git` run would select nothing and report it as a successful, empty run,
+/// which is indistinguishable from "no files need changing" — exactly the
+/// silence a configuration mistake should not be able to produce.
 ///
 /// The run supplies a positional path, so the configured list is never used for
 /// selection. It is still rejected: every setting is validated whether or not
@@ -232,25 +208,41 @@ fn an_untypable_environment_value_exits_two() {
 /// worth fixing even on a run that would not have read it — and because a
 /// validation that depended on the mode would let a typo surface only on some
 /// invocations.
-#[test]
-fn a_rejected_extension_names_its_key() {
+#[rstest::rstest]
+#[case::rejected("md_exts = [\"a.b\"]\n", "invalid configuration value for md_exts")]
+#[case::empty(
+    "md_exts = []\n",
+    "invalid configuration value for md_exts: the extension list must name at least one"
+)]
+fn an_unusable_extension_list_names_its_key(
+    #[case] contents: &'static str,
+    #[case] needle: &'static str,
+) {
     let fixture = Fixture::new();
-    let config = fixture.write("selected.toml", "md_exts = [\"a.b\"]\n");
+    let config = fixture.write("selected.toml", contents);
     fixture.write("notes.md", RAGGED);
 
     let run = fixture.run_selected(&config, &["notes.md"], "");
 
-    assert_failure(&run, 2, "invalid configuration value for md_exts");
+    assert_failure(&run, 2, &[needle]);
 }
 
-/// A selected file that exists but cannot be read is an error, exit 2.
+/// A configuration file that exists but cannot be read is an error, exit 2.
 ///
-/// The missing-file case above is satisfied by a loader that refuses only what
-/// is absent. This one is the other half: the path exists, so any check that
-/// stops at metadata passes, and only a real failed read produces the status.
+/// A selected file is the case the missing-file test above is satisfied by: a
+/// loader that refuses only what is absent passes there, while here the path
+/// exists and only a real failed read produces the status.
 /// `ExplicitMode::RequiredExclusive` is what makes it fatal — a named file is a
 /// statement of intent, so a file the tool cannot honour is not one it may
 /// silently replace with the defaults.
+///
+/// A discovered project file is the other shape, and it proves the promotion in
+/// `src/config.rs`: the framework classifies an automatic candidate as optional
+/// and withholds the failure whenever any scope loaded, so a locked project file
+/// beside a readable user file would otherwise leave the run formatting on
+/// settings the user cannot see. The user file is the readable one, so the
+/// precedence order is the real one — the locked file is the *nearer* scope —
+/// and a run that ignored it would silently apply the user file instead.
 ///
 /// The mode is `0o000` rather than a read-only directory, because the
 /// configuration path is *read* rather than written. A process that ignores
@@ -258,125 +250,42 @@ fn a_rejected_extension_names_its_key() {
 /// cannot induce the failure at all; that is reported as a skip rather than
 /// asserted, since an assertion that never fails would be vacuous.
 #[cfg(unix)]
-#[test]
-fn an_unreadable_selected_file_exits_two_with_no_standard_output() {
-    let fixture = Fixture::new();
-    let config = fixture.write("locked.toml", "ellipsis = true\n");
-    fixture.write("drift.md", RAGGED);
-    deny_read(&config);
-
-    let run = fixture.run_selected(&config, &["drift.md"], "");
-    let permissions_ignored = permissions_are_ignored(&config);
-    allow_read(&config);
-
-    if permissions_ignored {
-        eprintln!("skipped: this process ignores permission bits, so the read cannot fail");
-        return;
-    }
-
-    assert_eq!(
-        run.status, 2,
-        "stdout: {} stderr: {}",
-        run.stdout, run.stderr
-    );
-    assert_eq!(run.stdout, "", "the diagnostic belongs on stderr");
-    assert!(
-        run.stderr.contains("locked.toml"),
-        "the diagnostic names the unreadable file: {}",
-        run.stderr
-    );
-    assert!(
-        run.stderr.to_lowercase().contains("permission denied"),
-        "the diagnostic states why the read failed: {}",
-        run.stderr
-    );
-    assert_eq!(
-        std::fs::read_to_string(fixture.root().join("drift.md")).expect("read the input"),
-        RAGGED,
-        "a run that could not load its configuration must not touch the input"
-    );
-}
-
-/// An unreadable discovered file is reported even when a valid one loaded.
-///
-/// The promotion in `src/config.rs` exists for exactly this shape: the
-/// framework classifies an automatic candidate as optional and withholds the
-/// failure whenever any scope loaded, so without promotion a locked project
-/// file beside a readable user file would leave the run formatting on settings
-/// the user cannot see. A malformed file proves the same path; an *unreadable*
-/// one proves it for the failure mode a permissions mistake actually produces,
-/// where the bytes are not even available to parse.
-///
-/// The user file is the read-only one, so the precedence order is the real
-/// one: the project file that cannot be read is the *nearer* scope, and a run
-/// that ignored it would silently apply the user file instead. The input is a
-/// named file rather than standard input, so the case can also show that a run
-/// which fails before reading its configuration does not rewrite what it was
-/// asked to format.
-#[cfg(unix)]
-#[test]
-fn an_unreadable_project_file_is_reported_beside_a_valid_user_file() {
+#[rstest::rstest]
+#[case::selected("selected.locked.toml", Some("selected.locked.toml"))]
+#[case::discovered(".mdtablefix.toml", None)]
+fn an_unreadable_configuration_file_is_an_error_exit_two(
+    #[case] locked: &str,
+    #[case] selection: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let fixture = Fixture::new();
     fixture.write("xdg/mdtablefix/config.toml", "ellipsis = true\n");
-    let project = fixture.write(".mdtablefix.toml", "wrap = true\n");
+    let path = fixture.write(locked, "wrap = true\n");
     fixture.write("drift.md", RAGGED);
-    deny_read(&project);
+    deny_read(&path);
 
-    let run = fixture.run(&["drift.md"], "");
-    let permissions_ignored = permissions_are_ignored(&project);
-    allow_read(&project);
+    let run = match selection {
+        Some(selected) => fixture.run_selected(&fixture.root().join(selected), &["drift.md"], ""),
+        None => fixture.run(&["drift.md"], ""),
+    };
+    let permissions_ignored = permissions_are_ignored(&path);
+    allow_read(&path);
 
     if permissions_ignored {
         eprintln!("skipped: this process ignores permission bits, so the read cannot fail");
-        return;
+        return Ok(());
     }
 
-    assert_eq!(
-        run.status, 2,
-        "stdout: {} stderr: {}",
-        run.stdout, run.stderr
-    );
-    assert_eq!(run.stdout, "", "the diagnostic belongs on stderr");
-    assert!(
-        run.stderr.contains(".mdtablefix.toml"),
-        "the diagnostic names the unreadable file: {}",
-        run.stderr
-    );
+    assert_failure(&run, 2, &[locked]);
     assert!(
         run.stderr.to_lowercase().contains("permission denied"),
         "the diagnostic states why the read failed: {}",
         run.stderr
     );
+    let untouched = std::fs::read_to_string(fixture.root().join("drift.md"))?;
     assert_eq!(
-        std::fs::read_to_string(fixture.root().join("drift.md")).expect("read the input"),
-        RAGGED,
+        untouched, RAGGED,
         "a run that could not load its configuration must not touch the input"
     );
-}
 
-/// An empty extension list is rejected rather than selecting nothing.
-///
-/// The process-level half of the unit case: `md_exts = []` is valid TOML and
-/// every one of its zero members parses, so only the explicit length check
-/// catches it. Without this, a `--git` run would select nothing and report
-/// that as a successful, empty run — indistinguishable from "no files need
-/// changing", which is exactly the silence a configuration mistake should not
-/// be able to produce.
-///
-/// The positional path is supplied for the same reason as the rejected-value
-/// case above: every setting is validated whether or not the resolved mode
-/// consults it.
-#[test]
-fn an_empty_extension_list_names_its_key() {
-    let fixture = Fixture::new();
-    let config = fixture.write("selected.toml", "md_exts = []\n");
-    fixture.write("notes.md", RAGGED);
-
-    let run = fixture.run_selected(&config, &["notes.md"], "");
-
-    assert_failure(
-        &run,
-        2,
-        "invalid configuration value for md_exts: the extension list must name at least one",
-    );
+    Ok(())
 }

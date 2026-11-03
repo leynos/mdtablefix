@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use super::{
     ConfigError,
-    test_support::{Fixture, resolve, write},
+    test_support::{Fixture, Scope, resolve, write},
 };
 
 /// A selected file that does not exist is an error, not a silent skip.
@@ -50,7 +50,7 @@ fn a_missing_selected_file_is_an_error() {
 #[case::comment("# this file does not use extends\nwrap = true\n")]
 #[case::nested("wrap = true\n[section]\nextends = \"base.toml\"\n")]
 #[case::unknown_key("unknown = 1\nwrap = true\n")]
-fn a_selected_file_without_a_declaration_still_loads(#[case] contents: &str) {
+fn a_selected_file_without_a_declaration_still_loads(#[case] contents: &'static str) {
     let fixture = Fixture::new();
     let environment = fixture.selecting(contents);
 
@@ -69,8 +69,8 @@ fn a_selected_file_without_a_declaration_still_loads(#[case] contents: &str) {
 #[case::malformed("wrap = \n", "cannot resolve configuration")]
 #[case::wrong_type("wrap = \"notabool\"\n", "expected a boolean")]
 fn a_selected_file_that_cannot_be_merged_is_an_error(
-    #[case] contents: &str,
-    #[case] fragment: &str,
+    #[case] contents: &'static str,
+    #[case] fragment: &'static str,
 ) {
     let fixture = Fixture::new();
     let environment = fixture.selecting(contents);
@@ -95,8 +95,8 @@ fn a_selected_file_that_cannot_be_merged_is_an_error(
 #[test]
 fn a_malformed_discovered_file_is_reported_beside_a_valid_one() {
     let fixture = Fixture::new();
-    fixture.discover("ellipsis = true\n");
-    fixture.discover_system("wrap = \n");
+    fixture.place(Scope::User, "ellipsis = true\n");
+    fixture.place(Scope::System, "wrap = \n");
 
     let error = resolve(&["mdtablefix"], &fixture.environment())
         .expect_err("the malformed discovery candidate is reported");
@@ -118,7 +118,7 @@ fn a_malformed_discovered_file_is_reported_beside_a_valid_one() {
 #[test]
 fn an_absent_discovered_candidate_is_not_an_error() {
     let fixture = Fixture::new();
-    fixture.discover("ellipsis = true\n");
+    fixture.place(Scope::User, "ellipsis = true\n");
 
     let settings = resolve(&["mdtablefix"], &fixture.environment()).expect("the search is quiet");
 
@@ -148,8 +148,8 @@ fn an_absent_discovered_candidate_is_not_an_error() {
     "invalid configuration value for md_exts: the extension list must name at least one extension"
 )]
 fn a_configured_extension_list_names_the_key_it_came_from(
-    #[case] contents: &str,
-    #[case] message: &str,
+    #[case] contents: &'static str,
+    #[case] message: &'static str,
 ) {
     let fixture = Fixture::new();
     let environment = fixture.selecting(contents);
@@ -216,14 +216,17 @@ fn an_extends_key_is_refused_before_the_parent_is_read() {
 )]
 #[case::command_line("", None, true)]
 fn only_the_command_line_can_allow_a_conflicted_rewrite(
-    #[case] contents: &str,
-    #[case] variable: Option<(&str, &str)>,
+    #[case] contents: &'static str,
+    #[case] variable: Option<(&'static str, &'static str)>,
     #[case] expected: bool,
 ) {
     let fixture = Fixture::new();
     let mut environment = fixture.environment();
     if !contents.is_empty() {
-        environment.insert("MDTABLEFIX_CONFIG_PATH", fixture.select(contents));
+        environment.insert(
+            "MDTABLEFIX_CONFIG_PATH",
+            fixture.place(Scope::Selected, contents),
+        );
     }
     if let Some((name, value)) = variable {
         environment.insert(name, value);
@@ -244,7 +247,7 @@ fn only_the_command_line_can_allow_a_conflicted_rewrite(
 #[test]
 fn an_extends_key_in_a_discovered_file_is_refused() {
     let fixture = Fixture::new();
-    fixture.discover("extends = \"base.toml\"\n");
+    fixture.place(Scope::User, "extends = \"base.toml\"\n");
 
     let error = resolve(&["mdtablefix"], &fixture.environment())
         .expect_err("a discovered inheritance is refused");
@@ -353,7 +356,7 @@ fn fifo(candidate: &Path, _target: &Path) {
 fn an_empty_selector_value_leaves_discovery_in_charge() {
     let fixture = Fixture::new();
     let mut environment = fixture.environment();
-    fixture.discover("wrap = true\n");
+    fixture.place(Scope::User, "wrap = true\n");
     environment.insert("MDTABLEFIX_CONFIG_PATH", "");
 
     let settings = resolve(&["mdtablefix"], &environment).expect("the file is discovered");

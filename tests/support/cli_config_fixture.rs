@@ -110,7 +110,7 @@ impl Fixture {
     fn base(&self, name: &str) -> PathBuf { self.root().join(name) }
 
     /// Writes `contents` to `name`, creating its parent directories.
-    pub fn write(&self, name: &str, contents: &str) -> PathBuf {
+    pub fn write(&self, name: &str, contents: impl AsRef<[u8]>) -> PathBuf {
         let path = self.root().join(name);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).expect("create the file's parent directory");
@@ -198,19 +198,24 @@ pub fn assert_clean_success(run: &Run, expected: &str) {
     assert!(run.stderr.is_empty(), "stderr: {}", run.stderr);
 }
 
-/// Asserts that `run` failed with `status`, naming `needle` on standard error.
+/// Asserts that `run` failed with `status`, naming every `needle` on stderr.
 ///
-/// A failing run is three claims at once: the status a script branches on, that
-/// standard output stayed empty, and that the diagnostic says what went wrong.
-/// The empty standard output is not decoration — a diagnostic printed there
-/// would corrupt the document a pipeline is reading — so the three are stated
-/// together rather than left to each test to remember.
+/// A failing run makes three claims at once: the status a script branches on,
+/// that standard output stayed empty, and that the diagnostic says what went
+/// wrong. The empty standard output is not decoration — a diagnostic printed
+/// there would corrupt the document a pipeline is reading — so the three are
+/// stated together rather than left to each test to remember.
 ///
-/// `needle` is a fragment rather than the whole message because the framework's
-/// own text is not this crate's to pin; what a test asserts is that this tool
-/// passed the failure on rather than swallowing it.
-pub fn assert_failure(run: &Run, status: i32, needle: &str) {
+/// More than one needle is allowed because a diagnostic about a file often has
+/// to name both the file and why it could not be used. A needle is a fragment
+/// rather than the whole message: the framework's own text is not this crate's
+/// to pin, and what a test asserts is that this tool passed the failure on
+/// rather than swallowing it.
+pub fn assert_failure(run: &Run, status: i32, needles: &[&str]) {
     assert_eq!(run.status, status, "stderr: {}", run.stderr);
     assert!(run.stdout.is_empty(), "stdout: {}", run.stdout);
-    assert!(run.stderr.contains(needle), "stderr: {}", run.stderr);
+
+    for needle in needles {
+        assert!(run.stderr.contains(needle), "stderr: {}", run.stderr);
+    }
 }
