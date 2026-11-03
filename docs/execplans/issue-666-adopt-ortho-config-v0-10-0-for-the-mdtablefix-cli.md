@@ -1120,6 +1120,28 @@ actual current state of the work.
       is the next lifecycle step, after the plan is marked ready.
       Date/Author: 2026-11-03, implementation agent.
 
+- [x] (2026-11-03) Maintainer acceptance recorded for the Boolean-grammar
+      amendment, committed as `1ef90b2` and pushed; remote head verified equal
+      to local over SSH from a scrubbed environment. The pull request was then
+      marked ready with `gh pr ready 671` under the lifecycle identity, and the
+      base commit was unchanged at `4a9bdf0e`.
+      Date/Author: 2026-11-03, implementation agent.
+
+- [x] (2026-11-03) The formal CodeRabbit review ran for the first time on a
+      ready head, and this is the evidence that readiness was the blocker
+      rather than the service: the `CodeRabbit` check reported `skipped` on
+      every earlier head and `pass` in 9m51s on `1ef90b2`. Every other check
+      also passed on that head, including `build-test`, the Windows atomic
+      write contract, all four packaging targets, `verify`, CodeScene and
+      Gecko. The review was not a plain pass, though: it submitted
+      `CHANGES_REQUESTED` (`5751485362`) with three findings, and the check's
+      own summary says "Review completed with incomplete coverage". Two
+      findings were accepted and fixed, and one was rebutted for the third
+      time; all three dispositions are in `Decision log`. Readiness did not
+      cause a return to draft, and must not: a red review blocks the merge, not
+      the ready state.
+      Date/Author: 2026-11-03, implementation agent.
+
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
@@ -1456,6 +1478,35 @@ For an architecture deviation, name the affected upstream identifiers, impacts,
 options, required upstream-document changes, and approving authority. Set the
 plan status to `BLOCKED` until the deviation is accepted.
 
+- Decision (CodeRabbit ready-state round, 2026-11-03): the first formal
+  review on a non-draft head (`1ef90b2`, review `5751485362`) raised three
+  findings. Two are accepted and fixed; the third is rebutted for the third
+  time, on unchanged grounds.
+  - Accepted: `docs/architecture.md` said a configuration failure stops the
+    run "before any file is read". That is false as written, because
+    configuration files are files and `Settings::resolve` must load them
+    before it can report a malformed or unreadable one. Both the prose
+    (Line 1042) and the flow caption (Lines 1079-1081) now say *target input*
+    file, which is the claim the implementation supports and the one that
+    carries the meaning.
+  - Accepted: the `APP_NAME` doc comment in `src/config_schema.rs` named
+    `.mdtablefix.toml` for both scopes. The fixtures place the user file at
+    `$XDG_CONFIG_HOME/mdtablefix/config.toml`
+    (`src/config_test_support.rs` Line 49, `tests/cli_config_binary.rs`
+    Line 183), so the comment taught the wrong location in the one place whose
+    purpose is to explain those names. It now names both spellings.
+  - Rebutted: renaming `docs/adrs/0014-configuration-layering.md` to the style
+    guide's `adr-NNN` form and its prescribed title. This repeats the round-two
+    and round-four findings. The style-guide premise is correct and is not
+    disputed; the objection is scope. All fourteen records in `docs/adrs/` use
+    the four-digit form and a bare title, ADR 0014 records the deviation and
+    its reason at Lines 48-56, renaming one file would make it the outlier and
+    falsify that paragraph, and 17 references across seven files would churn
+    in a PR scoped to adopting `ortho_config`. The consistent fix is a
+    separate repository-wide rename that moves the style guide's `docs/`
+    placement rule at the same time. Escalation if CodeRabbit maintains the
+    finding: it is a maintainer scope decision, not an implementation defect.
+  Date/Author: 2026-11-03, implementation agent.
 - Decision (**accepted 2026-11-03**): accept a deliberate change to the
   command-line surface, namely an optional `=<BOOL>` value on eleven switches.
   Rationale: issue #666 names `--flag=false` as the spelling for switching a

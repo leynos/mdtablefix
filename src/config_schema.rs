@@ -11,8 +11,9 @@
 
 /// The application name discovery derives its file names from.
 ///
-/// The framework stems the dotfile from this, so it yields `.mdtablefix.toml`
-/// for the project file and `.mdtablefix.toml` for the user dotfile.
+/// The framework derives both file names from this: `.mdtablefix.toml` for the
+/// project dotfile, and `mdtablefix/config.toml` beneath each configuration
+/// base directory for the user and system scopes.
 pub(crate) const APP_NAME: &str = "mdtablefix";
 
 /// The environment variable naming an explicit configuration file.

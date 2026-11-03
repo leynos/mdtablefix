@@ -1039,16 +1039,16 @@ Failures divide in two. A configuration failure — an unreadable or malformed
 selected file, an unreadable or malformed _discovered_ file, a value of the
 wrong type, an unreadable directory that makes a candidate unclassifiable — is
 reported on standard error as `mdtablefix: <message>` and ends the run with
-`ExitStatus::Error`, which is status 2, before any file is read. A discovered
-file that is absent is not a failure; it contributes nothing. A discovered file
-that exists and cannot be loaded is, even when another scope loaded: the
-framework classifies automatic candidates as optional and would otherwise
-withhold the failure, so the composition root promotes those errors rather than
-proceeding on a lower scope's settings. Help and version requests are not
-failures: they are display requests that the argument parser satisfies and the
-run reports as success. `Settings::resolve` returns a `Result` and neither
-prints nor exits, so the decision to write to a stream and to choose a status
-stays in `main`.
+`ExitStatus::Error`, which is status 2, before any target input file is read. A
+discovered file that is absent is not a failure; it contributes nothing. A
+discovered file that exists and cannot be loaded is, even when another scope
+loaded: the framework classifies automatic candidates as optional and would
+otherwise withhold the failure, so the composition root promotes those errors
+rather than proceeding on a lower scope's settings. Help and version requests
+are not failures: they are display requests that the argument parser satisfies
+and the run reports as success. `Settings::resolve` returns a `Result` and
+neither prints nor exits, so the decision to write to a stream and to choose a
+status stays in `main`.
 
 For screen readers: The following flow traces one run from the argument vector
 to the driver, showing where the command-line tier is read, where each
@@ -1076,9 +1076,10 @@ Figure: Configuration resolution. The parsed argument vector supplies the
 highest-precedence layer and the selection of which source to read; discovery
 contributes file layers in scope order; the environment contributes what the
 prefix names; and the merge folds all of it over the compiled-in defaults
-before the driver sees a single setting. A configuration failure is reported
-and the run stops ahead of any file access, while a display request is answered
-by the parser and counted as success.
+before the driver sees a single setting. Configuration layers are loaded before
+any merge error is returned, so a malformed or unreadable configuration file is
+reported before the run touches a target input file. A display request is
+answered by the parser and counted as success.
 
 ## Atomic in-place writes
 
