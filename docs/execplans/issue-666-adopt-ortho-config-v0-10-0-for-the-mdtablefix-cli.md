@@ -14,9 +14,11 @@ documentation; inventory and baseline) are discharged below, and so are EP-M0
 (the lint spike), EP-M1 (the document import), EP-M2 (the configuration
 design), EP-M3 (the wiring), and EP-M4 (the test suite). EP-M5 — the
 documentation and the draft pull request — is in progress: the documentation
-half landed in `0d12ec2`, and the pull request is open as a draft. The plan
-closes when the CodeRabbit review round is clear; it is never merged under this
-plan.
+half landed in `0d12ec2`, and the pull request is open. The plan closes when
+the CodeRabbit review round is clear and the maintainer has accepted the
+Boolean-grammar amendment recorded in `Decision log`; the merge is a separate
+lifecycle action authorised outside this plan and does not wait on the plan
+being marked complete.
 
 The issue that governs this plan is
 [leynos/mdtablefix#666](https://github.com/leynos/mdtablefix/issues/666): adopt
@@ -1452,8 +1454,9 @@ plan status to `BLOCKED` until the deviation is accepted.
 
 - Decision (**acceptance outstanding**): accept a deliberate change to the
   command-line surface, namely an optional `=<BOOL>` value on eleven switches.
-  Rationale: TOR-REQ-666-x asks that a configured `true` be overridable per
-  invocation, and issue #666 names `--flag=false` as the spelling for it. With
+  Rationale: issue #666 names `--flag=false` as the spelling for switching a
+  rule off per invocation, and §4's per-invocation override requirement is what
+  that spelling serves — the nearest traced identifier is TOR-REQ-666-4. With
   `ArgAction::SetTrue` and a bare `bool`, `--wrap` is already taken to mean
   "true" and no value can be attached, so the only way to state "false" on the
   command line is to give every configurable switch an optional value; there is
@@ -1943,13 +1946,18 @@ fully verified, and named five gaps. Each is answered below.
   `tests/cli_config_binary.rs`, with the input written as one line per
   transformation so an enabled default is visible. Date/Author: 2026-11-01,
   implementation agent.
-- Decision (accepted): the in-process precedence table names all twelve
-  `ConfigFile` keys, so `breaks`, `ellipsis`, `fences`, `footnotes`,
-  `code_emphasis`, `include_untracked`, and `allow_conflicted` are covered
-  where six of them previously had no cell. Rationale: the merge is generated
-  from the schema, so an omitted key would never fail — it would simply never
-  be exercised. The table is now 12 keys by 5 scenarios by 2 supplies. Evidence:
-  `src/config_tests.rs`. Date/Author: 2026-11-01, implementation agent.
+- Decision (accepted; counts corrected 2026-11-03): the in-process precedence
+  table names every `ConfigFile` key, so `breaks`, `ellipsis`, `fences`,
+  `footnotes`, `code_emphasis` and `include_untracked` are covered where six of
+  them previously had no cell. Rationale: the merge is generated from the
+  schema, so an omitted key would never fail — it would simply never be
+  exercised. As written this entry said "all twelve" and named
+  `allow_conflicted` among the newly covered keys. Both were true on 2026-11-01
+  and neither stayed so: the 2026-11-02 exclusion removed `allow_conflicted`
+  from the schema, leaving eleven keys, so the table is now 11 keys by 5
+  scenarios by 2 supplies and its key enum has no `allow_conflicted` variant.
+  Evidence: `src/config_tests.rs`. Date/Author: 2026-11-01, implementation
+  agent; reconciliation 2026-11-03.
 - Decision (accepted): correct two documentation errors.
   `docs/users-guide.md` says `--breaks=false` is a usage error, which stopped
   being true with the change above, and the same claim in ADR 0014's Context
@@ -2370,9 +2378,12 @@ TOR-REQ-666-7   Document the user-facing configuration surface and the internal
                              (written 2026-10-27, commit 0d12ec2)
 TOR-CON-666-1   No production process-environment reads (ADR 0012).
                 -> EP-M3, EP-M4 -> make lint (clippy::disallowed_methods)
-TOR-CON-666-2   No merge and no release publication.
-                -> EP-M5 -> the deliverable is a draft pull request; the
-                             branch is never merged into main
+TOR-CON-666-2   No release publication. The original wording also bound this
+                plan to no merge at all; that half is superseded, because the
+                maintainer separately authorised the merge of PR #671 (see
+                Progress, 2026-11-03). The release boundary stands.
+                -> EP-M5 -> no tag, no crates.io publication, no release note
+                             claiming a shipped version
 ```
 
 The governing standards inside this repository are
@@ -2921,15 +2932,20 @@ interfaces. For each milestone record:
   milestone: the full gate set on the final tree, the push, and the draft pull
   request.
 - Conformance check:
-  - Requirements satisfied: TOR-REQ-666-7 and TOR-CON-666-2.
+  - Requirements satisfied: TOR-REQ-666-7, and TOR-CON-666-2 for its
+    surviving release half.
   - Design still followed: yes.
   - Upstream assumptions still valid: yes.
   - No unapproved interface or dependency change: yes.
   - No unapproved trust boundary: yes.
-  - Trace links current: yes.
-- Recovery: close the draft pull request without merging.
-- Remaining gaps: the CodeRabbit review round, which is a delivery step rather
-  than a repository state.
+  - Trace links current: the no-merge half of TOR-CON-666-2 is superseded;
+    see its row under `Conformance basis`.
+- Recovery: the merge is a squash of the branch into `main`; reverting the
+  resulting commit restores the pre-adoption tree, and no tag or publication
+  exists to unwind.
+- Remaining gaps: the CodeRabbit review round and the maintainer's acceptance
+  of the Boolean-grammar amendment, both delivery steps rather than repository
+  states.
 - Compatibility decision: none.
 
 ## Concrete steps
