@@ -1078,7 +1078,8 @@ actual current state of the work.
       keeping: do not describe the configuration integration as formally
       verified by the existing proofs. The completeness assessment did not
       clear. It found no production defect and called the implementation
-      substantially complete, but named three gaps, all now closed: (1) the
+      substantially complete, but named three gaps; the first two are closed
+      and the third is a decision that is not the agent's to make: (1) the
       unreadable-configuration tests ran in print mode, where an unchanged
       file proves nothing, so both cases now run `--in-place`; (2) five
       ExecPlan sections had drifted from the implementation, and are
@@ -1088,14 +1089,29 @@ actual current state of the work.
       unreadable-file obligation renamed to the merged table and its evidence
       corrected, the Outcomes paragraph's snapshot claim marked historical,
       and the EP-M3 snapshot criterion replaced with the amended-grammar one;
-      (3) the Boolean-grammar amendment needed explicit maintainer acceptance,
-      which is now recorded as an acceptance-outstanding `Decision log` entry
-      naming the impacts, the rejected alternatives, and the approving
-      authority. One further correction is worth recording because it is
-      exactly the sort of drift that assessment was looking for: an early
-      draft of the reconciliation said `tests/cli_git.rs` regenerates the
-      snapshot from the measured help, which is false — it pins the rendering
-      with `insta` — and the paragraph was corrected before it shipped.
+      (3) the Boolean-grammar amendment needs explicit maintainer acceptance.
+      The follow-up assessment confirmed (1) and (2) and held (3) open, and
+      asked for this entry to say so rather than claim all three: an earlier
+      revision of this paragraph read "three gaps, all now closed", which
+      contradicted the Decision log. Recording a decision is not accepting
+      it, and only the maintainer can accept this one. One further
+      correction is worth
+      recording because it is exactly the sort of drift that assessment was
+      looking for: an early draft of the reconciliation said `tests/cli_git.rs`
+      regenerates the snapshot from the measured help, which is false — it
+      pins the rendering with `insta` — and the paragraph was corrected before
+      it shipped.
+      Date/Author: 2026-11-03, implementation agent.
+
+- [x] (2026-11-03) Hosted CI settled green on the repaired head `97f241c`,
+      every check having completed rather than been skipped. `build-test`
+      (success), `atomic write contract (windows)` (success), all four
+      binstall packaging targets (success), `verify` (success), `CodeScene
+      Code Health Review (main)` (success), `Gecko Security Review` (success).
+      `automerge` and `CodeRabbit` both reported `skipped`, and neither counts
+      as executed validation: `automerge` is the merge app, and CodeRabbit
+      skips a draft. The CodeRabbit review is therefore still outstanding and
+      is the next lifecycle step, after the plan is marked ready.
       Date/Author: 2026-11-03, implementation agent.
 
 ## Surprises & discoveries
