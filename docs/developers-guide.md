@@ -313,15 +313,20 @@ rendering and renumbering retain their own state.
   boundary: it splits the body into lines and runs the transforms, leaving the
   terminator to the caller.
 
-`src/main.rs` file-output functions:
+`src/driver/run.rs` file-output functions:
 
 - `open_file_parent(path) -> anyhow::Result<(Dir, Utf8PathBuf)>` is the CLI's
   sole ambient filesystem boundary. It opens the selected file's parent
   directory and returns a relative UTF-8 path for capability-scoped handling.
 - `analyse_one(mode, path, format)` names the file in any error and delegates
   the work to `driver::analyse` through the capability `open_file_parent`
-  returned. `run_stdin` and `run_files` are the two command boundaries built on
-  those pieces.
+  returned. `run_stdin`, `run_files` and `execute` are the command boundaries
+  built on those pieces.
+
+These moved out of `src/main.rs` when settings resolution took over the
+argument parse: `main.rs` now only resolves `Settings`, selects inputs and
+hands them to `driver::execute`, so the file-output boundaries live beside the
+analysis they call.
 
 `src/io/line_endings.rs` line-ending policy:
 
@@ -359,11 +364,11 @@ rendering and renumbering retain their own state.
 
 Detection runs on the raw document at each input boundary: `rewrite_with` in
 `src/io/replace.rs`, `driver::analyse` in `src/driver.rs`, and `format_stdin` in
-`src/main.rs`, each reporting through its own `report_line_endings` with the
-same message shape. The internal pipeline stays LF-only — `str::lines` strips
-each line's terminator before a transform sees it — and only the serializer
-re-applies the detected style. Standard input keeps its historical contract of
-printing one terminator even when it produces no lines, which
+`src/driver/run.rs`, each reporting through its own `report_line_endings` with
+the same message shape. The internal pipeline stays LF-only — `str::lines`
+strips each line's terminator before a transform sees it — and only the
+serializer re-applies the detected style. Standard input keeps its historical
+contract of printing one terminator even when it produces no lines, which
 `tests/parallel.rs` pins.
 
 The mode selects behaviour rather than a formatting variant: every mode shares
@@ -570,7 +575,7 @@ their recorded index. `rayon`'s `ParallelIterator::collect` into a `Vec` is not
 documented to preserve input order, so a report list that relied on it could
 follow completion order instead of argument order, and the difference would be
 invisible on a machine that happened to finish in order. The index is captured
-by `par_iter().enumerate()` in `src/main.rs`'s `run_files`, and
+by `par_iter().enumerate()` in `src/driver/run.rs`'s `run_files`, and
 `in_argument_order` restores the sequence explicitly. Because each index is
 unique, sorting on it is deterministic whatever order the workers produced.
 
