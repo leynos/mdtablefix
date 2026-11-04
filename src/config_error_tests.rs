@@ -379,3 +379,30 @@ fn a_positional_path_outranks_a_configured_git_selection() {
     assert!(!settings.git);
     assert_eq!(settings.files, vec![PathBuf::from("notes.md")]);
 }
+
+/// Resolution reports one bounded outcome within its own span.
+///
+/// The span is what makes configuration resolution visible at all: without it
+/// a slow or failing load is indistinguishable from any other startup cost.
+/// The event is asserted rather than the span name because `traced_test`
+/// exposes captured events, and the pair is what a subscriber actually sees.
+///
+/// The field is a category, not a value. A configuration file may hold
+/// anything, and a diagnostic that echoed it would defeat the reason
+/// `config_extends` refuses `extends` in the first place.
+#[test]
+#[test_macros::traced_test]
+fn resolution_reports_its_outcome_as_a_bounded_category() {
+    let fixture = Fixture::new();
+    let environment = fixture.environment();
+
+    resolve(&["mdtablefix"], &environment).expect("the defaults resolve");
+
+    assert!(
+        logs_contain("configuration resolution finished"),
+        "resolution must report that it finished"
+    );
+    // Quoted, as the fmt subscriber renders a `&str` field. Asserting the
+    // unquoted form would pass only if the field held a bare identifier.
+    assert!(logs_contain("outcome=\"ok\""), "the outcome is a category");
+}

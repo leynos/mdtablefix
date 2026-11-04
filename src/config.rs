@@ -112,7 +112,7 @@ impl Settings {
         lookup: &SharedEnvSource,
         scan: SharedScanEnvSource,
     ) -> Result<Self, ConfigError> {
-        let config = merged_config(cli, matches, lookup, scan)?;
+        let config = resolve_merged_config(cli, matches, lookup, scan)?;
 
         Ok(Self {
             opts: formatting_options(&config, cli),
@@ -170,6 +170,35 @@ pub enum ConfigError {
     /// The layered merge rejected the combination of sources.
     #[error("cannot resolve configuration: {0}")]
     Merge(#[from] Arc<OrthoError>),
+}
+
+/// Resolves the composed layers inside the configuration span.
+///
+/// A span rather than bare calls so a subscriber can time and correlate the
+/// whole resolution without seeing every layer. The field is a bounded
+/// category, never a value: a configuration file may hold anything, and the
+/// point is to make the resolution visible, not to reproduce its contents in
+/// the log.
+#[tracing::instrument(
+    name = "resolve_configuration",
+    level = "debug",
+    skip_all,
+    fields(base = "layered")
+)]
+fn resolve_merged_config(
+    cli: &Cli,
+    matches: &ArgMatches,
+    lookup: &SharedEnvSource,
+    scan: SharedScanEnvSource,
+) -> Result<ConfigFile, ConfigError> {
+    let outcome = merged_config(cli, matches, lookup, scan);
+    // One bounded outcome, never a value: `ok` and `error` say whether the run
+    // got past configuration without reproducing what any layer held.
+    tracing::debug!(
+        outcome = if outcome.is_ok() { "ok" } else { "error" },
+        "configuration resolution finished"
+    );
+    outcome
 }
 
 /// Composes the layers and folds them over the schema.

@@ -279,12 +279,19 @@ A committed `.mdtablefix.toml` that switched it on would let an
 tree the user had merely checked out. The flag itself is unchanged, so the
 escape hatch is still there for a user who types it.
 
-Six failures are worth recognizing, all of which exit `2` with the diagnostic
+Seven failures are worth recognizing, all of which exit `2` with the diagnostic
 on standard error and nothing on standard output:
 
 - `MDTABLEFIX_CONFIG_PATH` names a file that does not exist. A named file is
   required, so this is an error rather than a silent fall back to discovery,
   and the diagnostic quotes the path it was given.
+- A configuration file exists but cannot be read — typically a permission
+  error. The diagnostic names the path and the reason, and the run stops before
+  it touches any input file. This holds for a discovered file as well as a
+  selected one, even when a file in another scope loaded successfully: a locked
+  project file beside a readable user file fails the run rather than silently
+  applying the user file's settings, because the run would otherwise format
+  under rules the user cannot see.
 - A file is not valid TOML. The diagnostic quotes the path, the line and column,
   and the parser's complaint. This applies to a discovered file as well as a
   selected one: a broken `.mdtablefix.toml` beside a good user file fails the
