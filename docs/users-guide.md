@@ -3,12 +3,20 @@
 ## Command-line usage
 
 ```bash
-mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
-          [--footnotes] [--code-emphasis] [--headings]
+mdtablefix [--wrap[=BOOL]] [--renumber[=BOOL]] [--breaks[=BOOL]]
+          [--ellipsis[=BOOL]] [--fences[=BOOL]] [--footnotes[=BOOL]]
+          [--code-emphasis[=BOOL]] [--headings[=BOOL]]
           [--in-place | --check | --diff | --list-files] [FILE...]
-          [--git [--include-untracked] [--md-exts EXT[,EXT...]]
-                 [--allow-conflicted]]
+          [--git[=BOOL] [--include-untracked[=BOOL]] [--md-exts EXT[,EXT...]]
+                      [--allow-conflicted[=BOOL]]]
 ```
+
+A switch takes an optional `=<BOOL>` value. Writing the switch alone means
+`true`, which is why every command line written before the value existed keeps
+its meaning; writing `=<BOOL>` states the value outright, and is how a
+configuration file's `true` is overridden for one run. The equals sign is part
+of the spelling: `--wrap false` is read as the bare switch plus the positional
+argument `false`, not as a value.
 
 Every named file is formatted, and the result is printed to standard output. If
 no file is named, the document is read from standard input and the formatted
@@ -16,33 +24,33 @@ text is written to standard output. Alternatively `--git` selects the files
 from the Git repository that contains the current directory. The behaviour of
 each formatting flag is described in the sections that follow.
 
-| Flag                     | Effect                                                   |
-| ------------------------ | -------------------------------------------------------- |
-| `--wrap`                 | Reflow paragraphs and list items to 80 columns.          |
-| `--renumber`             | Renumber ordered lists sequentially.                     |
-| `--breaks`               | Rewrite thematic breaks as a line of 70 underscores.     |
-| `--ellipsis`             | Replace `...` with the ellipsis character.               |
-| `--fences`               | Normalize fenced code blocks where compression is safe.  |
-| `--footnotes`            | Convert bare numeric references into footnote links.     |
-| `--code-emphasis`        | Repair emphasis markers that adjoin inline code.         |
-| `--headings`             | Convert Setext headings to hash-prefixed headings.       |
-| `--in-place`             | Rewrite each selected file instead of printing it.       |
-| `--check`                | Report each file that would be reformatted, without      |
-|                          | writing.                                                 |
-| `--diff`                 | Print a unified diff for each file that would be         |
-|                          | reformatted.                                             |
-| `--list-files`           | Print the paths a selection resolves to, without reading |
-|                          | or writing them.                                         |
-| `--git`                  | Select Markdown files tracked by Git beneath the current |
-|                          | directory.                                               |
-| `--include-untracked`    | With `--git`, also select untracked files Git does not   |
-|                          | ignore.                                                  |
-| `--md-exts EXT[,EXT...]` | With `--git`, the extensions to select, replacing the    |
-|                          | default `md`, `mdc`, and `markdown`.                     |
-| `--allow-conflicted`     | With `--git --in-place`, rewrite files that carry        |
-|                          | conflict markers during a merge, rebase, revert, or      |
-|                          | cherry-pick.                                             |
-| `--version`              | Print the version and exit.                              |
+| Flag                         | Effect                                                   |
+| ---------------------------- | -------------------------------------------------------- |
+| `--wrap[=BOOL]`              | Reflow paragraphs and list items to 80 columns.          |
+| `--renumber[=BOOL]`          | Renumber ordered lists sequentially.                     |
+| `--breaks[=BOOL]`            | Rewrite thematic breaks as a line of 70 underscores.     |
+| `--ellipsis[=BOOL]`          | Replace `...` with the ellipsis character.               |
+| `--fences[=BOOL]`            | Normalize fenced code blocks where compression is safe.  |
+| `--footnotes[=BOOL]`         | Convert bare numeric references into footnote links.     |
+| `--code-emphasis[=BOOL]`     | Repair emphasis markers that adjoin inline code.         |
+| `--headings[=BOOL]`          | Convert Setext headings to hash-prefixed headings.       |
+| `--in-place`                 | Rewrite each selected file instead of printing it.       |
+| `--check`                    | Report each file that would be reformatted, without      |
+|                              | writing.                                                 |
+| `--diff`                     | Print a unified diff for each file that would be         |
+|                              | reformatted.                                             |
+| `--list-files`               | Print the paths a selection resolves to, without reading |
+|                              | or writing them.                                         |
+| `--git[=BOOL]`               | Select Markdown files tracked by Git beneath the current |
+|                              | directory.                                               |
+| `--include-untracked[=BOOL]` | With `--git`, also select untracked files Git does       |
+|                              | not ignore.                                              |
+| `--md-exts EXT[,EXT...]`     | With `--git`, the extensions to select, replacing the    |
+|                              | default `md`, `mdc`, and `markdown`.                     |
+| `--allow-conflicted[=BOOL]`  | With `--git --in-place`, rewrite files that carry        |
+|                              | conflict markers during a merge, rebase, revert, or      |
+|                              | cherry-pick.                                             |
+| `--version`                  | Print the version and exit.                              |
 
 _Table 1: The command-line flags._
 
@@ -175,6 +183,178 @@ line to standard error: this tool's own wording with Git's diagnostic appended.
 The process is always `git ls-files`, run without a shell, so nothing a user
 typed is ever interpreted as a command.
 
+### Configuration
+
+A repository that formats the same way on every run can state its rule set once
+in a configuration file or an environment variable instead of repeating the
+flags. Configuration supplies _settings_ — what the tool does — and never the
+mode or the file arguments, which stay the invocation's own business. The
+configurable keys are the eight transformation switches, `md_exts`, and the two
+Git selection switches, `git` and `include_untracked`.
+
+A configured `git = true` is a setting, not a typed flag, so it does not
+satisfy the input requirement that every mode carries. `--check`, `--diff`, and
+`--in-place` still need either a typed `--git` or at least one file argument,
+and `--list-files` still needs a typed `--git`, because a file argument cannot
+stand in for that flag. A bare `mdtablefix` with a configured `git = true` does
+select from the repository, which is the case configuration exists to serve.
+
+A typed `--git=false` is a typed flag but not an input: it states that no Git
+selection is wanted. A mode flag given with it and no file is rejected — with
+`--check requires --git or at least one file`, or
+`--list-files requires --git` — and exits 2, rather than falling back to
+standard input and, in a reporting mode, reporting nothing.
+
+`--include-untracked`, `--allow-conflicted`, `--list-files`, and `--md-exts`
+require `--git`, and the requirement is judged on whether the flag was typed
+rather than on the value it resolved to. So `--include-untracked=false file.md`
+without `--git` is rejected exactly like the bare `--include-untracked`, while
+`--git --include-untracked=false` is accepted and simply selects no untracked
+files.
+
+A file supplies a key the same way the flag does. This file formats paragraphs,
+renumbers lists, and normalizes thematic breaks without any flag being typed:
+
+```toml
+wrap = true
+renumber = true
+breaks = true
+```
+
+The file is TOML. Its name is `config.toml` inside a `mdtablefix` directory, or
+`.mdtablefix.toml`, and discovery reads it from the locations in the table
+below. The scope column says which layer a location belongs to; within one
+scope, an earlier row is preferred to a later one.
+
+| Order | Scope    | Location                                                                                                      |
+| ----- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| 1     | Selected | The path named by `MDTABLEFIX_CONFIG_PATH`, when set and non-empty.                                           |
+| 2     | User     | `$XDG_CONFIG_HOME/mdtablefix/config.toml`, then the dotfile beside it.                                        |
+| 3     | System   | The same pair under each `XDG_CONFIG_DIRS` entry, or under `/etc/xdg`.                                        |
+| 4     | User     | The same pair under `%APPDATA%`, then under `%LOCALAPPDATA%`.                                                 |
+| 5     | User     | `$HOME/.config/mdtablefix/config.toml`, then `$HOME/.config/.mdtablefix.toml`, then `$HOME/.mdtablefix.toml`. |
+| 6     | Project  | `.mdtablefix.toml` in the working directory.                                                                  |
+
+_Table 2: Where a configuration file is found._
+
+Two cells are abbreviated. Row 3 reads `/etc/xdg` when `XDG_CONFIG_DIRS` is
+unset or names no usable directory. Row 5's three paths are the XDG directory
+spelled out, then the dotfile in the same directory, then the dotfile in the
+home directory itself.
+
+The working directory holds only the dotfile: a `mdtablefix/config.toml` beside
+a run's own files is not a candidate.
+
+The scopes stack system below user below project, so the working-directory file
+is the **most** influential one, not the least: it is applied last and
+overrides a key that a user file also states. This is the opposite of what a
+flat reading of the table suggests, and it is deliberate — the file nearest the
+work is the one that should describe it. A selected file short-circuits the
+whole walk, so `MDTABLEFIX_CONFIG_PATH` is read alone and nothing automatic is
+consulted.
+
+Precedence overall is compiled-in defaults, then files, then the environment,
+then the command line. A typed command-line flag wins over an environment
+variable, which wins over a configuration file, which wins over the default.
+The layers stack rather than replace: a file that sets `wrap` and an
+environment that sets `breaks` supply both, and only a key stated twice needs a
+decision.
+
+Every setting also has an environment variable, spelled `MDTABLEFIX_` followed
+by the key in upper case: `MDTABLEFIX_WRAP`, `MDTABLEFIX_RENUMBER`,
+`MDTABLEFIX_BREAKS`, `MDTABLEFIX_ELLIPSIS`, `MDTABLEFIX_FENCES`,
+`MDTABLEFIX_FOOTNOTES`, `MDTABLEFIX_CODE_EMPHASIS`, `MDTABLEFIX_HEADINGS`,
+`MDTABLEFIX_MD_EXTS`, `MDTABLEFIX_GIT`, and `MDTABLEFIX_INCLUDE_UNTRACKED`. A
+boolean takes `true` or `false` in any case, and a list may be written with
+brackets (`[rst,xml]`), as a quoted list (`["rst"]`), or as bare
+comma-separated words (`rst,xml`). A list written with spaces but no commas
+(`rst xml`) is a single string, which is not a list, so the run fails rather
+than silently narrowing the selection.
+
+`--allow-conflicted` is the one switch neither a file nor the environment can
+supply, and it is deliberately excluded. The other Git switches decide _which_
+files a run reads; this one decides whether the conflict guard applies to them.
+A committed `.mdtablefix.toml` that switched it on would let an
+`--git --in-place` run rewrite text across unresolved conflict markers in a
+tree the user had merely checked out. The flag itself is unchanged, so the
+escape hatch is still there for a user who types it.
+
+Seven failures are worth recognizing, all of which exit `2` with the diagnostic
+on standard error and nothing on standard output:
+
+- `MDTABLEFIX_CONFIG_PATH` names a file that does not exist. A named file is
+  required, so this is an error rather than a silent fall back to discovery,
+  and the diagnostic quotes the path it was given.
+- A configuration file exists but cannot be read — typically a permission
+  error. The diagnostic names the path and the reason, and the run stops before
+  it touches any input file. This holds for a discovered file as well as a
+  selected one, even when a file in another scope loaded successfully: a locked
+  project file beside a readable user file fails the run rather than silently
+  applying the user file's settings, because the run would otherwise format
+  under rules the user cannot see.
+- A file is not valid TOML. The diagnostic quotes the path, the line and column,
+  and the parser's complaint. This applies to a discovered file as well as a
+  selected one: a broken `.mdtablefix.toml` beside a good user file fails the
+  run rather than being skipped, because running under the user file's rules
+  while the project file says something else would be a surprise.
+- A value has the wrong type — `wrap = "yes"` rather than `wrap = true`. The
+  diagnostic reports the mismatch and nothing else,
+  `invalid type: string "yes", expected a boolean`. It names neither the file
+  nor the setting, because the value has already been merged by the time a type
+  is checked and its provenance is gone. To locate it, search the merged
+  configuration files and the `MDTABLEFIX_*` variables that were set for the
+  offending value — the quoted `yes`, in this example.
+- A configured `md_exts` holds an extension this tool rejects. These values did
+  not pass through the command line's parser, so the diagnostic names the key:
+  `invalid configuration value for md_exts: ...`.
+- A configured `md_exts` names no extension at all — `md_exts = []`. The list
+  is valid TOML, so only an explicit check catches it, and it is rejected for
+  the same reason a value that could never match is: a filter that selects
+  nothing would end a `--git` run with an empty result the user could not
+  explain from the file they wrote. The command line cannot express this case,
+  because `--md-exts` takes at least one value.
+- A file uses `extends` to name a parent configuration. This tool does not
+  support inheritance, and it refuses the key before the parent is opened. The
+  diagnostic names the file that declared it and nothing else. State the
+  settings in one file instead.
+
+  The refusal is a safeguard rather than a restriction for its own sake. A
+  parent path may point anywhere the invoking user can read, including outside
+  the working directory, and the parser quotes a source line when a file is not
+  valid TOML. A committed `.mdtablefix.toml` naming an unrelated file could
+  then print a line of that file into a log. Refusing the key closes the route
+  entirely.
+
+  Only files this tool would actually load are examined. A candidate that is
+  not a regular file, or a symbolic link whose target leaves the directory the
+  candidate names, is reported by the configuration loader itself — naming the
+  path and the reason, and quoting no content — rather than being treated as a
+  declaration. A relative link to a file in the same directory is followed, so
+  a dotfile repository can link `config.toml` to a checked-in file.
+
+An unknown key is ignored, so a file written for a newer version still loads. A
+missing file at an automatic location is not an error; it simply contributes
+nothing. When no configuration is found and no variable is set, a run behaves
+exactly as it did before configuration existed.
+
+Every transformation switch takes an optional value, so a configuration can be
+overridden in either direction from the command line. A file stating
+`breaks = true` is turned off for one run by `--breaks=false`, and one stating
+`breaks = false` is turned on by typing `--breaks` alone or `--breaks=true`.
+The typed value outranks the file and the environment, as the precedence order
+above says.
+
+`--breaks=false` is therefore not a usage error, and this is the one place the
+command line gained a spelling rather than keeping its old surface exactly. The
+gain is additive: a switch typed alone still means `true`, a value must follow
+an equals sign so `--wrap false` keeps `false` as a positional argument, and a
+non-boolean value such as `--wrap=80` is still rejected with exit status `2`.
+
+The environment can express `false` too, which is the route that existed first:
+`MDTABLEFIX_BREAKS=false` beside `breaks = true` leaves breaks alone. The two
+routes agree, and a typed value still outranks the variable when both are
+present.
+
 ### Exit status
 
 | Status | Meaning                                                       |
@@ -185,7 +365,7 @@ typed is ever interpreted as a command.
 | `2`    | A file could not be read or rewritten, the selection of files |
 |        | failed, or the command line was rejected.                     |
 
-_Table 2: The exit statuses._
+_Table 3: The exit statuses._
 
 An error outranks drift: a run that could not read one file exits `2` even when
 another file drifted, so a gate never reports a clean tree from an incomplete

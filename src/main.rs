@@ -1,142 +1,50 @@
 //! Binary entry point for `mdtablefix`.
 //!
-//! Parses command-line arguments and coordinates Markdown formatting. When
-//! file paths are supplied, they are analysed in parallel and reported in
-//! argument order: each file may be printed, rewritten in place, checked for
-//! drift, or shown as a unified diff. Without paths the tool reads from
-//! standard input and prints results to stdout while preserving the input
-//! order.
+//! Parses command-line arguments, resolves them against any configured
+//! settings, and coordinates Markdown formatting. When file paths are supplied,
+//! they are analysed in parallel and reported in argument order: each file may
+//! be printed, rewritten in place, checked for drift, or shown as a unified
+//! diff. Without paths the tool reads from standard input and prints results to
+//! stdout while preserving the input order.
 //!
 //! Every mode shares one formatting closure, built once, so `--check` cannot
 //! disagree with `--in-place` about what the formatter would write.
+//!
+//! This file is the composition root and nothing more: it parses, resolves the
+//! settings, selects the inputs, and reports. What a run does lives in
+//! [`driver`], and how the settings are layered lives in [`config`].
 
-use std::{
-    io::{self, BufWriter, Read, Write},
-    process::ExitCode,
-};
+use std::process::ExitCode;
 
-use anyhow::Context;
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
-use mdtablefix::{
-    io::SourceDocument,
-    report::{FileReport, render_summary},
-};
-use rayon::prelude::*;
 use tracing::debug;
 
 mod command;
+mod config;
 mod driver;
 mod git_inputs;
 mod metrics;
 mod select;
 
-use command::{Cli, FormatOpts, format_lines, formatting_closure};
-use driver::{ExitStatus, Formatter, Inputs, Mode, analyse, exit_status, in_argument_order};
-use metrics::{record_analysis, record_run};
+use command::Cli;
+use config::Settings;
+use driver::{ExitStatus, Inputs, Mode, exit_status};
+// The document-boundary helpers moved into `driver` with the rest of the run,
+// but the tests that pin their behaviour live here and name them through
+// `super`, so the composition root keeps a binding for them.
+#[cfg(test)]
+use driver::{format_stdin, open_file_parent, render_stdin_output};
+use metrics::record_run;
 use select::ConflictGuard;
-
-/// Opens a file's parent directory and returns its relative UTF-8 path.
-///
-/// This is the only ambient filesystem boundary for CLI file processing. The
-/// returned directory capability restricts subsequent handler I/O to the
-/// selected file's parent directory.
-///
-/// The path is already UTF-8, because [`Inputs::resolve`] converts every
-/// positional argument once, before any file is analysed.
-fn open_file_parent(path: &Utf8Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_str().is_empty())
-        .unwrap_or(Utf8Path::new("."));
-    let file_name = path
-        .file_name()
-        .with_context(|| format!("selecting file name from {path}"))?;
-    let directory = Dir::open_ambient_dir(parent, ambient_authority())
-        .with_context(|| format!("opening {parent}"))?;
-
-    Ok((directory, Utf8PathBuf::from(file_name)))
-}
-
-/// Renders standard-input output.
-///
-/// Standard input keeps its historical contract of printing one terminator
-/// even when it produces no lines, whereas an empty file produces empty
-/// output. `tests/parallel.rs` pins that difference.
-///
-/// An input that produces no lines prints the bare terminator and nothing
-/// else, so a byte-order mark on a mark-only input is not echoed. Nothing is
-/// written back to a file on this path, so the mark cannot be lost.
-fn render_stdin_output(document: &SourceDocument<'_>, fixed: &[String]) -> String {
-    if fixed.is_empty() {
-        document.ending().as_str().to_string()
-    } else {
-        document.render(fixed)
-    }
-}
-
-/// Formats standard input and renders it for standard output.
-///
-/// Standard input is the boundary with no path to name, so its report says so
-/// rather than omitting the field. The document boundary is otherwise taken
-/// exactly as it is for a file: the body carries no byte-order mark, and the
-/// majority style of the input decides the terminators.
-fn format_stdin(input: &str, opts: FormatOpts) -> String {
-    let document = SourceDocument::parse(input);
-    driver::report_line_endings(document.counts(), "stdin", None);
-    render_stdin_output(&document, &format_lines(document.body(), opts))
-}
-
-/// Analyses one command-line path, naming it in any error.
-///
-/// The context encloses opening the parent directory as well as the analysis,
-/// so an error from either names the file as the user wrote it rather than
-/// only its parent. The mode's verb says which operation failed: `--in-place`
-/// writes, and every other mode reads.
-fn analyse_one(
-    mode: Mode,
-    guard: &ConflictGuard,
-    path: &Utf8Path,
-    format: &Formatter,
-) -> anyhow::Result<(FileReport, String)> {
-    open_file_parent(path)
-        .and_then(|(directory, storage_key)| {
-            analyse(mode, guard, &directory, path, &storage_key, format)
-        })
-        .with_context(|| format!("{} {}", mode.verb(), path))
-}
-
-/// Writes `text` to standard output.
-///
-/// Standard output is written through an explicit handle rather than `print!`,
-/// which panics on a write failure. A closed pipe is a normal early exit, and a
-/// panic here would exit `101`, a status this tool does not document.
-fn write_stdout(text: &str) -> anyhow::Result<()> {
-    let mut stdout = io::stdout().lock();
-    stdout.write_all(text.as_bytes())?;
-    stdout.flush()?;
-
-    Ok(())
-}
-
-/// Whether any cause in the chain is a write to a closed pipe.
-fn is_broken_pipe(error: &anyhow::Error) -> bool {
-    error.chain().any(|cause| {
-        cause
-            .downcast_ref::<io::Error>()
-            .is_some_and(|error| error.kind() == io::ErrorKind::BrokenPipe)
-    })
-}
 
 /// Ends a run that failed before any file was processed, and records it.
 ///
 /// A failure to name the inputs never reaches the loop that analyses them, so
 /// without this it would be the one class of failure a host could not count: a
-/// missing working directory, a repository that cannot be listed, or a path
-/// argument that cannot be resolved would each exit non-zero having recorded
-/// nothing. The caller reports the failure; this decides the status and records
-/// it, so every way a run can end is counted once and the metric cannot
-/// disagree with the exit code.
+/// missing working directory, a repository that cannot be listed, a path
+/// argument that cannot be resolved, or a configuration source that cannot be
+/// merged would each exit non-zero having recorded nothing. The caller reports
+/// the failure; this decides the status and records it, so every way a run can
+/// end is counted once and the metric cannot disagree with the exit code.
 fn failed_run(mode: Mode) -> ExitStatus {
     let status = exit_status(mode, false, true);
     record_run(mode, status);
@@ -144,81 +52,96 @@ fn failed_run(mode: Mode) -> ExitStatus {
     status
 }
 
+/// Resolves the `--git` selection, reporting any warning it earned.
+///
+/// The skipped-candidate warning is printed here rather than inside `resolve`,
+/// which answers questions: a query that writes to standard error cannot be
+/// reused by a caller that wants the selection without the commentary. See
+/// [`git_inputs::GitSelection::skipped_warning`].
+fn select_from_git(settings: &Settings, mode: Mode) -> Option<(Inputs, ConflictGuard)> {
+    // The working directory is resolved before anything is selected, because it
+    // is what `--git` is relative to: `git ls-files` runs in it, the selection
+    // is reported relative to it, and the repository that governs it is the one
+    // whose in-progress operation the guard looks for.
+    let working_directory = match git_inputs::working_directory() {
+        Ok(working_directory) => working_directory,
+        Err(error) => {
+            eprintln!("{error:?}");
+            return None;
+        }
+    };
+    match git_inputs::resolve(settings, mode, &working_directory) {
+        Ok(selection) => {
+            if let Some(warning) = selection.skipped_warning() {
+                eprintln!("{warning}");
+            }
+            report_selection(&selection);
+            Some((selection.inputs, selection.guard))
+        }
+        Err(error) => {
+            // One deliberate line: this tool's own wording, with the underlying
+            // reason relayed beside it. See `GitInputsError::diagnostic`.
+            eprintln!("mdtablefix: {}", error.diagnostic());
+            None
+        }
+    }
+}
+
+/// Resolves the input source the settings name, reporting any failure.
+///
+/// `settings.git` already folds in the rule that a typed path outranks a
+/// configured one: [`Settings::resolve`] clears it whenever positional
+/// arguments are present, because a positional argument is the user's own
+/// statement of what to act on and a file cannot make it on their behalf.
+///
+/// `None` means the run has already been reported and only its status is left
+/// to decide, which the caller does through [`failed_run`].
+fn select_inputs(settings: &Settings, mode: Mode) -> Option<(Inputs, ConflictGuard)> {
+    if settings.git {
+        return select_from_git(settings, mode);
+    }
+    match Inputs::resolve(settings.files.clone()) {
+        Ok(inputs) => Some((inputs, ConflictGuard::unguarded())),
+        Err(error) => {
+            eprintln!("{error:?}");
+            None
+        }
+    }
+}
+
 /// Runs the mode the command line selects, records the run, and returns its
 /// status.
 ///
-/// Resolution comes first, so a command line that cannot name its inputs fails
-/// as a whole — through [`exit_status`], like every other operational failure —
-/// rather than being discovered file by file. A file that cannot be read or
-/// rewritten is reported as it is encountered, counted in the summary, and
-/// folded into [`ExitStatus::Error`], so one unreadable file does not abandon
-/// the rest.
+/// Resolution comes first, so a command line that cannot name its inputs — or a
+/// configuration source that cannot be merged — fails as a whole, through
+/// [`exit_status`], like every other operational failure, rather than being
+/// discovered file by file. A file that cannot be read or rewritten is reported
+/// as it is encountered, counted in the summary, and folded into
+/// [`ExitStatus::Error`], so one unreadable file does not abandon the rest.
 ///
 /// The run is recorded here, at the boundary that decides the status and under
 /// the very status this process is about to exit with, so the metric a host
 /// aggregates and the exit code cannot disagree. A resolution failure returns
-/// through [`failed_run`] instead, which records it the same way. A closed
-/// pipe is an ordinary early exit, as in `mdtablefix --check *.md | head`: the
-/// reader stopped
-/// early, which says nothing about this run, so the run is recorded as the
-/// success it is. Rust ignores `SIGPIPE`, so the write reports `EPIPE` instead,
-/// and `print!` would turn that into the undocumented status `101`. Such an
-/// infrastructure failure of standard input or output is the only error that
-/// leaves here, and it is recorded before it is returned.
+/// through [`failed_run`] instead, which records it the same way.
 fn run() -> anyhow::Result<ExitStatus> {
-    let cli = Cli::parse_validated();
+    let (cli, matches) = Cli::parse_validated();
     let mode = cli.mode();
     metrics::describe_metrics();
-    let (inputs, guard) = if cli.selects_from_git() {
-        // The working directory is resolved before anything is selected,
-        // because it is what `--git` is relative to: `git ls-files` runs in it,
-        // the selection is reported relative to it, and the repository that
-        // governs it is the one whose in-progress operation the guard looks
-        // for.
-        let working_directory = match git_inputs::working_directory() {
-            Ok(working_directory) => working_directory,
-            Err(error) => {
-                eprintln!("{error:?}");
-                return Ok(failed_run(mode));
-            }
-        };
-        match git_inputs::resolve(&cli, mode, &working_directory) {
-            Ok(selection) => {
-                // Printed here rather than inside `resolve`, which answers
-                // questions: a query that writes to standard error cannot be
-                // reused by a caller that wants the selection without the
-                // commentary. See `GitSelection::skipped_warning`.
-                if let Some(warning) = selection.skipped_warning() {
-                    eprintln!("{warning}");
-                }
-                report_selection(&selection);
-                (selection.inputs, selection.guard)
-            }
-            Err(error) => {
-                // One deliberate line: this tool's own wording, with the
-                // underlying reason relayed beside it. See
-                // `GitInputsError::diagnostic`.
-                eprintln!("mdtablefix: {}", error.diagnostic());
-                return Ok(failed_run(mode));
-            }
-        }
-    } else {
-        match Inputs::resolve(cli.files) {
-            Ok(inputs) => (inputs, ConflictGuard::unguarded()),
-            Err(error) => {
-                eprintln!("{error:?}");
-                return Ok(failed_run(mode));
-            }
+    let settings = match Settings::resolve(&cli, &matches) {
+        Ok(settings) => settings,
+        Err(error) => {
+            // One deliberate line, in this tool's own words, so the stream and
+            // the status match every other operational failure. Configuration
+            // is resolved here, before any file is touched, so a bad file
+            // cannot half-format a tree.
+            eprintln!("mdtablefix: {error}");
+            return Ok(failed_run(mode));
         }
     };
-    let result = match inputs {
-        Inputs::Stdin => run_stdin(cli.opts),
-        Inputs::Files(files) => run_files(mode, &guard, &files, cli.opts),
+    let Some((inputs, guard)) = select_inputs(&settings, mode) else {
+        return Ok(failed_run(mode));
     };
-    let result = match result {
-        Err(error) if is_broken_pipe(&error) => Ok(ExitStatus::Success),
-        settled => settled,
-    };
+    let result = driver::execute(mode, &guard, inputs, settings.opts);
     record_run(mode, result.as_ref().copied().unwrap_or(ExitStatus::Error));
 
     result
@@ -239,101 +162,6 @@ fn report_selection(selection: &git_inputs::GitSelection) {
     );
 }
 
-/// Formats standard input and writes the result to standard output.
-///
-/// The destination is standard output whatever the mode, because there is no
-/// file for a mode flag to act on: the parser's `inputs` group is what
-/// guarantees a mode flag arrives with a file argument instead.
-fn run_stdin(opts: FormatOpts) -> anyhow::Result<ExitStatus> {
-    let mut input = String::new();
-    io::stdin().read_to_string(&mut input)?;
-    write_stdout(&format_stdin(&input, opts))?;
-
-    Ok(ExitStatus::Success)
-}
-
-/// The number of files analysed in one parallel batch.
-///
-/// A selection can be an entire repository, so the results are drained in
-/// chunks rather than in one pass: the retained payloads are then one chunk's
-/// rather than the whole tree's, and the ordering stage below is what makes the
-/// chunking unobservable — the output is argument order either way. 256 is a
-/// compromise between the parallel fan-out each chunk buys and that bound.
-const ANALYSIS_CHUNK: usize = 256;
-
-/// Analyses the named files under `mode`, in argument order.
-///
-/// The only errors returned here are writes to standard output; a file that
-/// cannot be read or rewritten is reported and counted instead, and decides the
-/// status along with the drift the reporting modes found.
-fn run_files(
-    mode: Mode,
-    guard: &ConflictGuard,
-    files: &[Utf8PathBuf],
-    opts: FormatOpts,
-) -> anyhow::Result<ExitStatus> {
-    let format = formatting_closure(opts);
-    let mut changed = 0;
-    let mut unchanged = 0;
-    let mut errored = 0;
-    // One lock and one buffer for the run, not one per file: the results are
-    // already assembled in memory, so the only question is how many syscalls
-    // they cost.
-    let mut stdout = BufWriter::new(io::stdout().lock());
-    for chunk in files.chunks(ANALYSIS_CHUNK) {
-        let results = match mode {
-            Mode::InPlace => chunk
-                .iter()
-                .map(|path| record_analysis(mode, path, || analyse_one(mode, guard, path, &format)))
-                .collect(),
-            Mode::Print | Mode::Check | Mode::Diff | Mode::ListFiles => in_argument_order(
-                chunk
-                    .par_iter()
-                    .enumerate()
-                    .map(|(index, path)| {
-                        (
-                            index,
-                            record_analysis(mode, path, || analyse_one(mode, guard, path, &format)),
-                        )
-                    })
-                    .collect(),
-            ),
-        };
-
-        for result in results {
-            match result {
-                Ok((report, payload)) => {
-                    if report.is_changed {
-                        changed += 1;
-                    } else {
-                        unchanged += 1;
-                    }
-                    // A closed pipe surfaces here, and `main` treats it as the
-                    // early exit it is rather than as a failure to report.
-                    stdout.write_all(payload.as_bytes())?;
-                }
-                Err(error) => {
-                    // The chain matters: the outer context names the file, and
-                    // the cause explains the failure, such as a declined
-                    // symlink or a refused conflicted file.
-                    eprintln!("{error:?}");
-                    errored += 1;
-                }
-            }
-        }
-    }
-    stdout.flush()?;
-
-    // The summary describes what was found, so it belongs to the modes that
-    // report rather than print; the read-only modes keep standard output a
-    // machine contract by putting it on standard error.
-    if mode.reports() {
-        eprintln!("{}", render_summary(changed, unchanged, errored));
-    }
-
-    Ok(exit_status(mode, changed > 0, errored > 0))
-}
-
 /// Entry point for the command-line tool that reflows broken markdown tables.
 ///
 /// Parses command-line arguments to determine whether to process files in
@@ -345,7 +173,8 @@ fn run_files(
 ///
 /// `0` when every file was analysed and no reporting mode found drift, `1` when
 /// a reporting mode did find drift, and `2` when a file could not be read or
-/// rewritten.
+/// rewritten, when the inputs could not be resolved, or when a configuration
+/// source could not be merged.
 ///
 /// # Examples
 ///

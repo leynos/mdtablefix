@@ -1,7 +1,7 @@
 //! The command line, and the formatting pipeline its options select.
 //!
 //! Everything here that touches a document is pure: arguments are parsed, the
-//! options are resolved into [`Options`], and a document's lines are formatted.
+//! options are resolved into `Options`, and a document's lines are formatted.
 //! Nothing here reads a document input or writes an output, which is what lets
 //! the binary's two boundaries — a file and standard input — share one pipeline
 //! without sharing an I/O policy.
@@ -9,17 +9,16 @@
 //! Declared only from `src/main.rs`, so this module belongs to the binary and
 //! `src/lib.rs` does not name it: nothing here adds public API. It depends on
 //! `crate::driver` for [`Mode`], on `crate::select` for the extension parser
-//! `--md-exts` is validated by, and on the library's [`Options`], and nothing
-//! depends on it but the binary's composition root. It lives in its own file
-//! because `src/main.rs` is capped at 400 lines, not because the command line
-//! is a layer: it is the outermost adapter, and the mode it names is passed
-//! inward unchanged.
+//! `--md-exts` is validated by, and on the library's `Options` through the
+//! [`FormatOpts`] conversion, and nothing depends on it but the binary's
+//! composition root. It lives in its own file because `src/main.rs` is capped
+//! at 400 lines, not because the command line is a layer: it is the outermost
+//! adapter, and the mode it names is passed inward unchanged.
 
 use std::{borrow::Cow, path::PathBuf};
 
 use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind, parser::ValueSource};
 use mdtablefix::{
-    Options,
     format_breaks,
     io::SourceDocument,
     process::{process_stream_inner, process_with_frontmatter},
@@ -29,6 +28,11 @@ use crate::{
     driver::Mode,
     select::extensions::{ExtensionFilter, parse_extension},
 };
+
+mod format_options;
+
+pub use self::format_options::FormatOpts;
+use self::format_options::{HIDE_SWITCH_DEFAULT, SWITCH_VALUE};
 
 /// Parsed command-line request before it is mapped to a formatting mode.
 ///
@@ -62,10 +66,24 @@ pub struct Cli {
     #[arg(long = "list-files", group = "mode")]
     list_files: bool,
     /// Select Markdown files tracked by Git beneath the current directory
-    #[arg(long = "git")]
+    #[arg(
+        long = "git",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     git: bool,
     /// Also select untracked files that Git does not ignore
-    #[arg(long = "include-untracked")]
+    #[arg(
+        long = "include-untracked",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     include_untracked: bool,
     /// File extensions to select under `--git`
     // One `default_value` rather than `default_values`, so `--help` renders the
@@ -83,7 +101,14 @@ pub struct Cli {
     )]
     md_exts: Vec<String>,
     /// Rewrite files containing conflict markers during a merge or rebase
-    #[arg(long = "allow-conflicted")]
+    #[arg(
+        long = "allow-conflicted",
+        value_name = SWITCH_VALUE,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        hide_default_value = HIDE_SWITCH_DEFAULT,
+    )]
     allow_conflicted: bool,
     /// Content transformations applied after an input has been selected.
     #[command(flatten)]
@@ -92,23 +117,62 @@ pub struct Cli {
     pub files: Vec<PathBuf>,
 }
 
-/// The flags that only make sense with `--git`, each paired with the form the
-/// user wrote it in.
+/// The flags that only make sense with `--git`, each paired with whether the
+/// user typed it.
 ///
-/// `--md-exts` is checked by its [`ValueSource`] rather than by its value,
-/// because its default means it always carries one: a user who typed
-/// `--md-exts md` explicitly is asking for `--git`, and must be told so, while
-/// a user who typed nothing is not.
-fn git_only_flags(cli: &Cli, matches: &clap::ArgMatches) -> [(&'static str, bool); 4] {
-    let explicit_exts = matches.value_source("md_exts") != Some(ValueSource::DefaultValue);
-
+/// Every one is judged by its [`ValueSource`] rather than by its value, because
+/// a resolved `false` cannot tell the two ways of meaning it apart. `--md-exts`
+/// is the clearest case, since its default means it always carries a value: a
+/// user who typed `--md-exts md` is asking for `--git`, and a user who typed
+/// nothing is not. The optional `=<BOOL>` value makes the same distinction for
+/// the switches: `--include-untracked=false` names the flag as surely as the
+/// bare form does, so it is judged the same way, and only `CommandLine` counts
+/// as naming it.
+fn git_only_flags(matches: &clap::ArgMatches) -> [(&'static str, bool); 4] {
     [
-        ("--include-untracked", cli.include_untracked),
-        ("--allow-conflicted", cli.allow_conflicted),
-        ("--list-files", cli.list_files),
-        ("--md-exts", explicit_exts),
+        (
+            "--include-untracked",
+            is_typed(matches, "include_untracked"),
+        ),
+        ("--allow-conflicted", is_typed(matches, "allow_conflicted")),
+        ("--list-files", is_typed(matches, "list_files")),
+        ("--md-exts", is_typed(matches, "md_exts")),
     ]
 }
+
+/// Whether `id` was supplied on the command line rather than defaulted.
+///
+/// Shared with [`crate::config`], which uses it to decide which settings the
+/// command line contributes: a defaulted value states nothing there either.
+pub(crate) fn is_typed(matches: &clap::ArgMatches, id: &str) -> bool {
+    matches.value_source(id) == Some(ValueSource::CommandLine)
+}
+
+/// The name of the mode flag the user typed, if any.
+///
+/// Reported by the flag rather than by [`Mode`], because the diagnostic tells a
+/// user which word to remove or supplement, and `--check` is the word they
+/// typed.
+fn typed_mode_flag(cli: &Cli) -> Option<&'static str> {
+    [
+        ("--in-place", cli.in_place),
+        ("--check", cli.check),
+        ("--diff", cli.diff),
+        ("--list-files", cli.list_files),
+    ]
+    .into_iter()
+    .find_map(|(name, typed)| typed.then_some(name))
+}
+
+/// Whether nothing names what the run should act on.
+///
+/// A mode flag has to have an input, and the mode group's `requires("inputs")`
+/// is satisfied by *typing* `--git` — even `--git=false`, which states that no
+/// Git selection is wanted. So the input is judged here, from the parsed
+/// value, rather than by the group. Keeping the tests together lets the
+/// diagnostic read as one sentence: it is only raised when a mode was typed
+/// *and* there is nothing for it to act on.
+fn has_no_input(cli: &Cli) -> bool { cli.files.is_empty() && !cli.git }
 
 impl Cli {
     /// Parses and enforces the dependencies `clap` cannot express here.
@@ -119,15 +183,27 @@ impl Cli {
     /// sight. So each dependency is checked after parsing, and reported as a
     /// clap error, which keeps the exit status at 2 and the usage footer.
     ///
+    /// A mode flag also needs an input of its own. The `mode` group's
+    /// `requires("inputs")` is satisfied by *typing* `--git`, but typing
+    /// `--git=false` states that no Git selection is wanted, so `--check
+    /// --git=false` with no path would reach standard input and, printing
+    /// rather than reporting, exit 0. Before the optional `=<BOOL>` value that
+    /// state could not be expressed, which is why the group alone was enough.
+    ///
+    /// The matches are returned beside the parsed request because they are the
+    /// only record of where each value came from, and configuration needs that
+    /// provenance to tell a typed flag from a defaulted one. See
+    /// `crate::config::Settings::resolve`.
+    ///
     /// # Panics
     ///
     /// Terminates the process on a parse error, exactly as [`Cli::parse`] does:
     /// that is clap's contract for a command-line tool.
-    pub fn parse_validated() -> Self {
+    pub fn parse_validated() -> (Self, clap::ArgMatches) {
         let matches = Self::command().get_matches();
         let cli = Self::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
-        for (name, present) in git_only_flags(&cli, &matches) {
-            if present && !cli.git {
+        for (name, typed) in git_only_flags(&matches) {
+            if typed && !cli.git {
                 Self::command()
                     .error(
                         ErrorKind::MissingRequiredArgument,
@@ -137,15 +213,28 @@ impl Cli {
             }
         }
 
-        cli
+        if let Some(flag) = typed_mode_flag(&cli)
+            && has_no_input(&cli)
+        {
+            Self::command()
+                .error(
+                    ErrorKind::MissingRequiredArgument,
+                    format!("{flag} requires --git or at least one file"),
+                )
+                .exit();
+        }
+
+        (cli, matches)
     }
 
     /// The mode the flags select.
     ///
     /// The `mode` argument group already guarantees that at most one flag is
-    /// set, and its `requires("inputs")` guarantees that any flag at all comes
-    /// with a file argument, so these branches cannot disagree with the parser:
-    /// they only name the decision it made.
+    /// set, so these branches cannot disagree with the parser: they only name
+    /// the decision it made. That a mode flag also has a usable input is not
+    /// the group's to say — `requires("inputs")` accepts any typed `--git`,
+    /// including `--git=false` — and is enforced in
+    /// [`Cli::parse_validated`] instead.
     #[must_use]
     pub fn mode(&self) -> Mode {
         if self.in_place {
@@ -175,57 +264,6 @@ impl Cli {
     /// Each value has already been through the parser `--md-exts` declares, so
     /// this only has to fold them into the set that holds them.
     pub fn extensions(&self) -> ExtensionFilter { self.md_exts.iter().cloned().collect() }
-}
-
-/// Independent content transformations requested by the command-line caller.
-///
-/// These flags are intentionally represented separately so the processing
-/// pipeline can apply its stable normalization order to any selected subset.
-#[derive(clap::Args, Clone, Copy)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "CLI exposes independent flags via separate switches"
-)]
-pub struct FormatOpts {
-    /// Wrap paragraphs and list items to 80 columns
-    #[arg(long = "wrap")]
-    pub wrap: bool,
-    /// Renumber ordered list items
-    #[arg(long = "renumber")]
-    pub renumber: bool,
-    /// Reformat thematic breaks as underscores
-    #[arg(long = "breaks")]
-    pub breaks: bool,
-    /// Replace "..." with the ellipsis character
-    #[arg(long = "ellipsis")]
-    pub ellipsis: bool,
-    /// Normalize fence delimiters to three backticks
-    #[arg(long = "fences")]
-    pub fences: bool,
-    /// Convert bare numeric references and the final numbered list to
-    /// Markdown footnote links
-    #[arg(long = "footnotes")]
-    pub footnotes: bool,
-    /// Fix emphasis markers adjacent to inline code
-    #[arg(long = "code-emphasis")]
-    pub code_emphasis: bool,
-    /// Convert Setext-style headings to hash-prefixed headings
-    #[arg(long = "headings")]
-    pub headings: bool,
-}
-
-impl From<FormatOpts> for Options {
-    fn from(opts: FormatOpts) -> Self {
-        Self {
-            wrap: opts.wrap,
-            ellipsis: opts.ellipsis,
-            fences: opts.fences,
-            footnotes: opts.footnotes,
-            renumber: opts.renumber,
-            code_emphasis: opts.code_emphasis,
-            headings: opts.headings,
-        }
-    }
 }
 
 /// Runs every selected transformation over `lines`.

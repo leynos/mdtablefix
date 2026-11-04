@@ -10,21 +10,21 @@ Arguments:
   [FILES]...  Markdown files to fix
 
 Options:
-      --in-place           Rewrite files in place
-      --check              Report which files would be reformatted, and by how many lines
-      --diff               Print a unified diff for each file that would be reformatted
-      --list-files         Print the selected paths and exit, without reading or writing them
-      --git                Select Markdown files tracked by Git beneath the current directory
-      --include-untracked  Also select untracked files that Git does not ignore
-      --md-exts <EXT>      File extensions to select under `--git` [default: md,mdc,markdown]
-      --allow-conflicted   Rewrite files containing conflict markers during a merge or rebase
-      --wrap               Wrap paragraphs and list items to 80 columns
-      --renumber           Renumber ordered list items
-      --breaks             Reformat thematic breaks as underscores
-      --ellipsis           Replace "..." with the ellipsis character
-      --fences             Normalize fence delimiters to three backticks
-      --footnotes          Convert bare numeric references and the final numbered list to Markdown footnote links
-      --code-emphasis      Fix emphasis markers adjacent to inline code
-      --headings           Convert Setext-style headings to hash-prefixed headings
-  -h, --help               Print help
-  -V, --version            Print version
+      --in-place                    Rewrite files in place
+      --check                       Report which files would be reformatted, and by how many lines
+      --diff                        Print a unified diff for each file that would be reformatted
+      --list-files                  Print the selected paths and exit, without reading or writing them
+      --git[=<BOOL>]                Select Markdown files tracked by Git beneath the current directory [possible values: true, false]
+      --include-untracked[=<BOOL>]  Also select untracked files that Git does not ignore [possible values: true, false]
+      --md-exts <EXT>               File extensions to select under `--git` [default: md,mdc,markdown]
+      --allow-conflicted[=<BOOL>]   Rewrite files containing conflict markers during a merge or rebase [possible values: true, false]
+      --wrap[=<BOOL>]               Wrap paragraphs and list items to 80 columns [possible values: true, false]
+      --renumber[=<BOOL>]           Renumber ordered list items [possible values: true, false]
+      --breaks[=<BOOL>]             Reformat thematic breaks as underscores [possible values: true, false]
+      --ellipsis[=<BOOL>]           Replace "..." with the ellipsis character [possible values: true, false]
+      --fences[=<BOOL>]             Normalize fence delimiters to three backticks [possible values: true, false]
+      --footnotes[=<BOOL>]          Convert bare numeric references and the final numbered list to Markdown footnote links [possible values: true, false]
+      --code-emphasis[=<BOOL>]      Fix emphasis markers adjacent to inline code [possible values: true, false]
+      --headings[=<BOOL>]           Convert Setext-style headings to hash-prefixed headings [possible values: true, false]
+  -h, --help                        Print help
+  -V, --version                     Print version

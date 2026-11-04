@@ -30,9 +30,13 @@ fn test_cli_wrap_option() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_cli_wrap_rejects_parameter() -> Result<(), Box<dyn std::error::Error>> {
+    // `--wrap` accepts an optional boolean, so a width reaches the boolean
+    // parser rather than the "takes no value" check. The status is unchanged —
+    // this was a usage error before the optional value existed and still is —
+    // and the message still names the offending value.
     run_cli_with_stdin(&["--wrap=80"], "alpha beta\n")?
         .failure()
-        .stderr(predicates::str::contains("unexpected value '80'"));
+        .stderr(predicates::str::contains("invalid value '80'"));
     Ok(())
 }
 

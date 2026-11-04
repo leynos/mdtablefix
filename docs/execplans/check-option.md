@@ -943,7 +943,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
   re-syncable. `docs/netsuke-design.md` and `docs/ortho-config-users-guide.md`
   are also absent but not applicable: this repository parses arguments with
   plain `clap`, not `ortho-config`, and adopting the Netsuke lint baseline is
-  tracked separately as issue #441. Date/Author: 2026-09-09.
+  tracked separately as issue #441. Date/Author: 2026-09-09. Later note: the
+  `ortho-config` half of that reasoning no longer holds. The
+  [`ortho_config` v0.10.0 adoption plan](issue-666-adopt-ortho-config-v0-10-0-for-the-mdtablefix-cli.md)
+  imports both guides and adopts the framework for the binary's settings, with
+  the design recorded in [ADR 0014](../adrs/0014-configuration-layering.md);
+  the Netsuke half and issue #441 are unaffected.
 
 - Decision: raise the two idempotence defects as GitHub issue #468, with the
   reproduction corpus attached and an acceptance bar of corpus **and** property
@@ -4274,8 +4279,11 @@ Signposted documents absent here and not applicable:
 
 - `docs/netsuke-design.md`: no Netsuke-specific policy is adopted. Aligning
   this repository with the Netsuke lint baseline is issue #441.
-- `docs/ortho-config-users-guide.md`: this repository uses plain `clap`, not
-  `ortho-config`, and this plan does not change that.
+- `docs/ortho-config-users-guide.md`: this repository used plain `clap`, not
+  `ortho-config`, and this plan did not change that. A later plan has since
+  adopted the framework and vendored both guides; see
+  [the adoption plan](issue-666-adopt-ortho-config-v0-10-0-for-the-mdtablefix-cli.md)
+  and [ADR 0014](../adrs/0014-configuration-layering.md).
 
 Skills to load:
 

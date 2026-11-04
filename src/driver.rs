@@ -14,9 +14,12 @@
 //!
 //! What this module does not hold lives beside it. [`source`] resolves the
 //! inputs and turns one file into an [`Assessment`]; [`reporting`] holds the
-//! modes, the rendering each one does, and the exit statuses they earn.
+//! modes, the rendering each one does, and the exit statuses they earn; and
+//! [`run`] executes a resolved input, formatting standard input or analysing a
+//! file selection.
 
 mod reporting;
+mod run;
 mod source;
 
 use anyhow::{Context, anyhow};
@@ -28,6 +31,11 @@ use mdtablefix::{
 };
 pub use reporting::{ExitStatus, Mode, exit_status, report_line_endings};
 use reporting::{listed, render_diff};
+pub(crate) use run::execute;
+// The document-boundary helpers are reached only by the composition root's own
+// tests, which pin their behaviour from `src/main_tests.rs`.
+#[cfg(test)]
+pub(crate) use run::{format_stdin, open_file_parent, render_stdin_output};
 pub use source::{Inputs, ReadOnlyDir, assess, write_back};
 
 use crate::select::{
