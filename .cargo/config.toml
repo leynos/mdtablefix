@@ -12,6 +12,19 @@
 # recipes set. Coverage and the release recipe and workflow assign `RUSTFLAGS`
 # without them on purpose. A direct `cargo build --release` keeps these flags
 # unless `RUSTFLAGS` is assigned.
+
+# The development footprint rule (concordat `rust-dev-build-footprint`): no
+# incremental state and no debug information in default dev builds, and
+# dependencies built without embedded metadata. The pin predates nightly-2026-07-31,
+# so the older `no-embed-metadata` key applies; whoever moves the pin across that
+# boundary switches to `embed-metadata = false`. Stable Cargo ignores `[unstable]`.
+[unstable]
+no-embed-metadata = true
+
+[profile.dev]
+incremental = false
+debug = 0
+
 [build]
 rustflags = ["-Zthreads=8"]
 
