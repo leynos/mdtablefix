@@ -5,7 +5,17 @@
 # until the default branch has written one.
 [profile.default]
 slow-timeout = { period = "180s", terminate-after = 1, grace-period = "5s" }
+# The whole run, strictly above the largest per-test allowance (540 s, below).
+global-timeout = "30m"
+
+[test-groups.nested-cargo-builds]
+# Tests that start a child cargo (the trybuild suite and the package-tree
+# enforcement test) contend for the package-cache lock, so they run one at a
+# time, each bounded by its own allowance.
+max-threads = 1
 
 [[profile.default.overrides]]
-filter = 'binary(compile)'
+filter = 'binary(compile) | binary(env_access_enforcement)'
+test-group = "nested-cargo-builds"
 slow-timeout = { period = "180s", terminate-after = 3, grace-period = "5s" }
+
