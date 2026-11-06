@@ -58,3 +58,20 @@ the workflows, so a flag lost through a recipe or workflow edit fails there.
 - A change to a recipe or workflow step that assigns `RUSTFLAGS` must restate
   the flags, and the contract says which clause fails when it does not.
 - Revisit Cranelift when the toolchain or the failing tests change.
+
+## Addendum (2026-11-06)
+
+The development build footprint is part of this standard. `.cargo/config.toml`
+sets `incremental = false` and `debug = 0` in `[profile.dev]`, so a default
+development build keeps no incremental state and no debug information and
+writes far fewer intermediate artefacts. A debugger needs
+`CARGO_PROFILE_DEV_DEBUG=true`, and incremental rebuilds need
+`CARGO_INCREMENTAL=1`. Linker symbols remain, because `strip` is unset.
+
+The same file sets the `[unstable]` key that disables embedded metadata in
+dependency rlibs. Its name depends on the toolchain in `rust-toolchain.toml`:
+nightlies before the native key use `no-embed-metadata = true`, and later ones
+use `embed-metadata = false`. Whoever moves the pin across that boundary
+switches the key, and stable Cargo ignores the table. This records the decision
+in the architectural record; the developers' guide section "The build standard"
+is left to the documentation train that owns that file.
