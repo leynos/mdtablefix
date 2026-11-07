@@ -69,6 +69,9 @@ jobs:
           globs: '**/*.md'
       - name: Lint
         run: make lint
+      - name: Fetch dependencies
+        # Tests start their own cargo offline; fetch once so none resolves cold.
+        run: cargo fetch --locked
       - name: Test and Measure Coverage
         # Coverage here is for the local ratchet and nothing else. The report
         # is neither published (`publish-artefact: 'false'` keeps the action
@@ -124,6 +127,9 @@ jobs:
           install-mold: 'true'
           install-binstall: false
           use-sccache: false
+      - name: Fetch dependencies
+        # Tests start their own cargo offline; fetch once so none resolves cold.
+        run: cargo fetch --locked
       - name: Test the atomic write contract
         # `--lib` is required, not incidental: the rollback a failed swap
         # performs after the destination was prepared is unreachable through a

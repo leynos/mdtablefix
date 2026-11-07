@@ -134,6 +134,9 @@ fn lint_the_fixture() -> Result<String> {
         .env_remove("CARGO_ENCODED_RUSTDOCFLAGS")
         .env_remove("LLVM_PROFILE_FILE")
         .env_remove("CLIPPY_ARGS")
+        // The fixture has no dependencies, so nothing here may reach the
+        // network or wait on the index.
+        .env("CARGO_NET_OFFLINE", "true")
         .output()
         .context("run Clippy over the fixture package")?;
 
