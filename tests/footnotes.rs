@@ -17,6 +17,16 @@ use rstest::rstest;
 #[path = "common/mod.rs"]
 mod common;
 
+fn assert_footnotes_snapshot(name: &str, input: &[String]) {
+    insta::with_settings!(
+        {
+            snapshot_path => "snapshots",
+            prepend_module_to_snapshot => false,
+        },
+        { insta::assert_snapshot!(name, convert_footnotes(input).join("\n")) }
+    );
+}
+
 #[test]
 fn macros_available() {
     let _: Vec<String> = lines_vec!("a", "b");
@@ -282,6 +292,45 @@ fn test_skips_when_existing_block_is_indented_or_quoted() {
     assert_eq!(convert_footnotes(&input1), input1);
     assert_eq!(convert_footnotes(&input2), input2);
     assert_eq!(convert_footnotes(&input3), input3);
+}
+
+#[test]
+fn footnotes_snapshot_single_blockquote_definition() {
+    let input = lines_vec!("Reference.[^9]", "", "> [^9]: First", "> [^3]: Second");
+    assert_footnotes_snapshot("footnotes_single_blockquote_definition", &input);
+}
+
+#[test]
+fn footnotes_snapshot_nested_blockquote_definition() {
+    let input = lines_vec!("Reference.[^9]", "", "> > [^9]: First", "> > [^3]: Second");
+    assert_footnotes_snapshot("footnotes_nested_blockquote_definition", &input);
+}
+
+#[test]
+fn footnotes_snapshot_mixed_blockquote_depths() {
+    let input = lines_vec!(
+        "First reference.[^9]",
+        "Second reference.[^3]",
+        "",
+        "> [^3]: Second",
+        "> > [^9]: First"
+    );
+    assert_footnotes_snapshot("footnotes_mixed_blockquote_depths", &input);
+}
+
+#[test]
+fn footnotes_snapshot_blockquoted_fence_keeps_footnote_like_text() {
+    let input = lines_vec!(
+        "> ```",
+        "> [^9]: Fenced text",
+        "> ```",
+        "## Footnotes",
+        "1. Converted list item"
+    );
+    assert_footnotes_snapshot(
+        "footnotes_blockquoted_fence_keeps_footnote_like_text",
+        &input,
+    );
 }
 
 #[test]

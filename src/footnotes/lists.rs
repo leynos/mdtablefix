@@ -5,7 +5,10 @@
 
 use regex::Captures;
 
-use super::parsing::{FOOTNOTE_LINE_RE, is_definition_continuation};
+use super::{
+    parsing::{FOOTNOTE_LINE_RE, is_definition_continuation},
+    strip_blockquote_markers,
+};
 use crate::wrap::FenceTracker;
 
 /// Find the trailing block of lines that satisfy a predicate.
@@ -57,10 +60,7 @@ pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> boo
         if fence.is_fence_marker || fence.is_in_fence {
             continue;
         }
-        let mut t = l.trim_start();
-        while let Some(rest) = t.strip_prefix('>') {
-            t = rest.trim_start();
-        }
+        let t = strip_blockquote_markers(l);
         if t.strip_prefix("[^")
             .and_then(|r| r.split_once("]:"))
             .is_some_and(|(num, _)| num.chars().all(|c| c.is_ascii_digit()))
