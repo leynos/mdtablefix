@@ -51,6 +51,20 @@ When working in this area:
 - Keep the split/rejoin contract and its tests in sync with changes to
   `src/frontmatter.rs`.
 
+## Fetching dependencies before tests
+
+The environment-access test starts its own `cargo clippy` on a fixture crate.
+Cargo resolves dependencies while it holds the package-cache lock in
+`$CARGO_HOME`, so a nested `cargo` that resolves cold can wait on another
+repository's build for many minutes. The fixture has no dependencies, so that
+spawn sets `CARGO_NET_OFFLINE=true` and needs nothing from the network.
+
+`make test` runs `cargo fetch --locked` first, and `ci.yml` and
+`coverage-main.yml` run the same command as an unconditional step before their
+test and coverage steps, with no `|| true`. A failed fetch stops the run.
+Prepare a direct or offline run with `cargo fetch --locked` first. The estate
+lint rule `nested-cargo-offline-tests` checks the fetch steps and the spawn.
+
 ## Table reflow architecture
 
 The table reflow pipeline is split into small stages so continuation rows and

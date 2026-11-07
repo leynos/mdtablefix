@@ -51,6 +51,7 @@ clean: ## Remove build artifacts
 	$(CARGO) clean
 
 test: ## Run tests with warnings treated as errors
+	cargo fetch --locked
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(STANDARD_RUSTFLAGS)" $(CARGO) test --workspace --all-targets --all-features $(BUILD_JOBS)
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(STANDARD_RUSTFLAGS)" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 

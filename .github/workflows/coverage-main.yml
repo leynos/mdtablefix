@@ -62,6 +62,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: cargo binstall --no-confirm --locked ripgrep@15.2.0
+      - name: Fetch dependencies
+        # Tests start their own cargo offline; fetch once so none resolves cold.
+        run: cargo fetch --locked
       - name: Test and Measure Coverage
         # The same action, format and output path as the pull-request lane, and
         # the same default baseline files, so the figure written here is the
