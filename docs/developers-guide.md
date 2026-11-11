@@ -1407,6 +1407,22 @@ descriptions exactly once per process behind a `std::sync::OnceLock`.
   carries no labels, and separates that decline from the other ways a
   replacement can fail.
 
+The wrapping path emits two metrics from `src/wrap/metrics.rs`, recorded at the
+`wrap_text` boundary rather than inside the domain modules, so the wrapping
+helpers stay free of vendor-specific instrumentation:
+
+- `mdtablefix_wrap_total` counts wrapping invocations with one label, `outcome`,
+  whose value is `reflowed` when the wrapping changed at least one line and
+  `unchanged` when it returned the text as it found it.
+- `mdtablefix_wrap_duration_seconds` is a histogram of one invocation's
+  duration in seconds, with the unit declared by `metrics::Unit::Seconds` and
+  the same `outcome` label. The timer starts before wrapping begins, so the
+  sample covers the complete path.
+
+`src/wrap/metrics_tests.rs` installs a local recorder and asserts the declared
+names, unit, and description, the bounded `outcome` label, and one duration
+sample per invocation for both outcomes.
+
 Metric cardinality is bounded by construction: every metric name and every
 label value is a compile-time constant. Target paths, file names, and error
 text are never labels. The target `path` appears only as a tracing span field.

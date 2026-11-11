@@ -1092,6 +1092,21 @@ Metric names are stable, and labels are bounded: `outcome` is the only label
 key, carried only by the two replacement metrics above. No path, file name, or
 error text is ever used as a label, so a recorder's cardinality stays bounded.
 
+### Wrapping metrics
+
+`wrap_text` emits two metrics, so a host can see how much of a run the wrapping
+path accounts for. It installs no recorder of its own, like the replacement
+path, and a host that installs none sees no behavioural change.
+
+- `mdtablefix_wrap_total` — wrapping invocations, labelled by `outcome`
+  (`reflowed` or `unchanged`).
+- `mdtablefix_wrap_duration_seconds` — histogram of one wrapping invocation's
+  duration in seconds, labelled by `outcome`.
+
+`reflowed` means the wrapping changed at least one line; `unchanged` means it
+returned the text as it found it. Neither label is derived from document text,
+so the cardinality stays bounded.
+
 ### Inline-wrapping tracing events
 
 Inline paragraph wrapping emits `tracing` events at `debug` and `trace` levels

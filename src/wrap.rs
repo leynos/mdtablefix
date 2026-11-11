@@ -22,6 +22,11 @@ mod inline;
 
 mod link_reference;
 
+mod metrics;
+
+#[cfg(test)]
+mod metrics_tests;
+
 mod observer;
 
 mod paragraph;
@@ -281,8 +286,21 @@ fn dispatch_continuation(
 }
 
 /// Wrap text lines to the given width.
+///
+/// The invocation is timed and counted so a host that installs a recorder can
+/// see how much of a run the wrapping path accounts for. The metrics are
+/// emitted from this boundary rather than from the domain modules, which stay
+/// free of vendor-specific instrumentation.
 #[must_use]
 pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
+    let started = std::time::Instant::now();
+    let out = wrap_lines(lines, width);
+    metrics::record_wrap(lines, &out, started.elapsed());
+    out
+}
+
+/// Performs the wrapping [`wrap_text`] reports the outcome of.
+fn wrap_lines(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut state = ParagraphState::default();
     let mut writer = ParagraphWriter::new(&mut out, width);

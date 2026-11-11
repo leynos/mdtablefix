@@ -364,7 +364,13 @@ fn emitted_metric_names_are_stable() {
         rewrite(&file).expect("the rewrite must succeed");
     });
 
-    let mut names: Vec<&str> = recorded.iter().map(|metric| metric.name.as_str()).collect();
+    // A rewrite also wraps text, so only this boundary's metrics are in scope
+    // here; the wrapping boundary asserts its own names in `wrap::metrics_tests`.
+    let mut names: Vec<&str> = recorded
+        .iter()
+        .map(|metric| metric.name.as_str())
+        .filter(|name| name.starts_with("mdtablefix_io_"))
+        .collect();
     names.sort_unstable();
     assert_eq!(
         names,
