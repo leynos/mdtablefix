@@ -236,6 +236,22 @@ mod tracing_tests {
     use super::*;
     use crate::wrap::tracing_adapter::TracingObserver;
 
+    /// Asserts the captured log holds every `expected` fragment and none of
+    /// the `forbidden` ones.
+    ///
+    /// `contains` is the test's own `logs_contain`, which `traced_test` injects
+    /// into each test body. Grouping the fragments keeps a traced test's shape
+    /// visible: what the event must report, and what document text must never
+    /// reach the log.
+    fn assert_log(contains: impl Fn(&str) -> bool, expected: &[&str], forbidden: &[&str]) {
+        for fragment in expected {
+            assert!(contains(fragment), "log is missing {fragment}");
+        }
+        for fragment in forbidden {
+            assert!(!contains(fragment), "log leaked {fragment}");
+        }
+    }
+
     #[traced_test]
     #[test]
     fn parse_link_or_image_logs_footnote_reference() {
@@ -251,10 +267,11 @@ mod tracing_tests {
     fn parse_link_or_image_logs_link_parsed() {
         let mut observer = TracingObserver;
         let _ = parse_link_or_image("[link](url)", 0, &mut Some(&mut observer));
-        assert!(logs_contain("link or image parsed"));
-        assert!(logs_contain("token_length=11"));
-        assert!(!logs_contain("[link](url)"));
-        assert!(logs_contain("is_image=false"));
+        assert_log(
+            logs_contain,
+            &["link or image parsed", "token_length=11", "is_image=false"],
+            &["[link](url)"],
+        );
     }
 
     #[traced_test]
@@ -264,10 +281,11 @@ mod tracing_tests {
         let (token, _) = parse_link_or_image("![alt](url)", 0, &mut Some(&mut observer));
         // Observable parse result: the image literal is kept atomic.
         assert_eq!(token, "![alt](url)");
-        assert!(logs_contain("link or image parsed"));
-        assert!(logs_contain("token_length=11"));
-        assert!(logs_contain("is_image=true"));
-        assert!(!logs_contain("![alt](url)"));
+        assert_log(
+            logs_contain,
+            &["link or image parsed", "token_length=11", "is_image=true"],
+            &["![alt](url)"],
+        );
     }
 
     #[traced_test]
@@ -285,11 +303,16 @@ mod tracing_tests {
     fn parse_link_or_image_logs_footnote_label_span() {
         let mut observer = TracingObserver;
         let _ = parse_link_or_image("[^4] tail", 0, &mut Some(&mut observer));
-        assert!(logs_contain("footnote label span recognized"));
-        assert!(logs_contain("start="));
-        assert!(logs_contain("end="));
-        assert!(logs_contain("token_length=4"));
-        assert!(!logs_contain("[^4]"));
+        assert_log(
+            logs_contain,
+            &[
+                "footnote label span recognized",
+                "start=",
+                "end=",
+                "token_length=4",
+            ],
+            &["[^4]"],
+        );
     }
 
     #[traced_test]
@@ -297,11 +320,16 @@ mod tracing_tests {
     fn find_footnote_end_logs_label_span_recognized() {
         let mut observer = TracingObserver;
         let _ = find_footnote_end("[^4] tail", 0, &mut Some(&mut observer));
-        assert!(logs_contain("footnote label span recognized"));
-        assert!(logs_contain("start=0"));
-        assert!(logs_contain("end=4"));
-        assert!(logs_contain("token_length=4"));
-        assert!(!logs_contain("[^4]"));
+        assert_log(
+            logs_contain,
+            &[
+                "footnote label span recognized",
+                "start=0",
+                "end=4",
+                "token_length=4",
+            ],
+            &["[^4]"],
+        );
     }
 
     #[traced_test]

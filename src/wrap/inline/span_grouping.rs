@@ -9,6 +9,8 @@
 //! `wrapping` consumes the spans produced here and turns them into fitted
 //! lines; the two are separate modules so each stays a readable size.
 
+use std::ops::Range;
+
 use unicode_width::UnicodeWidthStr;
 
 use super::{
@@ -23,6 +25,7 @@ use super::{
         looks_like_link,
     },
     span_helpers::{
+        SpanCursor,
         SpanKind,
         absorb_token_and_trailing_punctuation,
         date_token_span,
@@ -48,6 +51,106 @@ fn is_code_token(token: &str) -> bool {
     is_inline_code_token(token) || has_inline_code_structure(token)
 }
 
+/// A coupling decision about the token at `end`, ready to be reported.
+#[derive(Clone, Copy)]
+struct CouplingReport<'a> {
+    /// The token stream the decision was made over.
+    tokens: &'a [String],
+    /// The index of the token the decision concerns.
+    end: usize,
+    /// The classification of the span so far.
+    kind: SpanKind,
+    /// Whether the token was coupled into the span.
+    coupled: bool,
+}
+
+/// Returns the span kind an opening punctuation token couples to, if any.
+///
+/// Only `[` introduces a bare bracket reference, so other openers stay ordinary
+/// prose even when the token that follows closes like a reference.
+fn opening_coupling_kind(opener: &str, next: &str) -> Option<SpanKind> {
+    if is_code_token(next) {
+        Some(SpanKind::Code)
+    } else if looks_like_link(next) {
+        Some(SpanKind::Link)
+    } else if opener == "[" && looks_like_bracketed_reference(next) {
+        Some(SpanKind::BracketedRef)
+    } else {
+        None
+    }
+}
+
+/// Couples an opening-punctuation token to the atomic span that follows it.
+///
+/// Forward-coupling keeps wrapping from leaving a lone `(` at the end of a line
+/// before inline code or a link. Returns the new exclusive end and the span
+/// kind when coupling happened.
+fn couple_opening_punctuation(
+    tokens: &[String],
+    start: usize,
+    width: &mut usize,
+) -> Option<(usize, SpanKind)> {
+    if !tokens[start].chars().all(is_opening_punct) {
+        return None;
+    }
+    let next = tokens.get(start + 1)?;
+    let kind = opening_coupling_kind(&tokens[start], next)?;
+    *width += UnicodeWidthStr::width(next.as_str());
+    Some((extend_punctuation(tokens, start + 2, width), kind))
+}
+
+/// Couples a hyphen-prefix token to the inline code span that follows it.
+///
+/// This keeps wrapping from splitting a hyphen-terminated prefix from the
+/// inline code span that follows it, such as a `pre-` prefix before code.
+/// Returns the new exclusive end when coupling happened.
+fn couple_hyphen_prefix(
+    tokens: &[String],
+    start: usize,
+    end: usize,
+    width: &mut usize,
+) -> Option<usize> {
+    let next = tokens.get(end)?;
+    if !ends_with_hyphen_prefix(&tokens[start]) || !is_code_token(next) {
+        return None;
+    }
+    *width += UnicodeWidthStr::width(next.as_str());
+    Some(extend_punctuation(tokens, end + 1, width))
+}
+
+/// Returns the span kind implied by a single token, ignoring punctuation.
+fn first_token_kind(token: &str, observer: &mut ObserverHandle<'_>) -> SpanKind {
+    if is_code_token(token) {
+        SpanKind::Code
+    } else if looks_like_link(token) {
+        SpanKind::Link
+    } else if looks_like_footnote_ref(token, observer) {
+        SpanKind::FootnoteRef
+    } else {
+        SpanKind::General
+    }
+}
+
+/// Classifies the first token of a span and extends it over punctuation.
+///
+/// Returns `None` when the token is ordinary prose, which leaves the span as
+/// the single token it started as.
+fn classify_first_token(
+    tokens: &[String],
+    span: Range<usize>,
+    width: &mut usize,
+    observer: &mut ObserverHandle<'_>,
+) -> Option<(usize, SpanKind)> {
+    if tokens[span.start] == "`" {
+        return Some((merge_code_span(tokens, span.start, width), SpanKind::Code));
+    }
+    let kind = first_token_kind(&tokens[span.start], observer);
+    if kind == SpanKind::General {
+        return None;
+    }
+    Some((extend_punctuation(tokens, span.end, width), kind))
+}
+
 /// Build the first atomic span at `start`, including punctuation and attached
 /// Markdown constructs that cannot be split across a line boundary.
 ///
@@ -60,61 +163,24 @@ fn initial_token_span(
     start: usize,
     observer: &mut ObserverHandle<'_>,
 ) -> (usize, usize, SpanKind) {
-    let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
+    let mut end = start + 1;
     let mut kind = SpanKind::General;
 
-    // Forward-couple opening punctuation to the next atomic span so wrapping
-    // never leaves a lone `(` at the end of a line before inline code or a link.
-    if tokens[start].chars().all(is_opening_punct)
-        && let Some(next) = tokens.get(start + 1)
+    if let Some((coupled_end, coupled_kind)) = couple_opening_punctuation(tokens, start, &mut width)
     {
-        if is_code_token(next) {
-            kind = SpanKind::Code;
-            end += 1;
-            width += UnicodeWidthStr::width(next.as_str());
-            end = extend_punctuation(tokens, end, &mut width);
-        } else if looks_like_link(next) {
-            kind = SpanKind::Link;
-            end += 1;
-            width += UnicodeWidthStr::width(next.as_str());
-            end = extend_punctuation(tokens, end, &mut width);
-        } else if tokens[start] == "[" && looks_like_bracketed_reference(next) {
-            // Forward-couple a bare bracket reference to its opener so wrapping
-            // never strands `[` at the end of a line before its digits. Only
-            // `[` introduces a reference, so other openers stay ordinary prose.
-            kind = SpanKind::BracketedRef;
-            end += 1;
-            width += UnicodeWidthStr::width(next.as_str());
-            end = extend_punctuation(tokens, end, &mut width);
-        }
+        end = coupled_end;
+        kind = coupled_kind;
+    } else if let Some(coupled_end) = couple_hyphen_prefix(tokens, start, end, &mut width) {
+        end = coupled_end;
+        kind = SpanKind::Code;
     }
 
-    // Forward-couple a hyphen-prefix token to the next inline code span so
-    // wrapping never splits compounds such as `pre-`code`` at the hyphen.
-    if kind == SpanKind::General
-        && ends_with_hyphen_prefix(&tokens[start])
-        && let Some(next) = tokens.get(end)
-        && is_code_token(next)
+    if let Some((classified_end, classified_kind)) =
+        classify_first_token(tokens, start..end, &mut width, observer)
     {
-        kind = SpanKind::Code;
-        width += UnicodeWidthStr::width(next.as_str());
-        end += 1;
-        end = extend_punctuation(tokens, end, &mut width);
-    }
-
-    if tokens[start] == "`" {
-        kind = SpanKind::Code;
-        end = merge_code_span(tokens, start, &mut width);
-    } else if is_code_token(&tokens[start]) {
-        kind = SpanKind::Code;
-        end = extend_punctuation(tokens, end, &mut width);
-    } else if looks_like_link(&tokens[start]) {
-        kind = SpanKind::Link;
-        end = extend_punctuation(tokens, end, &mut width);
-    } else if looks_like_footnote_ref(&tokens[start], observer) {
-        kind = SpanKind::FootnoteRef;
-        end = extend_punctuation(tokens, end, &mut width);
+        end = classified_end;
+        kind = classified_kind;
     }
 
     (end, width, kind)
@@ -141,10 +207,7 @@ pub(in crate::wrap) fn determine_token_span(tokens: &[String], start: usize) -> 
 /// The probe passes `&mut None`: it only selects whether to report, and
 /// forwarding the observer would emit a `FootnoteRefChecked` event for it.
 fn emit_whitespace_footnote_coupling(
-    kind: SpanKind,
-    next_token: Option<&String>,
-    following_token: Option<&String>,
-    coupled: bool,
+    report: CouplingReport<'_>,
     observer: &mut ObserverHandle<'_>,
 ) {
     // Nothing will consume the event, so skip the probe entirely rather than
@@ -152,50 +215,170 @@ fn emit_whitespace_footnote_coupling(
     let Some(observer) = observer.as_deref_mut() else {
         return;
     };
-    let Some(token) = next_token.filter(|token| looks_like_footnote_ref(token, &mut None)) else {
+    let Some(token) = report
+        .tokens
+        .get(report.end + 1)
+        .filter(|token| looks_like_footnote_ref(token, &mut None))
+    else {
         return;
     };
     observer.observe(Event::WhitespaceFootnoteCoupling {
-        kind,
+        kind: report.kind,
         token,
-        has_following_colon: following_token.is_some_and(|following| following == ":"),
-        coupled,
+        has_following_colon: report
+            .tokens
+            .get(report.end + 2)
+            .is_some_and(|following| following == ":"),
+        coupled: report.coupled,
     });
 }
 
 /// Reports whether an adjacent footnote reference was coupled into the current
 /// span, and the context that decided it.
-fn emit_footnote_reference_coupling(
-    tokens: &[String],
-    end: usize,
-    kind: SpanKind,
-    coupled: bool,
-    observer: &mut ObserverHandle<'_>,
-) {
+fn emit_footnote_reference_coupling(report: CouplingReport<'_>, observer: &mut ObserverHandle<'_>) {
     // Nothing will consume the event, so skip the probe and the coupling
     // context rather than computing them and discarding the result.
     let Some(observer) = observer.as_deref_mut() else {
         return;
     };
-    let Some(token) = tokens
-        .get(end)
+    let Some(token) = report
+        .tokens
+        .get(report.end)
         .filter(|token| looks_like_footnote_ref(token, &mut None))
     else {
         return;
     };
-    let follows_space_before_colon = end
+    let follows_space_before_colon = report
+        .end
         .checked_sub(1)
-        .and_then(|previous| tokens.get(previous))
+        .and_then(|previous| report.tokens.get(previous))
         .is_some_and(|previous| previous.chars().all(char::is_whitespace))
-        && tokens
-            .get(end + 1)
+        && report
+            .tokens
+            .get(report.end + 1)
             .is_some_and(|following| following == ":");
     observer.observe(Event::FootnoteReferenceCoupling {
-        kind,
+        kind: report.kind,
         token,
         follows_space_before_colon,
-        coupled,
+        coupled: report.coupled,
     });
+}
+
+/// Couples a whitespace run to the span when the following token requires it.
+///
+/// Returns `false` when the run ends the span, which stops grouping.
+fn couple_whitespace(
+    tokens: &[String],
+    cursor: &mut SpanCursor,
+    observer: &mut ObserverHandle<'_>,
+) -> bool {
+    let next_token = tokens.get(cursor.end + 1);
+    let following_token = tokens.get(cursor.end + 2);
+    let should_couple =
+        should_couple_whitespace(cursor.kind, next_token, following_token, observer);
+    emit_whitespace_footnote_coupling(
+        CouplingReport {
+            tokens,
+            end: cursor.end,
+            kind: cursor.kind,
+            coupled: should_couple,
+        },
+        observer,
+    );
+    if !should_couple {
+        return false;
+    }
+    cursor.width += UnicodeWidthStr::width(tokens[cursor.end].as_str());
+    cursor.end += 1;
+    true
+}
+
+/// Absorbs a trailing punctuation token when the span is atomic.
+///
+/// Returns `false` when the span is plain prose, which stops grouping.
+fn absorb_trailing_punctuation(tokens: &[String], cursor: &mut SpanCursor) -> bool {
+    if !matches!(
+        cursor.kind,
+        SpanKind::Code | SpanKind::Link | SpanKind::FootnoteRef
+    ) {
+        return false;
+    }
+    cursor.width += UnicodeWidthStr::width(tokens[cursor.end].as_str());
+    cursor.end += 1;
+    true
+}
+
+/// Couples an adjacent link, bracket reference, or footnote marker.
+///
+/// Returns `false` when the token starts a new span instead.
+fn couple_adjacent_atomic(
+    tokens: &[String],
+    cursor: &mut SpanCursor,
+    observer: &mut ObserverHandle<'_>,
+) -> bool {
+    if try_couple_inline_link_after_opener(tokens, cursor) {
+        return true;
+    }
+
+    // A bare bracket reference couples to its opener for the same reason
+    // footnote markers do: the opener can follow an atomic span directly, and
+    // leaving `[` in the preceding span would strand it at a line end.
+    if try_couple_bracketed_reference(tokens, cursor) {
+        return true;
+    }
+
+    // Footnote markers must be coupled before consecutive link/code chaining;
+    // otherwise `[^N]` stays a separate wrap token even when punctuation is
+    // already attached to the preceding atomic span. The report describes the
+    // decision, so it is built before the coupling moves the cursor.
+    let report = CouplingReport {
+        tokens,
+        end: cursor.end,
+        kind: cursor.kind,
+        coupled: false,
+    };
+    let coupled = try_couple_footnote_reference(tokens, cursor, observer);
+    emit_footnote_reference_coupling(CouplingReport { coupled, ..report }, observer);
+    coupled
+}
+
+/// Absorbs a chained link or code token of the same kind as the span.
+///
+/// Returns `false` when the token does not continue the span.
+fn absorb_chained_atomic(tokens: &[String], cursor: &mut SpanCursor) -> bool {
+    let token = &tokens[cursor.end];
+    if cursor.kind == SpanKind::Link && looks_like_link(token) {
+        absorb_token_and_trailing_punctuation(tokens, cursor);
+        return true;
+    }
+    if cursor.kind == SpanKind::Code && is_code_token(token) {
+        absorb_token_and_trailing_punctuation(tokens, cursor);
+        return true;
+    }
+    false
+}
+
+/// Extends the span by one grouping decision.
+///
+/// Returns `false` when the span cannot grow further, which ends the grouping
+/// loop.
+fn extend_span(
+    tokens: &[String],
+    cursor: &mut SpanCursor,
+    observer: &mut ObserverHandle<'_>,
+) -> bool {
+    let token = &tokens[cursor.end];
+    if is_whitespace_token(token) {
+        return couple_whitespace(tokens, cursor, observer);
+    }
+    if is_trailing_punctuation_token(token) {
+        return absorb_trailing_punctuation(tokens, cursor);
+    }
+    if couple_adjacent_atomic(tokens, cursor, observer) {
+        return true;
+    }
+    absorb_chained_atomic(tokens, cursor)
 }
 
 /// Finds the next logical token group starting at `start`, reporting the
@@ -228,87 +411,8 @@ pub(in crate::wrap::inline) fn determine_token_span_observed(
         return (end, width);
     }
 
-    let (mut end, mut width, mut kind) = initial_token_span(tokens, start, observer);
-
-    while end < tokens.len() {
-        let token = &tokens[end];
-        if is_whitespace_token(token) {
-            let next_token = tokens.get(end + 1);
-            let following_token = tokens.get(end + 2);
-            let should_couple =
-                should_couple_whitespace(kind, next_token, following_token, observer);
-            emit_whitespace_footnote_coupling(
-                kind,
-                next_token,
-                following_token,
-                should_couple,
-                observer,
-            );
-            if should_couple {
-                width += UnicodeWidthStr::width(token.as_str());
-                end += 1;
-                continue;
-            }
-
-            break;
-        }
-
-        if is_trailing_punctuation_token(token) {
-            if matches!(
-                kind,
-                SpanKind::Code | SpanKind::Link | SpanKind::FootnoteRef
-            ) {
-                width += UnicodeWidthStr::width(token.as_str());
-                end += 1;
-                continue;
-            }
-            break;
-        }
-
-        let is_link = looks_like_link(token);
-        let is_code = is_code_token(token);
-        if let Some((next_kind, next_end)) =
-            try_couple_inline_link_after_opener(tokens, end, &mut width)
-        {
-            kind = next_kind;
-            end = next_end;
-            continue;
-        }
-
-        // A bare bracket reference couples to its opener for the same reason
-        // footnote markers do: the opener can follow an atomic span directly,
-        // and leaving `[` in the preceding span would strand it at a line end.
-        if let Some((next_kind, next_end)) = try_couple_bracketed_reference(tokens, end, &mut width)
-        {
-            kind = next_kind;
-            end = next_end;
-            continue;
-        }
-
-        // Footnote markers must be coupled before consecutive link/code chaining;
-        // otherwise `[^N]` stays a separate wrap token even when punctuation is
-        // already attached to the preceding atomic span.
-        let footnote_coupling =
-            try_couple_footnote_reference(tokens, end, kind, &mut width, observer);
-        emit_footnote_reference_coupling(tokens, end, kind, footnote_coupling.is_some(), observer);
-        if let Some((next_kind, next_end)) = footnote_coupling {
-            kind = next_kind;
-            end = next_end;
-            continue;
-        }
-
-        if kind == SpanKind::Link && is_link {
-            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
-            continue;
-        }
-
-        if kind == SpanKind::Code && is_code {
-            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
-            continue;
-        }
-
-        break;
-    }
-
-    (end, width)
+    let (end, width, kind) = initial_token_span(tokens, start, observer);
+    let mut cursor = SpanCursor { end, width, kind };
+    while cursor.end < tokens.len() && extend_span(tokens, &mut cursor, observer) {}
+    (cursor.end, cursor.width)
 }

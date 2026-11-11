@@ -102,18 +102,17 @@ pub(in crate::wrap::inline) fn date_token_span(
     observer: &mut ObserverHandle<'_>,
 ) -> Option<(usize, usize)> {
     let date_end = try_match_date_sequence(tokens, start, observer)?;
-    let mut date_width = tokens[start..date_end]
+    let date_width = tokens[start..date_end]
         .iter()
         .map(|token| UnicodeWidthStr::width(token.as_str()))
         .sum();
-    if let Some((_, footnote_end)) = try_couple_footnote_reference(
-        tokens,
-        date_end,
-        SpanKind::General,
-        &mut date_width,
-        observer,
-    ) {
-        return Some((footnote_end, date_width));
+    let mut cursor = SpanCursor {
+        end: date_end,
+        width: date_width,
+        kind: SpanKind::General,
+    };
+    if try_couple_footnote_reference(tokens, &mut cursor, observer) {
+        return Some((cursor.end, cursor.width));
     }
     Some((date_end, date_width))
 }
@@ -235,32 +234,52 @@ pub(in crate::wrap::inline) fn merge_code_span(
     j
 }
 
-/// Extends `end` by one token and any trailing punctuation that follows it.
+/// The span under construction while grouping extends it.
+///
+/// Grouping is a sequence of small decisions that each move the exclusive end
+/// forward, so the three values travel together rather than as separate
+/// parameters.
+pub(in crate::wrap::inline) struct SpanCursor {
+    /// The exclusive end of the span so far.
+    pub end: usize,
+    /// The Unicode display width accumulated so far.
+    pub width: usize,
+    /// The classification of the span so far.
+    pub kind: SpanKind,
+}
+
+/// Extends the cursor by one token and any trailing punctuation after it.
 pub(in crate::wrap::inline) fn absorb_token_and_trailing_punctuation(
     tokens: &[String],
-    end: usize,
-    width: &mut usize,
-) -> usize {
-    *width += UnicodeWidthStr::width(tokens[end].as_str());
-    extend_punctuation(tokens, end + 1, width)
+    cursor: &mut SpanCursor,
+) {
+    cursor.width += UnicodeWidthStr::width(tokens[cursor.end].as_str());
+    cursor.end = extend_punctuation(tokens, cursor.end + 1, &mut cursor.width);
 }
 
 /// Couples an opener-followed inline link, such as `([1](url))`, into the
 /// current span.
+///
+/// Returns whether the link was coupled.
 pub(in crate::wrap::inline) fn try_couple_inline_link_after_opener(
     tokens: &[String],
-    end: usize,
-    width: &mut usize,
-) -> Option<(SpanKind, usize)> {
-    let opener = tokens.get(end)?;
-    let link = tokens.get(end + 1)?;
+    cursor: &mut SpanCursor,
+) -> bool {
+    let Some(opener) = tokens.get(cursor.end) else {
+        return false;
+    };
+    let Some(link) = tokens.get(cursor.end + 1) else {
+        return false;
+    };
     if !opener.chars().all(is_opening_punct) || !looks_like_link(link) {
-        return None;
+        return false;
     }
 
-    *width += UnicodeWidthStr::width(opener.as_str());
-    *width += UnicodeWidthStr::width(link.as_str());
-    Some((SpanKind::Link, extend_punctuation(tokens, end + 2, width)))
+    cursor.width += UnicodeWidthStr::width(opener.as_str());
+    cursor.width += UnicodeWidthStr::width(link.as_str());
+    cursor.kind = SpanKind::Link;
+    cursor.end = extend_punctuation(tokens, cursor.end + 2, &mut cursor.width);
+    true
 }
 
 /// Couples a `[` opener to the numeric reference that closes it.
@@ -270,61 +289,76 @@ pub(in crate::wrap::inline) fn try_couple_inline_link_after_opener(
 /// independent wrap units, the opener fits at the end of a line while the
 /// digits move to the next one, which splits the reference across the break and
 /// leaves the formatter with an input it reflows differently on a second pass.
+///
+/// Returns whether the reference was coupled.
 pub(in crate::wrap::inline) fn try_couple_bracketed_reference(
     tokens: &[String],
-    end: usize,
-    width: &mut usize,
-) -> Option<(SpanKind, usize)> {
-    let opener = tokens.get(end)?;
-    let reference = tokens.get(end + 1)?;
+    cursor: &mut SpanCursor,
+) -> bool {
+    let Some(opener) = tokens.get(cursor.end) else {
+        return false;
+    };
+    let Some(reference) = tokens.get(cursor.end + 1) else {
+        return false;
+    };
     if opener != "[" || !looks_like_bracketed_reference(reference) {
-        return None;
+        return false;
     }
 
-    *width += UnicodeWidthStr::width(opener.as_str());
-    *width += UnicodeWidthStr::width(reference.as_str());
-    Some((
-        SpanKind::BracketedRef,
-        extend_punctuation(tokens, end + 2, width),
-    ))
+    cursor.width += UnicodeWidthStr::width(opener.as_str());
+    cursor.width += UnicodeWidthStr::width(reference.as_str());
+    cursor.kind = SpanKind::BracketedRef;
+    cursor.end = extend_punctuation(tokens, cursor.end + 2, &mut cursor.width);
+    true
 }
 
-/// Couples an adjacent footnote reference into the current span when appropriate.
+/// Returns whether a general span should absorb the footnote reference at
+/// `end`.
+///
+/// A reference binds to prose only when it follows punctuation, or when it
+/// follows whitespace and precedes a colon.
+fn general_span_accepts_footnote(tokens: &[String], end: usize) -> bool {
+    let Some(previous) = end.checked_sub(1).and_then(|previous| tokens.get(previous)) else {
+        return false;
+    };
+    let follows_punctuation = previous.chars().last().is_some_and(is_trailing_punct);
+    let follows_space_before_colon = previous.chars().all(char::is_whitespace)
+        && tokens.get(end + 1).is_some_and(|token| token == ":");
+    follows_punctuation || follows_space_before_colon
+}
+
+/// Couples an adjacent footnote reference into the current span when
+/// appropriate.
+///
+/// Returns whether the reference was coupled.
 pub(in crate::wrap::inline) fn try_couple_footnote_reference(
     tokens: &[String],
-    end: usize,
-    kind: SpanKind,
-    width: &mut usize,
+    cursor: &mut SpanCursor,
     observer: &mut ObserverHandle<'_>,
-) -> Option<(SpanKind, usize)> {
-    let token = tokens.get(end)?;
+) -> bool {
+    let Some(token) = tokens.get(cursor.end) else {
+        return false;
+    };
     if !looks_like_footnote_ref(token, observer) {
-        return None;
+        return false;
     }
 
-    match kind {
+    match cursor.kind {
         SpanKind::General => {
-            let previous = end
-                .checked_sub(1)
-                .and_then(|previous| tokens.get(previous))?;
-            let follows_punctuation = previous.chars().last().is_some_and(is_trailing_punct);
-            let follows_space_before_colon = previous.chars().all(char::is_whitespace)
-                && tokens.get(end + 1).is_some_and(|token| token == ":");
-            if !follows_punctuation && !follows_space_before_colon {
-                return None;
+            if !general_span_accepts_footnote(tokens, cursor.end) {
+                return false;
             }
-            Some((
-                SpanKind::FootnoteRef,
-                absorb_token_and_trailing_punctuation(tokens, end, width),
-            ))
+            cursor.kind = SpanKind::FootnoteRef;
+            absorb_token_and_trailing_punctuation(tokens, cursor);
+            true
         }
-        SpanKind::Code | SpanKind::Link => Some((
-            kind,
-            absorb_token_and_trailing_punctuation(tokens, end, width),
-        )),
+        SpanKind::Code | SpanKind::Link => {
+            absorb_token_and_trailing_punctuation(tokens, cursor);
+            true
+        }
         // A reference marker binds only to the opener that introduces it, so a
         // second one starts a span of its own.
-        SpanKind::FootnoteRef | SpanKind::BracketedRef => None,
+        SpanKind::FootnoteRef | SpanKind::BracketedRef => false,
     }
 }
 

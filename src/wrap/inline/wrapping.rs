@@ -23,6 +23,9 @@ use crate::wrap::{
     tokenize,
 };
 
+/// Returns whether `token` is sentence punctuation to glue onto a code span.
+fn glues_to_code_span(token: &str) -> bool { token.len() == 1 && ".?!,:;".contains(token) }
+
 /// Appends the token span into the rendered fragment buffer `text`.
 ///
 /// `tokens` supplies the source tokens and `span` identifies the grouped range
@@ -30,7 +33,7 @@ use crate::wrap::{
 /// that punctuation after code spans keeps its original Markdown spacing.
 fn push_span_text(text: &mut String, tokens: &[String], span: Range<usize>) {
     for token in &tokens[span] {
-        if token.len() == 1 && ".?!,:;".contains(token) && text.trim_end().ends_with('`') {
+        if glues_to_code_span(token) && text.trim_end().ends_with('`') {
             text.truncate(text.trim_end_matches(char::is_whitespace).len());
         }
         text.push_str(token);
@@ -76,21 +79,28 @@ fn fragment_line_width(line: &[InlineFragment]) -> usize {
     line.iter().map(|fragment| fragment.width).sum()
 }
 
+/// Returns whether `line_width` uses all of `width` but for one column.
+fn fills_width(line_width: usize, width: usize) -> bool {
+    line_width == width || line_width + 1 == width
+}
+
+/// Returns whether `fragment` reads as ordinary prose after a boundary link.
+fn is_prose(fragment: &InlineFragment) -> bool { fragment.is_whitespace() || fragment.is_plain() }
+
+/// Returns whether `line` begins with a link followed by prose.
+fn starts_with_boundary_link(line: &[InlineFragment]) -> bool {
+    line.first()
+        .is_some_and(|fragment| fragment.kind == FragmentKind::Link)
+        && line.get(1).is_some_and(is_prose)
+}
+
 /// Splits a link first fragment from trailing prose after a boundary wrap.
 fn split_boundary_link_line(
     previous_line: &[InlineFragment],
     line: &[InlineFragment],
     width: usize,
 ) -> Option<(Vec<InlineFragment>, Vec<InlineFragment>)> {
-    let previous_width = fragment_line_width(previous_line);
-    if !(previous_width == width || previous_width + 1 == width)
-        || !line
-            .first()
-            .is_some_and(|fragment| fragment.kind == FragmentKind::Link)
-        || !line
-            .get(1)
-            .is_some_and(|fragment| fragment.is_whitespace() || fragment.is_plain())
-    {
+    if !fills_width(fragment_line_width(previous_line), width) || !starts_with_boundary_link(line) {
         return None;
     }
 
@@ -106,9 +116,9 @@ fn should_flush_boundary_link(
 ) -> bool {
     lines.last().is_some_and(|line| {
         let rendered_width = UnicodeWidthStr::width(line.as_str());
-        rendered_width == width || rendered_width + 1 == width
+        fills_width(rendered_width, width)
     }) && is_single_link_line(buffer)
-        && (next.is_whitespace() || next.is_plain())
+        && is_prose(next)
 }
 
 /// Renders one wrapped fragment line back into Markdown text.
@@ -143,6 +153,76 @@ fn render_line(
     text
 }
 
+/// Groups the buffered fragments into lines no wider than `width`.
+fn wrap_buffer(buffer: &[InlineFragment], width: usize) -> Vec<Vec<InlineFragment>> {
+    let wrapped = wrap_first_fit(buffer, &[width_as_f64(width)]);
+    let raw_lines = wrapped.iter().map(|line| line.to_vec()).collect::<Vec<_>>();
+    let mut grouped_lines = merge_whitespace_only_lines(&raw_lines, width);
+    rebalance_atomic_tails(&mut grouped_lines, width);
+    grouped_lines
+}
+
+/// Splits a boundary link line from its trailing prose and flushes both.
+///
+/// Returns whether the boundary split applied. The caller only invokes this
+/// once `grouped_lines` holds at least two lines.
+fn flush_boundary_link(
+    grouped_lines: &[Vec<InlineFragment>],
+    width: usize,
+    lines: &mut Vec<String>,
+    buffer: &mut Vec<InlineFragment>,
+) -> bool {
+    let split = grouped_lines
+        .get(grouped_lines.len() - 2)
+        .zip(grouped_lines.last())
+        .and_then(|(previous, line)| split_boundary_link_line(previous, line, width));
+    let Some((link_line, remaining_line)) = split else {
+        return false;
+    };
+
+    for line in &grouped_lines[..grouped_lines.len() - 1] {
+        lines.push(render_line(line, false, !lines.is_empty()));
+    }
+    lines.push(render_line(&link_line, false, !lines.is_empty()));
+    *buffer = remaining_line;
+    true
+}
+
+/// Renders every grouped line except the last into `lines`.
+fn flush_all_but_last(grouped_lines: &mut [Vec<InlineFragment>], lines: &mut Vec<String>) {
+    for line in &grouped_lines[..grouped_lines.len() - 1] {
+        lines.push(render_line(line, false, !lines.is_empty()));
+    }
+}
+
+/// Fits one more fragment into `buffer`, flushing completed lines into `lines`.
+fn fit_fragment(
+    fragment: InlineFragment,
+    width: usize,
+    lines: &mut Vec<String>,
+    buffer: &mut Vec<InlineFragment>,
+) {
+    if should_flush_boundary_link(lines, buffer, &fragment, width) {
+        lines.push(render_line(buffer, false, !lines.is_empty()));
+        buffer.clear();
+        if fragment.is_whitespace() {
+            return;
+        }
+    }
+
+    buffer.push(fragment);
+    let mut grouped_lines = wrap_buffer(buffer, width);
+    if grouped_lines.len() == 1 {
+        return;
+    }
+    if flush_boundary_link(&grouped_lines, width, lines, buffer) {
+        return;
+    }
+
+    flush_all_but_last(&mut grouped_lines, lines);
+    *buffer = grouped_lines.pop().unwrap_or_default();
+}
+
 /// Wraps inline Markdown `text` while reporting classification events to
 /// `observer`.
 ///
@@ -172,41 +252,7 @@ pub(in crate::wrap) fn wrap_preserving_code_observed(
     let mut buffer: Vec<InlineFragment> = Vec::new();
 
     for fragment in fragments {
-        if should_flush_boundary_link(&lines, &buffer, &fragment, width) {
-            lines.push(render_line(&buffer, false, !lines.is_empty()));
-            buffer.clear();
-            if fragment.is_whitespace() {
-                continue;
-            }
-        }
-
-        buffer.push(fragment);
-        let wrapped = wrap_first_fit(&buffer, &[width_as_f64(width)]);
-        let raw_lines = wrapped.iter().map(|line| line.to_vec()).collect::<Vec<_>>();
-        let mut grouped_lines = merge_whitespace_only_lines(&raw_lines, width);
-        rebalance_atomic_tails(&mut grouped_lines, width);
-
-        if grouped_lines.len() == 1 {
-            continue;
-        }
-
-        if let Some((link_line, remaining_line)) = grouped_lines
-            .get(grouped_lines.len() - 2)
-            .zip(grouped_lines.last())
-            .and_then(|(previous, line)| split_boundary_link_line(previous, line, width))
-        {
-            for line in &grouped_lines[..grouped_lines.len() - 1] {
-                lines.push(render_line(line, false, !lines.is_empty()));
-            }
-            lines.push(render_line(&link_line, false, !lines.is_empty()));
-            buffer = remaining_line;
-            continue;
-        }
-
-        for line in &grouped_lines[..grouped_lines.len() - 1] {
-            lines.push(render_line(line, false, !lines.is_empty()));
-        }
-        buffer = grouped_lines.pop().unwrap_or_default();
+        fit_fragment(fragment, width, &mut lines, &mut buffer);
     }
 
     if !buffer.is_empty() {
