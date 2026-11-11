@@ -9,7 +9,8 @@
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
-use super::fragment::{FragmentKind, InlineFragment, width_as_f64};
+use super::fragment::{InlineFragment, width_as_f64};
+use crate::wrap::observer::FragmentKind;
 
 #[test]
 fn inline_fragment_new_marks_spaces_as_whitespace() {

@@ -8,7 +8,6 @@
 //! span before `determine_token_span` performs the standard punctuation and
 //! link grouping pass.
 
-use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use super::predicates::{
@@ -25,21 +24,11 @@ use super::predicates::{
     looks_like_footnote_ref,
     looks_like_link,
 };
-
-/// Marks how a grouped token span should behave during wrapping.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(in crate::wrap::inline) enum SpanKind {
-    /// Treat the span as ordinary prose.
-    General,
-    /// Treat the span as an inline code sequence.
-    Code,
-    /// Treat the span as a Markdown link or image link.
-    Link,
-    /// Treat the span as a GitHub Flavoured Markdown footnote reference.
-    FootnoteRef,
-    /// Treat the span as a bare numeric bracket reference, such as `[1]`.
-    BracketedRef,
-}
+// `SpanKind` is domain vocabulary carried on `Event` values, so it lives in the
+// observer port beside `FragmentKind`. Re-exported here so the grouping helpers
+// and their callers keep using the familiar `span_helpers::SpanKind` path.
+pub(in crate::wrap::inline) use crate::wrap::observer::SpanKind;
+use crate::wrap::observer::{Event, ObserverHandle};
 
 /// Extends a grouped span over trailing punctuation tokens and updates `width`.
 pub(in crate::wrap::inline) fn extend_punctuation(
@@ -55,38 +44,51 @@ pub(in crate::wrap::inline) fn extend_punctuation(
 }
 
 /// Returns the exclusive end of a date-like token run beginning at `start`.
-#[tracing::instrument(level = "trace", skip(tokens), ret)]
+///
+/// The matched pattern is reported through `observer` as a stable category
+/// name, so callers can tell which of the three shapes was recognized without
+/// the helper touching a logging vendor.
 pub(in crate::wrap::inline) fn try_match_date_sequence(
     tokens: &[String],
     start: usize,
+    observer: &mut ObserverHandle<'_>,
 ) -> Option<usize> {
-    if let Some(end) = match_ordinal_day_month_year(tokens, start) {
-        debug!(
+    let (end, pattern) = match_date_pattern(tokens, start)?;
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::DateSequenceMatched {
             start,
             end,
-            pattern = "ordinal_day_month_year",
-            "matched date sequence"
-        );
-        Some(end)
-    } else if let Some(end) = match_numeric_day_month_year(tokens, start) {
-        debug!(
-            start,
-            end,
-            pattern = "numeric_day_month_year",
-            "matched date sequence"
-        );
-        Some(end)
-    } else if let Some(end) = match_month_numeric_day_year(tokens, start) {
-        debug!(
-            start,
-            end,
-            pattern = "month_numeric_day_year",
-            "matched date sequence"
-        );
-        Some(end)
-    } else {
-        None
+            pattern,
+        });
     }
+    Some(end)
+}
+
+/// The date shapes recognized, paired with the stable name each reports.
+///
+/// Order is the precedence: the first matcher to accept decides the span and
+/// the reported pattern. It is significant rather than incidental, because the
+/// shapes overlap on their leading tokens.
+type DateMatcher = (fn(&[String], usize) -> Option<usize>, &'static str);
+
+/// The ordered matcher table backing [`match_date_pattern`].
+const DATE_MATCHERS: [DateMatcher; 3] = [
+    (match_ordinal_day_month_year, "ordinal_day_month_year"),
+    (match_numeric_day_month_year, "numeric_day_month_year"),
+    (match_month_numeric_day_year, "month_numeric_day_year"),
+];
+
+/// Returns the exclusive end and stable pattern name of the first date shape
+/// matching at `start`, or `None` when none of them does.
+///
+/// This is the pure predicate half of [`try_match_date_sequence`], separated so
+/// the matcher precedence is one readable table rather than a branch chain, and
+/// so the pattern name travels with the match instead of being attached by the
+/// caller.
+fn match_date_pattern(tokens: &[String], start: usize) -> Option<(usize, &'static str)> {
+    DATE_MATCHERS
+        .iter()
+        .find_map(|(matcher, pattern)| matcher(tokens, start).map(|end| (end, *pattern)))
 }
 
 /// Return the first token span representing a complete date, optionally
@@ -94,19 +96,23 @@ pub(in crate::wrap::inline) fn try_match_date_sequence(
 ///
 /// The width is calculated over every token in the date so the wrapping stage
 /// treats the date as one indivisible display unit.
-#[tracing::instrument(level = "trace", skip(tokens), ret)]
 pub(in crate::wrap::inline) fn date_token_span(
     tokens: &[String],
     start: usize,
+    observer: &mut ObserverHandle<'_>,
 ) -> Option<(usize, usize)> {
-    let date_end = try_match_date_sequence(tokens, start)?;
+    let date_end = try_match_date_sequence(tokens, start, observer)?;
     let mut date_width = tokens[start..date_end]
         .iter()
         .map(|token| UnicodeWidthStr::width(token.as_str()))
         .sum();
-    if let Some((_, footnote_end)) =
-        try_couple_footnote_reference(tokens, date_end, SpanKind::General, &mut date_width)
-    {
+    if let Some((_, footnote_end)) = try_couple_footnote_reference(
+        tokens,
+        date_end,
+        SpanKind::General,
+        &mut date_width,
+        observer,
+    ) {
         return Some((footnote_end, date_width));
     }
     Some((date_end, date_width))
@@ -184,6 +190,7 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
     kind: SpanKind,
     next_token: Option<&String>,
     following_token: Option<&String>,
+    observer: &mut ObserverHandle<'_>,
 ) -> bool {
     match (kind, next_token, following_token) {
         (SpanKind::Link, Some(next), _)
@@ -195,7 +202,7 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
         }
         (SpanKind::Code, Some(next), _) if is_trailing_punctuation_token(next) => true,
         (SpanKind::General, Some(next), Some(following))
-            if looks_like_footnote_ref(next) && following == ":" =>
+            if looks_like_footnote_ref(next, observer) && following == ":" =>
         {
             true
         }
@@ -288,9 +295,10 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
     end: usize,
     kind: SpanKind,
     width: &mut usize,
+    observer: &mut ObserverHandle<'_>,
 ) -> Option<(SpanKind, usize)> {
     let token = tokens.get(end)?;
-    if !looks_like_footnote_ref(token) {
+    if !looks_like_footnote_ref(token, observer) {
         return None;
     }
 
@@ -330,4 +338,4 @@ mod span_helper_props;
 
 #[cfg(test)]
 #[path = "span_helper_tracing_tests.rs"]
-mod tracing_tests;
+mod span_helper_tracing_tests;

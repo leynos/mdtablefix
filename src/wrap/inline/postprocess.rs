@@ -11,9 +11,8 @@
 //! historical whitespace behaviour and keep eligible atomic fragments attached
 //! to the line where they fit.
 
-use tracing::trace;
-
-use super::fragment::{FragmentKind, InlineFragment};
+use super::fragment::InlineFragment;
+use crate::wrap::observer::FragmentKind;
 
 /// Returns whether every fragment on the line is whitespace-only.
 fn is_whitespace_only_line(line: &[InlineFragment]) -> bool {
@@ -89,45 +88,18 @@ fn inline_code_tail_carry_fits(
     width: usize,
 ) -> bool {
     let Some(next_content_line) = next_content_line else {
-        trace!(
-            fits = true,
-            reason = "no following content line",
-            target_width = width,
-            "checked inline-code tail carry width"
-        );
         return true;
     };
     let Some(previous_line) = merged.last() else {
-        trace!(
-            fits = true,
-            reason = "no previous merged line",
-            target_width = width,
-            "checked inline-code tail carry width"
-        );
         return true;
     };
     let Some(previous_tail) = previous_line.last() else {
-        trace!(
-            fits = true,
-            reason = "previous merged line is empty",
-            target_width = width,
-            "checked inline-code tail carry width"
-        );
         return true;
     };
 
     let next_line_width = line_width(next_content_line);
     let projected_width = previous_tail.width + 1 + next_line_width;
-    let fits = projected_width <= width;
-    trace!(
-        fits,
-        projected_width,
-        target_width = width,
-        previous_tail_width = previous_tail.width,
-        next_line_width,
-        "checked inline-code tail carry width"
-    );
-    fits
+    projected_width <= width
 }
 
 /// Merges whitespace-only wrap artefacts into neighbouring content lines.
@@ -145,11 +117,6 @@ pub(super) fn merge_whitespace_only_lines(
 
     for (index, mut line) in lines.iter().cloned().enumerate() {
         if is_whitespace_only_line(&line) {
-            trace!(
-                index,
-                fragment_count = line.len(),
-                "normalizing whitespace-only wrapped line"
-            );
             let next_starts_atomic = lines
                 .get(index + 1)
                 .is_some_and(|next_line| line_starts_with_atomic(next_line));

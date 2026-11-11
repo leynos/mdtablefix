@@ -11,18 +11,35 @@
 use tracing::trace;
 
 mod block;
+
 mod blockquote;
+
 mod continuation;
+
 mod fence;
+
 mod inline;
+
 mod link_reference;
+
+mod observer;
+
 mod paragraph;
+
 mod passthrough;
+
 mod pending;
+
 mod prefix;
+
 mod tokenize;
+
+mod tracing_adapter;
+
 #[cfg(test)]
 pub(crate) mod tracing_snapshot_support;
+
+mod wiring;
 pub(crate) use block::{BlockKind, classify_block, classify_residual_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
@@ -74,6 +91,9 @@ pub use tokenize::tokenize_markdown;
 #[cfg(test)]
 pub(crate) use tokenize::{continuation_begins_with_closing_fence, has_unclosed_code_span};
 pub(crate) use tokenize::{has_odd_backslash_escape_bytes, link_or_image_span};
+
+// Permit GFM task list markers with flexible spacing and missing post-marker
+// spaces in Markdown.
 
 /// Split a source line into its original spelling, inner content, and block
 /// context before any paragraph state is changed.
@@ -320,3 +340,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "bench-internals")]
+#[doc(hidden)]
+pub mod bench_internals;

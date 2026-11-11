@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Inline-wrapping `tracing` events no longer carry document text. The
+  `fragment classified` event now reports `token_length` instead of a truncated
+  `token` snippet. See the
+  [0.7.0 migration guide](docs/v0-7-0-migration-guide.md).
+  ([#309](https://github.com/leynos/mdtablefix/issues/309))
+
 ## v0.6.1
 
 - Fixed: `--renumber` no longer ends an ordered list at a heading or thematic

@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 use rstest::rstest;
 
 use super::{
-    super::inline::{attach_punctuation_to_previous_line, wrap_preserving_code},
+    super::{inline::attach_punctuation_to_previous_line, wiring::wrap_preserving_code},
     TRAILING_PUNCTUATION_CHARS,
 };
 
