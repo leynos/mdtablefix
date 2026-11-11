@@ -1126,7 +1126,9 @@ longer reaches a subscriber through this event. A consumer that was reading
 content is available, only the count.
 
 See [Observability](developers-guide.md#observability) in the developer's guide
-for the full event and field reference; this section does not repeat it.
+for the full event and field reference; this section does not repeat it. The
+[0.7.0 migration guide](v0-7-0-migration-guide.md) covers the consumer-visible
+change and the action a log consumer must take.
 
 ### `format_breaks` return type
 
