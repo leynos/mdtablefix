@@ -16,6 +16,23 @@
 //! - `report` for line-delta reporting.
 //! - `io` for file helpers, the document boundary, and line-ending preservation.
 
+/// Creates a lazily initialized regular expression.
+///
+/// The pattern is compiled on first access. The expansion refers to
+/// `regex::Regex` at the call site, so the invoking crate must declare `regex`
+/// as a direct dependency. The message is passed to `expect` if the pattern is
+/// invalid.
+///
+/// # Examples
+///
+/// ```
+/// use std::sync::LazyLock;
+///
+/// static WORD: LazyLock<regex::Regex> =
+///     mdtablefix::lazy_regex!(r"[[:alpha:]]+", "word pattern should compile");
+///
+/// assert!(WORD.is_match("table"));
+/// ```
 #[macro_export]
 macro_rules! lazy_regex {
     ($re:expr, $msg:expr $(,)?) => {
@@ -40,6 +57,28 @@ pub mod table;
 pub mod textproc;
 pub mod wrap;
 
+/// Deprecated compatibility wrapper for converting HTML tables to Markdown.
+///
+/// Use [`convert_html_tables`] for new code. It leaves input outside HTML
+/// table blocks unchanged and converts each table block to Markdown.
+///
+/// # Migration example
+///
+/// ```
+/// use mdtablefix::convert_html_tables;
+///
+/// let html = vec![
+///     "<table>".to_string(),
+///     "<tr><th>Header</th></tr>".to_string(),
+///     "<tr><td>Cell</td></tr>".to_string(),
+///     "</table>".to_string(),
+/// ];
+/// let markdown = convert_html_tables(&html);
+///
+/// assert_eq!(markdown.first().map(String::as_str), Some("| Header |"));
+/// assert_eq!(markdown.last().map(String::as_str), Some("| Cell   |"));
+/// assert!(markdown.iter().any(|line| line.starts_with("| ---")));
+/// ```
 #[deprecated(note = "this function is legacy; use `convert_html_tables` instead")]
 #[must_use]
 pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
