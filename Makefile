@@ -21,8 +21,10 @@ RG ?= rg
 PROVER_TOOLS ?= uvx --from git+https://github.com/leynos/rust-prover-tools@$(shell cat tools/rust-prover-tools/REF) prover-tools
 # The pinned Verus release uses the solver at `VERUS_Z3_PATH`, which is where
 # `install-prover-tools` in CI and `make verus-install` locally both put it.
-# The proof targets install nothing: CI installs through the shared action, and
-# a developer runs `make verus-install` once.
+# The proof targets install no prover: CI installs through the shared action,
+# and a developer runs `make verus-install` once. `verus run` still ensures the
+# Rust toolchain Verus builds with, through `rustup`, which no installer
+# provisions.
 #
 # The path is exported rather than written into `VERUS_RUN`: the mutation gates
 # expand `VERUS_RUN` by word splitting, which would keep any quotes around it.

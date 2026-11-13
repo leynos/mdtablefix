@@ -99,9 +99,10 @@ environment.
 
 Run `make verus-install` once to resolve the pinned runner, install the
 matching Verus release, Rust toolchain and Z3 solver, and populate the
-repository's `.verus` directory. The proof targets install nothing themselves,
-and `make` exports `VERUS_Z3_PATH` (default `.verus/z3/z3`) so Verus finds the
-solver. `make verus` then verifies `verus/lib.rs`, the proof entry point for
+repository's `.verus` directory. The proof targets install no prover themselves
+(`verus run` still ensures the Rust toolchain through `rustup`), and `make`
+exports `VERUS_Z3_PATH` (default `.verus/z3/z3`) so Verus finds the solver.
+`make verus` then verifies `verus/lib.rs`, the proof entry point for
 production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
 deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.

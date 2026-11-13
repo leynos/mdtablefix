@@ -30,7 +30,8 @@ jobs:
       # The shared action installs the Verus release named in
       # `tools/verus/VERSION`, and the Z3 solver beside it, through the pinned
       # rust-prover-tools. It checks the digest in `tools/verus/SHA256SUMS` and
-      # caches the verified archives. The Make targets below install nothing.
+      # caches the verified archives. The Make targets below install no prover; the
+      # runner still ensures the Rust toolchain Verus builds with, through rustup.
       - name: Install Verus
         uses: leynos/shared-actions/.github/actions/install-prover-tools@a0519a1476ab769ca7b8badfa794f3751213f1ea
         with:
