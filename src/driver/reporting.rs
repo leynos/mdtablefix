@@ -87,7 +87,6 @@ pub enum ExitStatus {
 
 impl ExitStatus {
     /// The process exit code for this status.
-    #[must_use]
     pub fn code(self) -> std::process::ExitCode {
         std::process::ExitCode::from(match self {
             Self::Success => 0,

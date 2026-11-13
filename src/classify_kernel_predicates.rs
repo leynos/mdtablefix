@@ -238,7 +238,7 @@ ensures(result => result == crate::spec_list_item(chars@, start as int));
     }
     match chars[first] {
         '-' | '*' | '+' => matches!(char_at(chars, first + 1), Some(' ' | '\t')),
-        '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
+        '0'..='9' => {
             ordered_list_item(chars, first + 1, end)
         }
         _ => false,
@@ -368,7 +368,7 @@ ensures(result => result == crate::spec_ordered_list_item(chars@, start as int, 
     while cursor < end {
         match chars[cursor] {
             '.' | ')' => return matches!(char_at(chars, cursor + 1), Some(' ' | '\t')),
-            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' if digit_count < 9 => {
+            '0'..='9' if digit_count < 9 => {
                 digit_count += 1;
                 cursor += 1;
             }

@@ -113,7 +113,7 @@ fn leading_indent(line: &str) -> usize {
     let indent_end = line
         .char_indices()
         .find(|&(_, c)| !c.is_whitespace())
-        .map_or_else(|| line.len(), |(i, _)| i);
+        .map_or(line.len(), |(i, _)| i);
     indent_len(&line[..indent_end])
 }
 

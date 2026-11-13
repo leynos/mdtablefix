@@ -56,7 +56,7 @@ fn wrap_text_handles_date_wider_than_width() {
     // exercises the long-atomic-token fallback path rather than normal fitting.
     let output = wrap_text(&input, 10);
 
-    assert!(!output.is_empty());
+    assert_ne!(output, [] as [std::string::String; 0]);
     assert!(
         output
             .iter()
@@ -67,7 +67,7 @@ fn wrap_text_handles_date_wider_than_width() {
     let input_with_following_punct = lines_vec!["On 25th December 2025, we met."];
     let output_with_following_punct = wrap_text(&input_with_following_punct, 10);
 
-    assert!(!output_with_following_punct.is_empty());
+    assert_ne!(output_with_following_punct, [] as [std::string::String; 0]);
     assert!(
         output_with_following_punct
             .iter()
@@ -79,7 +79,7 @@ fn wrap_text_handles_date_wider_than_width() {
     let input_at_line_start = lines_vec!["25th December 2025. We met again."];
     let output_at_line_start = wrap_text(&input_at_line_start, 10);
 
-    assert!(!output_at_line_start.is_empty());
+    assert_ne!(output_at_line_start, [] as [std::string::String; 0]);
     assert!(
         output_at_line_start
             .iter()

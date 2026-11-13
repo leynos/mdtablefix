@@ -268,7 +268,7 @@ fn quoted_body_replaces_historical_container_role(#[case] line: &str, #[case] ex
 #[case::non_breaking_space("\u{a0}")]
 #[case::vertical_tab("\u{b}")]
 fn markdown_blank_is_narrower_than_historical_unicode_trim(#[case] line: &str) {
-    assert!(line.trim().is_empty());
+    assert_eq!(line.trim(), "");
     assert_eq!(
         ReferenceState::default().observe(line),
         LineClass::ParagraphText

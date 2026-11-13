@@ -70,7 +70,10 @@ pub mod wrap;
 /// let markdown = html_table_to_markdown(&html);
 /// assert!(markdown.iter().any(|line| line.contains('A')));
 /// ```
-#[deprecated(note = "this function is legacy; use `convert_html_tables` instead")]
+#[deprecated(
+    since = "0.1.0",
+    note = "this function is legacy; use `convert_html_tables` instead"
+)]
 #[must_use]
 pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     html::html_table_to_markdown(lines)

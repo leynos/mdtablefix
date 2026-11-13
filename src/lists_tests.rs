@@ -36,12 +36,12 @@ fn list_state_end_lists_at_zero_clears_indent_stack_and_counters() {
     let _ = state.next_number(0);
     let _ = state.next_number(0);
     let _ = state.next_number(4);
-    assert!(!state.indent_stack.is_empty());
+    assert_ne!(state.indent_stack, [] as [usize; 0]);
     assert!(!state.counters.is_empty());
 
     state.end_lists_at(0);
 
-    assert!(state.indent_stack.is_empty());
+    assert_eq!(state.indent_stack, [] as [usize; 0]);
     assert!(state.counters.is_empty());
 }
 

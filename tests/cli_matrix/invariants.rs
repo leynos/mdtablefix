@@ -201,7 +201,10 @@ mod tests {
 
     #[test]
     fn unordered_fixture_markers_accepts_numbered_flat_list() {
-        assert!(unordered_fixture_markers("1. a\n2. b\n3. c").is_empty());
+        assert_eq!(
+            unordered_fixture_markers("1. a\n2. b\n3. c"),
+            [] as [std::string::String; 0]
+        );
     }
 
     #[test]
@@ -218,7 +221,10 @@ mod tests {
     fn unordered_fixture_markers_tracks_nested_counters_independently() {
         let fixture = "1. outer\n   1. inner\n   2. inner2\n2. outer2";
 
-        assert!(unordered_fixture_markers(fixture).is_empty());
+        assert_eq!(
+            unordered_fixture_markers(fixture),
+            [] as [std::string::String; 0]
+        );
     }
 
     #[test]

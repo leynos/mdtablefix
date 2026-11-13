@@ -95,13 +95,13 @@ mod tests {
     #[case::indented_closer_not_recognized(PrefixEmptyCase { lines: s(&["---", "title: Example", "  ---  ", "# Heading"]), body_is_empty: false, check_body_equality: false })]
     fn prefix_empty_cases(#[case] case: PrefixEmptyCase) {
         let (prefix, body) = split_leading_yaml_frontmatter(&case.lines);
-        assert!(prefix.is_empty());
+        assert_eq!(prefix, [] as [String; 0]);
         if case.body_is_empty {
-            assert!(body.is_empty());
+            assert_eq!(body, [] as [String; 0]);
         } else if case.check_body_equality {
             assert_eq!(body, &case.lines);
         } else {
-            assert!(!body.is_empty());
+            assert_ne!(body, [] as [String; 0]);
         }
     }
 
