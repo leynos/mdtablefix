@@ -847,14 +847,14 @@ Hard invariants. Violating one requires escalation, not a workaround.
   review. Date/Author: 2026-09-09.
 
 - Decision: defer atomic write-then-rename for `--in-place` to GitHub issue
-  #465 rather than including it here.
-  Rationale: design review identified that `--in-place` truncates before
-  writing, so a kill or a full disk leaves files empty, and that this plan
-  already rewrites the seam where the fix belongs. `@leynos` directed that it
-  be raised separately, keeping this plan scoped to the reporting modes and the
-  two document-boundary fixes that `--check` correctness depends upon. Sequence
-  #465 immediately after this work so the serialization path is edited once.
-  Date/Author: 2026-09-09, on explicit instruction from `@leynos`.
+  #465 rather than including it here. Rationale: design review identified that
+  `--in-place` truncates before writing, so a kill or a full disk leaves files
+  empty, and that this plan already rewrites the seam where the fix belongs.
+  `@leynos` directed that it be raised separately, keeping this plan scoped to
+  the reporting modes and the two document-boundary fixes that `--check`
+  correctness depends upon. Sequence #465 immediately after this work so the
+  serialization path is edited once. Date/Author: 2026-09-09, on explicit
+  instruction from `@leynos`.
 
 - Decision: accept whole-file majority line-ending detection, including its
   effect on fenced code blocks. Rationale: design review noted that a
@@ -943,7 +943,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
   re-syncable. `docs/netsuke-design.md` and `docs/ortho-config-users-guide.md`
   are also absent but not applicable: this repository parses arguments with
   plain `clap`, not `ortho-config`, and adopting the Netsuke lint baseline is
-  tracked separately as issue #441. Date/Author: 2026-09-09.
+  tracked separately as issue #441. Date/Author: 2026-09-09. Later note: the
+  `ortho-config` half of that reasoning no longer holds. The
+  [`ortho_config` v0.10.0 adoption plan](issue-666-adopt-ortho-config-v0-10-0-for-the-mdtablefix-cli.md)
+  imports both guides and adopts the framework for the binary's settings, with
+  the design recorded in [ADR 0014](../adrs/0014-configuration-layering.md);
+  the Netsuke half and issue #441 are unaffected.
 
 - Decision: raise the two idempotence defects as GitHub issue #468, with the
   reproduction corpus attached and an acceptance bar of corpus **and** property
@@ -989,12 +994,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
   2026-09-11.
 
 - Decision: treat the atomic `--in-place` write as discharged by pull request
-  #467 (issue #465) rather than implementing it here.
-  Rationale: this plan had deliberately deferred write-then-rename to issue
-  #465 and recorded it as a high-severity risk. #467 landed it as
-  `replace_file`, which is what `src/main.rs` and this branch's
-  document-boundary work now call, so `EP-M3` inherits the guarantee instead of
-  restating it. Date/Author: 2026-09-11.
+  #467 (issue #465) rather than implementing it here. Rationale: this plan had
+  deliberately deferred write-then-rename to issue #465 and recorded it as a
+  high-severity risk. #467 landed it as `replace_file`, which is what
+  `src/main.rs` and this branch's document-boundary work now call, so `EP-M3`
+  inherits the guarantee instead of restating it. Date/Author: 2026-09-11.
 
 - Decision: keep the idempotence cases in `tests/check_properties.rs` but scope
   them to the document boundary, leaving the general suites to
@@ -1100,10 +1104,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
   outcome but is a change to `src/headings.rs` (or its call site) that this
   plan's `Constraints` place out of scope, and the established precedent for
   exactly this situation — the `EP-M2` classes, which became issue #468 and
-  pull request
-  #470 — is a separate issue and a separate change. So the milestone is deferred,
-  the gap is recorded rather than skipped, and the plan does not claim a
-  mutation result it does not have. Date/Author: 2026-09-11.
+  pull request #470 — is a separate issue and a separate change. So the
+  milestone is deferred, the gap is recorded rather than skipped, and the plan
+  does not claim a mutation result it does not have. Date/Author: 2026-09-11.
 
 - Decision: the new defect class is escalated as GitHub issue #474, with a
   reproduction corpus and a non-vacuity requirement, in the shape issue #468
@@ -4276,8 +4279,11 @@ Signposted documents absent here and not applicable:
 
 - `docs/netsuke-design.md`: no Netsuke-specific policy is adopted. Aligning
   this repository with the Netsuke lint baseline is issue #441.
-- `docs/ortho-config-users-guide.md`: this repository uses plain `clap`, not
-  `ortho-config`, and this plan does not change that.
+- `docs/ortho-config-users-guide.md`: this repository used plain `clap`, not
+  `ortho-config`, and this plan did not change that. A later plan has since
+  adopted the framework and vendored both guides; see
+  [the adoption plan](issue-666-adopt-ortho-config-v0-10-0-for-the-mdtablefix-cli.md)
+  and [ADR 0014](../adrs/0014-configuration-layering.md).
 
 Skills to load:
 
