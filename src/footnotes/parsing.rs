@@ -70,9 +70,9 @@ pub(super) fn parse_definition(line: &str) -> Option<DefinitionParts<'_>> {
 ///
 /// Returns `true` when the first character of `line` is whitespace, marking
 /// indented body text that belongs to the definition above it. Whitespace-only
-/// lines therefore qualify as continuations too. Only an empty `line`, which
-/// has no leading character, returns `false`; block scanners handle those empty
-/// lines separately because they can separate adjacent definitions.
+/// lines therefore qualify as continuations too. Returns `false` when `line`
+/// is empty or its first character is not whitespace; block scanners handle
+/// empty lines separately because they can separate adjacent definitions.
 ///
 /// # Examples
 ///
