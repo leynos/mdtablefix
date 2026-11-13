@@ -2,6 +2,7 @@
 //! whitespace normalization, and basic overflow guards.
 
 use mdtablefix::wrap::{Token, tokenize_markdown, wrap_text};
+use proptest::prelude::*;
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
@@ -24,6 +25,24 @@ use unicode_width::UnicodeWidthStr;
 fn wrap_text_joins_cross_line_code_spans(#[case] input: Vec<String>, #[case] expected: &str) {
     let rendered = wrap_text(&input, 80).join("\n");
     assert!(rendered.contains(expected));
+}
+
+#[test]
+fn wrap_text_preserves_unicode_code_span_authored_break_as_a_fixed_point() {
+    let input = lines_vec!["é `abcd", "efgh` x"];
+    let wrapped = wrap_text(&input, 7);
+
+    // The authored break *inside* the overlong span survives as the seam
+    // between "`abcd" and "efgh`". The prose on either side does not stay
+    // attached, because re-attaching it would exceed the width; the
+    // documented contract retains span boundaries, not surrounding prose.
+    assert_eq!(wrapped, lines_vec!["é", "`abcd", "efgh`", "x"]);
+    assert!(
+        wrapped
+            .iter()
+            .all(|line| UnicodeWidthStr::width(line.as_str()) <= 7)
+    );
+    assert_eq!(wrap_text(&wrapped, 7), wrapped);
 }
 
 #[rstest]
@@ -323,4 +342,57 @@ fn wrap_text_does_not_overflow_after_tail_rebalancing() {
             .iter()
             .all(|line| UnicodeWidthStr::width(line.as_str()) <= 6)
     );
+}
+
+proptest! {
+    /// A wrapped overlong Unicode code span must never come back changed by a
+    /// second pass, must always respect the requested width, and must keep the
+    /// authored break *inside* the span as its seam.
+    ///
+    /// The claim is deliberately narrower than "the whole input is a fixed
+    /// point". `wrap_text` retains authored boundaries inside an overlong span,
+    /// but re-attaches surrounding prose only when it still fits; asserting the
+    /// wider claim fails for every input where the prose cannot be re-attached.
+    #[test]
+    fn prop_wrap_text_preserves_unicode_overlong_code_span_boundaries(
+        left in "\\p{L}{1,8}",
+        right in "\\p{L}{1,8}",
+    ) {
+        let input = vec![
+            format!("é `é{left}"),
+            format!("界{right}` x"),
+        ];
+        let width = input
+            .iter()
+            .map(|line| UnicodeWidthStr::width(line.as_str()))
+            .max()
+            .expect("the generated source always has two lines");
+        let code_span = format!("`é{left} 界{right}`");
+        let code_span_width = UnicodeWidthStr::width(code_span.as_str());
+
+        prop_assert!(
+            code_span_width > width,
+            "generated code span width {code_span_width} must exceed line width {width}"
+        );
+
+        let output = wrap_text(&input, width);
+        prop_assert!(
+            output
+                .iter()
+                .all(|line| UnicodeWidthStr::width(line.as_str()) <= width),
+            "output must respect width {width}: {output:?}"
+        );
+        prop_assert_eq!(wrap_text(&output, width), output.clone());
+
+        // The authored break is the boundary between "`é{left}" and
+        // "界{right}`". It survives as a line seam even though the prose around
+        // it is re-wrapped independently.
+        let first_piece = format!("`é{left}");
+        let second_piece = format!("界{right}`");
+        let seam = output.iter().position(|line| line == &first_piece);
+        prop_assert!(
+            matches!(seam, Some(index) if output.get(index + 1) == Some(&second_piece)),
+            "authored span seam {first_piece:?}/{second_piece:?} must be adjacent in {output:?}"
+        );
+    }
 }

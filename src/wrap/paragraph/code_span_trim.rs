@@ -182,4 +182,15 @@ mod tests {
             Cow::Borrowed("é `foo` 末"),
         );
     }
+
+    #[test]
+    fn borrows_original_text_when_synthetic_offset_splits_unicode_scalar() {
+        let text = "` é`";
+        let trimmed = trim_code_span_edge_spaces(text, &[3]);
+
+        assert!(matches!(
+            trimmed,
+            Cow::Borrowed(original) if std::ptr::eq(original, text)
+        ));
+    }
 }

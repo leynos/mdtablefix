@@ -350,29 +350,22 @@ mod tests {
         reattach_prose,
     };
 
-    #[test]
-    fn preserves_byte_boundary_after_multibyte_code_content() {
-        let segments = [("`éab".to_owned(), false), ("cd`".to_owned(), false)];
+    #[rstest::rstest]
+    #[case::after_code_content("`éab", "cd`", 5)]
+    #[case::immediately_after_code_content("`é", "abc`", 3)]
+    fn preserves_multibyte_code_span_source_boundaries(
+        #[case] first: &str,
+        #[case] second: &str,
+        #[case] expected_boundary: usize,
+    ) {
+        let segments = [(first.to_owned(), false), (second.to_owned(), false)];
         let (joined, boundaries) = join_with_boundaries(&segments);
 
-        assert_eq!(joined, "`éab cd`");
-        assert_eq!(boundaries, [5]);
+        assert_eq!(joined, format!("{first} {second}"));
+        assert_eq!(boundaries, [expected_boundary]);
         assert_eq!(
             conforming_source_lines_for_overlong_span(&segments, "", 4),
-            Some(vec!["`éab".to_owned(), "cd`".to_owned()]),
-        );
-    }
-
-    #[test]
-    fn preserves_boundary_immediately_after_multibyte_code_content() {
-        let segments = [("`é".to_owned(), false), ("abc`".to_owned(), false)];
-        let (joined, boundaries) = join_with_boundaries(&segments);
-
-        assert_eq!(joined, "`é abc`");
-        assert_eq!(boundaries, [3]);
-        assert_eq!(
-            conforming_source_lines_for_overlong_span(&segments, "", 4),
-            Some(vec!["`é".to_owned(), "abc`".to_owned()]),
+            Some(vec![first.to_owned(), second.to_owned()]),
         );
     }
 
@@ -398,3 +391,7 @@ mod tests {
         assert_eq!(trailing, ["`code", "span`", "after"]);
     }
 }
+
+#[cfg(test)]
+#[path = "spanning_code_boundary_tests.rs"]
+mod boundary_tests;
