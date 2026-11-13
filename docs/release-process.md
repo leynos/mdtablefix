@@ -25,7 +25,11 @@ that the tag's version, without the leading `v`, matches the `Cargo.toml`
 Maintainers can also dispatch the workflow manually with an existing release
 tag. This backfill path runs the current workflow definition but checks out and
 builds the tagged source. Use it when a historical release is missing an asset;
-it must not be used to rebuild a tag from different source.
+it must not be used to rebuild a tag from different source. The backfill builds
+with the nightly that the tagged tree's `rust-toolchain.toml` pins, so a tag
+released before 2026-11-13 (built with the 1.89.0 stable toolchain) is rebuilt
+with its own, different pin. Compare a rebuilt asset against the published one
+before relying on it, and expect a byte difference for such a tag.
 
 Runs for the same release tag are serialized without cancellation, while runs
 for different tags remain independent. Third-party actions in the release jobs
