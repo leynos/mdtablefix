@@ -69,16 +69,17 @@ pub(super) fn parse_definition(line: &str) -> Option<DefinitionParts<'_>> {
 /// Reports whether `line` can continue an indented footnote definition.
 ///
 /// Returns `true` when the first character of `line` is whitespace, marking
-/// indented body text that belongs to the definition above it. An empty `line`
-/// has no leading character and so returns `false`; blank lines are handled
-/// separately by block scanners because they can separate adjacent
-/// definitions.
+/// indented body text that belongs to the definition above it. Whitespace-only
+/// lines therefore qualify as continuations too. Only an empty `line`, which
+/// has no leading character, returns `false`; block scanners handle those empty
+/// lines separately because they can separate adjacent definitions.
 ///
 /// # Examples
 ///
 /// ```text
 /// "    continued text" => true   // leading whitespace
 /// "\tcontinued text"   => true   // leading tab
+/// "   "                => true   // whitespace-only
 /// "[^1]: definition"   => false  // starts a new definition
 /// ""                   => false  // no leading character
 /// ```
