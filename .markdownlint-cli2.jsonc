@@ -2,6 +2,9 @@
   "config": {
     "MD004": { "style": "dash" },
     "MD010": { "code_blocks": false },
+    // A changelog repeats `### Added`/`### Changed` under each release heading.
+    // Siblings-only still catches a genuine duplicate within one release.
+    "MD024": { "siblings_only": true },
     "MD013": {
       "line_length": 80,
       "code_block_line_length": 120,

@@ -7,6 +7,7 @@
 //! whitespace fragments as the only places `textwrap` can break.
 
 use super::fragment::InlineFragment;
+use crate::wrap::observer::ObserverHandle;
 
 /// Joins fragments that meet with no whitespace between them.
 ///
@@ -17,7 +18,13 @@ use super::fragment::InlineFragment;
 /// wrapper as two fragments with nothing between them. Merging every touching
 /// pair here makes the whitespace fragments the only break opportunities, so
 /// wrapping can never insert a space into the rendered text.
-pub(super) fn join_touching_fragments(fragments: Vec<InlineFragment>) -> Vec<InlineFragment> {
+///
+/// A merged run is a new fragment, so its classification is reported to
+/// `observer` exactly as grouping reports the fragments it built.
+pub(super) fn join_touching_fragments(
+    fragments: Vec<InlineFragment>,
+    observer: &mut ObserverHandle<'_>,
+) -> Vec<InlineFragment> {
     let mut runs: Vec<Vec<InlineFragment>> = Vec::new();
     for fragment in fragments {
         match runs.last_mut() {
@@ -31,19 +38,22 @@ pub(super) fn join_touching_fragments(fragments: Vec<InlineFragment>) -> Vec<Inl
             _ => runs.push(vec![fragment]),
         }
     }
-    runs.into_iter().map(merge_run).collect()
+    runs.into_iter()
+        .map(|run| merge_run(run, observer))
+        .collect()
 }
 
 /// Returns one fragment for a run, concatenating and classifying it once.
 ///
 /// A run of one keeps its fragment as grouping built it; a longer run is
 /// joined into a single buffer so a long whitespace-free run costs linear time.
-fn merge_run(run: Vec<InlineFragment>) -> InlineFragment {
+fn merge_run(run: Vec<InlineFragment>, observer: &mut ObserverHandle<'_>) -> InlineFragment {
     match <[InlineFragment; 1]>::try_from(run) {
         Ok([only]) => only,
-        Err(run) => {
-            InlineFragment::new(run.iter().map(|fragment| fragment.text.as_str()).collect())
-        }
+        Err(run) => InlineFragment::new_observed(
+            run.iter().map(|fragment| fragment.text.as_str()).collect(),
+            observer,
+        ),
     }
 }
 

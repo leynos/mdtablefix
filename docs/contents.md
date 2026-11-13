@@ -7,6 +7,8 @@
 
 - [User's guide](users-guide.md): Command-line usage, formatting behaviour,
   options, and examples for people using `mdtablefix`.
+- [Migrating to 0.7.0](v0-7-0-migration-guide.md): Behaviour changes in the
+  0.7.0 release and the actions they require.
 - [Migrating to 0.6.0](v0-6-0-migration-guide.md): Behaviour changes in the
   0.6.0 release and the actions they require.
 - [Developer's guide](developers-guide.md): Build, test, release,
@@ -59,6 +61,9 @@
 - [Configuration layering](adrs/0014-configuration-layering.md): Accepted
   decision adopting `ortho_config` v0.10.0 for the command-line interface's
   settings, file discovery, environment prefix, and precedence order.
+- [Observer boundary for tracing](adrs/0015-observer-boundary-for-tracing.md):
+  Accepted decision covering the `Observer` port and `TracingObserver` adapter
+  for inline-wrapping domain diagnostics.
 
 ## Reference material
 

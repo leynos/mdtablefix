@@ -11,18 +11,40 @@
 use tracing::trace;
 
 mod block;
+
 mod blockquote;
+
 mod continuation;
+
 mod fence;
+
 mod inline;
+
 mod link_reference;
+
+mod metrics;
+
+#[cfg(test)]
+mod metrics_tests;
+
+mod observer;
+
 mod paragraph;
+
 mod passthrough;
+
 mod pending;
+
 mod prefix;
+
 mod tokenize;
+
+mod tracing_adapter;
+
 #[cfg(test)]
 pub(crate) mod tracing_snapshot_support;
+
+mod wiring;
 pub(crate) use block::{BlockKind, classify_block, classify_residual_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
@@ -74,6 +96,9 @@ pub use tokenize::tokenize_markdown;
 #[cfg(test)]
 pub(crate) use tokenize::{continuation_begins_with_closing_fence, has_unclosed_code_span};
 pub(crate) use tokenize::{has_odd_backslash_escape_bytes, link_or_image_span};
+
+// Permit GFM task list markers with flexible spacing and missing post-marker
+// spaces in Markdown.
 
 /// Split a source line into its original spelling, inner content, and block
 /// context before any paragraph state is changed.
@@ -261,8 +286,23 @@ fn dispatch_continuation(
 }
 
 /// Wrap text lines to the given width.
+///
+/// The wrapping work is timed and the invocation counted so a host that
+/// installs a recorder can see how much of a run the wrapping path accounts
+/// for. The duration covers the wrapping itself; choosing the outcome label and
+/// recording the metrics sit outside the sample. The metrics are emitted from
+/// this boundary rather than from the domain modules, which stay free of
+/// vendor-specific instrumentation.
 #[must_use]
 pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
+    let started = std::time::Instant::now();
+    let out = wrap_lines(lines, width);
+    metrics::record_wrap(lines, &out, started.elapsed());
+    out
+}
+
+/// Performs the wrapping [`wrap_text`] reports the outcome of.
+fn wrap_lines(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut state = ParagraphState::default();
     let mut writer = ParagraphWriter::new(&mut out, width);
@@ -320,3 +360,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "bench-internals")]
+#[doc(hidden)]
+pub mod bench_internals;

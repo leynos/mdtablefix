@@ -13,7 +13,9 @@
 //! issue `#329`.
 
 mod link_span;
+
 mod parsing;
+
 mod scanning;
 
 pub(crate) use link_span::link_or_image_span;
@@ -79,54 +81,106 @@ pub enum Token<'a> {
 ///     vec!["foo", "  ", "bar", "\t", "baz", "   ", "`qux`"]
 /// );
 /// ```
+#[cfg(test)]
 pub(super) fn segment_inline(text: &str) -> Vec<String> {
+    let mut observer = crate::wrap::observer::NoOpObserver;
+    segment_inline_observed(text, &mut Some(&mut observer))
+}
+
+/// Segments `text` into inline tokens, reporting parsing events.
+///
+/// Identical to [`segment_inline`] except that link, image, and footnote
+/// parsing outcomes are reported to `observer`; with a `None` handle the
+/// segmentation is the same and nothing is emitted.
+pub(super) fn segment_inline_observed(
+    text: &str,
+    observer: &mut crate::wrap::observer::ObserverHandle<'_>,
+) -> Vec<String> {
     let mut tokens = Vec::new();
-    let bytes = text.as_bytes();
     let mut i = 0;
     while i < text.len() {
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        if ch.is_whitespace() {
-            let start = i;
-            i = scan_while(text, i, char::is_whitespace);
-            tokens.push(collect_range(text, start, i));
-            continue;
-        }
-
-        if ch == '`' {
-            if has_odd_backslash_escape_bytes(bytes, i) {
-                append_escaped_backtick(&mut tokens);
-                i += ch.len_utf8();
-                continue;
-            }
-
-            let (token, new_i) = handle_backtick_fence(text, i);
-            let (token, new_i) = extend_closed_code_token(text, i, token, new_i);
-            tokens.push(token);
-            i = new_i;
-            continue;
-        }
-
-        let looks_like_image = looks_like_image_start(text, i, ch);
-        let is_escaped = has_odd_backslash_escape_bytes(bytes, i);
-        if (ch == '[' || looks_like_image) && !is_escaped {
-            let (tok, mut new_i) = parse_link_or_image(text, i);
-            tokens.push(tok);
-            let punct_start = new_i;
-            new_i = scan_trailing_punctuation_end(text, new_i);
-            if new_i > punct_start {
-                tokens.push(collect_range(text, punct_start, new_i));
-            }
-            i = new_i;
-            continue;
-        }
-
-        let start = i;
-        i = scan_plain_text_end(text, bytes, i);
-        tokens.push(collect_range(text, start, i));
+        i = push_token_at(text, i, &mut tokens, observer);
     }
     tokens
+}
+
+/// Appends the whitespace run starting at `i` and returns the next offset.
+fn push_whitespace_run(text: &str, i: usize, tokens: &mut Vec<String>) -> usize {
+    let end = scan_while(text, i, char::is_whitespace);
+    tokens.push(collect_range(text, i, end));
+    end
+}
+
+/// Appends the backtick-delimited token starting at `i`.
+///
+/// `ch` is the backtick at `i`, already decoded by the caller.
+fn push_backtick_token(text: &str, i: usize, ch: char, tokens: &mut Vec<String>) -> usize {
+    if has_odd_backslash_escape_bytes(text.as_bytes(), i) {
+        append_escaped_backtick(tokens);
+        return i + ch.len_utf8();
+    }
+
+    let (token, end) = handle_backtick_fence(text, i);
+    let (token, end) = extend_closed_code_token(text, i, token, end);
+    tokens.push(token);
+    end
+}
+
+/// Returns whether a link or image token starts at `i`.
+fn is_link_or_image_start(text: &str, i: usize, ch: char) -> bool {
+    let looks_like_image = looks_like_image_start(text, i, ch);
+    (ch == '[' || looks_like_image) && !has_odd_backslash_escape_bytes(text.as_bytes(), i)
+}
+
+/// Appends the link or image token starting at `i`, plus its punctuation.
+fn push_link_or_image(
+    text: &str,
+    i: usize,
+    tokens: &mut Vec<String>,
+    observer: &mut crate::wrap::observer::ObserverHandle<'_>,
+) -> usize {
+    let (token, link_end) = parse_link_or_image(text, i, observer);
+    tokens.push(token);
+    let punctuation_end = scan_trailing_punctuation_end(text, link_end);
+    if punctuation_end > link_end {
+        tokens.push(collect_range(text, link_end, punctuation_end));
+    }
+    punctuation_end
+}
+
+/// Appends the plain-text run starting at `i` and returns the next offset.
+fn push_plain_text(text: &str, i: usize, tokens: &mut Vec<String>) -> usize {
+    let end = scan_plain_text_end(text, text.as_bytes(), i);
+    tokens.push(collect_range(text, i, end));
+    end
+}
+
+/// Appends the token that begins at byte `i` and returns the next byte offset.
+///
+/// The branch order is significant: whitespace and backticks are recognised
+/// before the link-and-image test, because a backtick run can contain brackets
+/// that would otherwise parse as a link.
+fn push_token_at(
+    text: &str,
+    i: usize,
+    tokens: &mut Vec<String>,
+    observer: &mut crate::wrap::observer::ObserverHandle<'_>,
+) -> usize {
+    let Some(ch) = text[i..].chars().next() else {
+        // Unreachable for callers whose loop condition is `i < text.len()`;
+        // returning the end keeps a malformed slice from spinning forever.
+        return text.len();
+    };
+    if ch.is_whitespace() {
+        return push_whitespace_run(text, i, tokens);
+    }
+    if ch == '`' {
+        return push_backtick_token(text, i, ch, tokens);
+    }
+    if is_link_or_image_start(text, i, ch) {
+        return push_link_or_image(text, i, tokens, observer);
+    }
+    push_plain_text(text, i, tokens)
 }
 
 /// Scan punctuation following a link without absorbing an inline citation.

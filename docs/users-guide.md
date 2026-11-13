@@ -1092,6 +1092,45 @@ Metric names are stable, and labels are bounded: `outcome` is the only label
 key, carried only by the two replacement metrics above. No path, file name, or
 error text is ever used as a label, so a recorder's cardinality stays bounded.
 
+### Wrapping metrics
+
+`wrap_text` emits two metrics, so a host can see how much of a run the wrapping
+path accounts for. It installs no recorder of its own, like the replacement
+path, and a host that installs none sees no behavioural change.
+
+- `mdtablefix_wrap_total` — wrapping invocations, labelled by `outcome`
+  (`reflowed` or `unchanged`).
+- `mdtablefix_wrap_duration_seconds` — histogram of one wrapping invocation's
+  duration in seconds, labelled by `outcome`.
+
+`reflowed` means the wrapping changed at least one line; `unchanged` means it
+returned the text as it found it. Neither label is derived from document text,
+so the cardinality stays bounded.
+
+### Inline-wrapping tracing events
+
+Inline paragraph wrapping emits `tracing` events at `debug` and `trace` levels
+when the host application installs a subscriber. The library installs none of
+its own, so a host that installs nothing sees no behavioural change.
+
+Every field on these events is content-free scalar metadata: counts, byte
+offsets, boolean flags, and stable category names. No document text — link
+URLs, footnote labels, or token text — ever reaches a subscriber.
+
+This is a deliberate narrowing. The `fragment classified` event previously
+carried a `token` field holding a truncated, up-to-80-byte snippet of the
+actual document text, plus a `truncated` flag. Both are gone, and a new
+`token_length` field gives the token's character count, so document text no
+longer reaches a subscriber through this event. The `kind` field, which reports
+the computed classification, is unchanged. A consumer that was reading `token=`
+from these logs must change: no replacement snippet of document content is
+available, only the count, and there is no replacement for the truncation flag.
+
+See [Observability](developers-guide.md#observability) in the developer's guide
+for the full event and field reference; this section does not repeat it. The
+[0.7.0 migration guide](v0-7-0-migration-guide.md) covers the consumer-visible
+change and the action a log consumer must take.
+
 ### `format_breaks` return type
 
 `format_breaks` returns `Vec<Cow<'_, str>>` rather than `Vec<String>`. Lines

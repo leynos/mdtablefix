@@ -6,31 +6,39 @@
 
 use rstest::rstest;
 
-use super::{SpanKind, try_couple_bracketed_reference};
+use super::{SpanCursor, SpanKind, try_couple_bracketed_reference};
 
 fn tokens(opener: &str, reference: &str) -> Vec<String> {
     vec![opener.to_string(), reference.to_string()]
 }
 
 #[rstest]
-#[case("[", "1]", Some((SpanKind::BracketedRef, 2)))]
-#[case("[", "[1]", Some((SpanKind::BracketedRef, 2)))]
-#[case("[", "12].", Some((SpanKind::BracketedRef, 2)))]
-#[case("(", "1]", None)]
-#[case("\"", "12]", None)]
-#[case("（", "1]", None)]
-#[case("[", "[^1]", None)]
+#[case("[", "1]", true)]
+#[case("[", "[1]", true)]
+#[case("[", "12].", true)]
+#[case("(", "1]", false)]
+#[case("\"", "12]", false)]
+#[case("（", "1]", false)]
+#[case("[", "[^1]", false)]
 fn couples_square_bracket_openers_only(
     #[case] opener: &str,
     #[case] reference: &str,
-    #[case] expected: Option<(SpanKind, usize)>,
+    #[case] expected: bool,
 ) {
-    let mut width = 0;
+    let mut cursor = SpanCursor {
+        end: 0,
+        width: 0,
+        kind: SpanKind::General,
+    };
 
     assert_eq!(
-        try_couple_bracketed_reference(&tokens(opener, reference), 0, &mut width),
+        try_couple_bracketed_reference(&tokens(opener, reference), &mut cursor),
         expected
     );
+    if expected {
+        assert_eq!(cursor.end, 2);
+        assert_eq!(cursor.kind, SpanKind::BracketedRef);
+    }
 }
 
 /// A `[` that follows another `[` is still the opener of the reference that
@@ -41,20 +49,23 @@ fn couples_square_bracket_openers_only(
 /// the shape issue #504 recorded. The cases are called at the index the
 /// tokenizer reaches them at rather than at zero.
 #[rstest]
-#[case(&["[", "[", "1]"], Some((SpanKind::BracketedRef, 3)))]
-#[case(&["[", "[", "1]]"], Some((SpanKind::BracketedRef, 3)))]
-fn couples_the_reference_after_a_bracket_run(
-    #[case] token_text: &[&str],
-    #[case] expected: Option<(SpanKind, usize)>,
-) {
-    let mut width = 0;
+#[case(&["[", "[", "1]"], true)]
+#[case(&["[", "[", "1]]"], true)]
+fn couples_the_reference_after_a_bracket_run(#[case] token_text: &[&str], #[case] expected: bool) {
+    let mut cursor = SpanCursor {
+        end: 1,
+        width: 0,
+        kind: SpanKind::General,
+    };
     let tokens = token_text
         .iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>();
 
     assert_eq!(
-        try_couple_bracketed_reference(&tokens, 1, &mut width),
+        try_couple_bracketed_reference(&tokens, &mut cursor),
         expected
     );
+    assert_eq!(cursor.end, 3);
+    assert_eq!(cursor.kind, SpanKind::BracketedRef);
 }
