@@ -27,9 +27,13 @@ use crate::fence_spec::{
 // routes are interchangeable here — both were measured — but naming the
 // definition's own module keeps the dependency visible in the source rather
 // than routed through `lib.rs`'s glob.
-use super::{lemma_compressed_block_regions, spec_delimiters_eligible, spec_fenced, spec_masked};
+use super::{
+    lemma_compressed_block_regions, spec_agendum_line, spec_blank_tag_raised,
+    spec_delimiter_reads_back, spec_delimiters_eligible, spec_emission_reads_back, spec_fenced,
+    spec_masked, spec_same_reading, spec_specline,
+};
 use crate::production_fence::{FenceState, LineFeatures, Region};
-use crate::production_plan::Release;
+use crate::production_plan::{Agendum, Release};
 use vstd::prelude::*;
 
 verus! {
@@ -234,6 +238,90 @@ proof fn lemma_witness_incompatible_endpoints_forbid_rewrite()
 }
 
 // ---------------------------------------------------------------------------
+// Witnesses for the emission contract
+// ---------------------------------------------------------------------------
+
+/// The `Normalized` arm of the emission contract rejects a wrong respelling.
+///
+/// The contract is only worth stating if it forbids something. This is the arm
+/// the conflict fallback relies on, and the witness is a line the emitter says
+/// it normalized while the written bytes changed both the marker family and the
+/// run — the two things
+/// [`spec_delimiter_reads_back`](crate::spec_delimiter_reads_back) carries
+/// across. The flags are the agendum's own: `normalizable` is set by
+/// [`spec_agendum_line`](crate::spec_agendum_line) for `Normalized` and cannot
+/// be claimed otherwise, which is why the witness builds the [`super::SpecLine`]
+/// through that derivation.
+///
+/// Both `spec_same_reading` and the blank-tag weakening fail here, so the
+/// failure lands on the contract's disjunction rather than on its antecedent.
+proof fn lemma_witness_normalized_contract_refuses_a_wrong_respelling()
+    ensures
+        !spec_emission_reads_back(
+            Agendum::Normalized,
+            spec_agendum_line(
+                spec_witness_null_opener(),
+                spec_witness_tildes(3),
+                Agendum::Normalized,
+            ),
+        ),
+{
+    reveal(spec_emission_reads_back);
+    reveal(spec_agendum_line);
+    reveal(spec_specline);
+    reveal(spec_delimiter_reads_back);
+    reveal(spec_same_reading);
+    reveal(spec_blank_tag_raised);
+}
+
+/// The null-specifier respelling satisfies the `Normalized` arm.
+///
+/// The positive half of the witness above: a four-backtick opener carrying a
+/// `null` specifier, and the same run written with that specifier dropped. The
+/// two readings are *not* equal — dropping the specifier raises the blank tag —
+/// so the contract's plain-agreement disjunct cannot carry it, and the witness
+/// exists to show the weaker disjunct does. That is the only reason
+/// [`spec_delimiter_reads_back`](crate::spec_delimiter_reads_back) is a
+/// disjunction at all.
+///
+/// Neither relation is a hypothesis: the witness establishes both, which is what
+/// makes it evidence that the contract is satisfiable by a real rewrite rather
+/// than true of nothing.
+proof fn lemma_witness_null_specifier_reads_back()
+    ensures
+        spec_witness_null_opener() != spec_witness_null_emitted(),
+        spec_delimiter_reads_back(spec_witness_null_opener(), spec_witness_null_emitted()),
+        spec_blank_tag_raised(spec_witness_null_opener(), spec_witness_null_emitted()),
+        spec_emission_reads_back(
+            Agendum::Normalized,
+            spec_agendum_line(
+                spec_witness_null_opener(),
+                spec_witness_null_emitted(),
+                Agendum::Normalized,
+            ),
+        ),
+{
+    reveal(spec_emission_reads_back);
+    reveal(spec_agendum_line);
+    reveal(spec_specline);
+    reveal(spec_delimiter_reads_back);
+    reveal(spec_same_reading);
+    reveal(spec_blank_tag_raised);
+}
+
+/// A four-backtick opener carrying a `null` specifier, at depth zero.
+///
+/// The tag is not blank: the marker run is followed by the specifier's text.
+pub open spec fn spec_witness_null_opener() -> LineFeatures {
+    LineFeatures { depth: 0, marker: Some('`'), marker_len: 4, trailing_blank: false }
+}
+
+/// The same opener with its `null` specifier dropped, so the tag reads blank.
+pub open spec fn spec_witness_null_emitted() -> LineFeatures {
+    LineFeatures { depth: 0, marker: Some('`'), marker_len: 4, trailing_blank: true }
+}
+
+// ---------------------------------------------------------------------------
 // Witnesses over the fold
 // ---------------------------------------------------------------------------
 
@@ -247,5 +335,13 @@ proof fn lemma_witness_incompatible_endpoints_forbid_rewrite()
 /// above, so it is declared after them.
 #[path = "plan_spec_witnesses_fold.rs"]
 pub mod fold;
+
+/// The fold witness for the normalization route.
+///
+/// Split from [`fold`] so both files stay under the 400-line ceiling, and
+/// because the route it pins — a *matched* block released `Normalized` — is the
+/// one the other three cannot reach.
+#[path = "plan_spec_witnesses_fold_normalized.rs"]
+pub mod fold_normalized;
 
 } // verus!

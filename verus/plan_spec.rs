@@ -103,7 +103,9 @@ pub use planner::{
     spec_fenced,
 };
 
-use planner::lemma_block_agenda_length;
+use planner::{
+    lemma_absorb_all_preserves_opening, lemma_block_agenda_length, lemma_no_conflict_all_clear,
+};
 
 #[path = "plan_spec_compression.rs"]
 mod compression;
@@ -125,6 +127,30 @@ pub use steps::{
     spec_pending_lines,
 };
 
+/// The per-step facts the fold's invariant is built from.
+///
+/// Declared after `steps` and `planner` because it names their specifications,
+/// and before the fold's own modules because their induction reads these lemmas
+/// one route at a time. The glob is private: every item is an intermediate fact
+/// about the transition, and none of them is part of the published surface.
+#[path = "plan_spec_fold_span.rs"]
+mod fold_span;
+use fold_span::*;
+
+/// The chain of spans the fold has completed.
+///
+/// Declared before the invariant that names it, and kept private: the chain is a
+/// specification of the driver's own decisions, reachable from the composition
+/// only through the theorem that produces it.
+#[path = "plan_spec_fold_chain.rs"]
+mod fold_chain;
+use fold_chain::*;
+
+/// The fold's invariant and the initial-segment algebra it rests on.
+#[path = "plan_spec_fold_invariant.rs"]
+mod fold_invariant;
+use fold_invariant::*;
+
 #[path = "plan_spec_fold.rs"]
 mod fold_plan;
 
@@ -140,6 +166,62 @@ pub use fold_plan::{
     spec_document_plan,
     lemma_document_plan_total,
 };
+
+/// What one fold step proves about the line it buffers or releases.
+///
+/// The transition lemmas turn the two routing answers the tracker supplied into the
+/// depth, closer, and opening facts the released-span theorem asks for, and
+/// `lemma_buffered_context` assembles them with the planner's conflict fold. The
+/// glob is private: these are intermediate facts about one step, and none is part of
+/// the published surface.
+#[path = "plan_spec_fold_transition.rs"]
+mod fold_transition;
+use fold_transition::*;
+
+/// How one fold step moves the written half of the invariant.
+///
+/// Separate from the routes because a step's span fact and the way a span fact
+/// advances the chain are different questions, and every route answers the second
+/// the same way.
+#[path = "plan_spec_fold_progress.rs"]
+mod fold_progress;
+use fold_progress::*;
+
+/// One released chunk, read as a preserved span at the document's offsets.
+#[path = "plan_spec_fold_release.rs"]
+mod fold_release;
+use fold_release::*;
+
+/// One induction step of the fold invariant: the vocabulary and the dispatch.
+#[path = "plan_spec_fold_step.rs"]
+mod fold_step;
+use fold_step::*;
+
+/// The routes taken with a block buffered.
+#[path = "plan_spec_fold_step_buffered.rs"]
+mod fold_step_buffered;
+use fold_step_buffered::*;
+
+/// The routes taken with a block buffered that the tracker abandoned.
+#[path = "plan_spec_fold_step_release.rs"]
+mod fold_step_release;
+use fold_step_release::*;
+
+/// The routes taken with nothing buffered.
+#[path = "plan_spec_fold_step_open.rs"]
+mod fold_step_open;
+use fold_step_open::*;
+
+/// The induction and the document theorem it establishes.
+///
+/// The invariant is `INV-DRIVER-FOLD` at every prefix; the theorem composes the
+/// spans the fold wrote and appends the tail of a document that ended inside a
+/// block. [`lemma_document_regions_preserved`] is the whole-document statement
+/// `LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS`, and it is the one name here the
+/// crate root publishes.
+#[path = "plan_spec_fold_regions.rs"]
+mod fold_regions;
+pub use fold_regions::lemma_document_regions_preserved;
 
 #[path = "plan_spec_document.rs"]
 mod document;
@@ -176,14 +258,13 @@ use drive_induction::*;
 /// keeps `crate::spec_regions_from` and its siblings reachable exactly as they
 /// were, rather than the split quietly withdrawing them.
 ///
-/// Nothing in this file calls into the child yet. The composition lemmas are
-/// stated and verified, but the document theorem above reaches its conclusion
-/// through the driver invariant instead. That is the outstanding obligation
-/// recorded under M6 item 5b in the ExecPlan: the composition is what would let
-/// the document theorem be restated in terms of it, and until that restatement
-/// lands the section is a proof island. The re-export is the honest way to keep
-/// it in place — an unused private glob would be a warning, and withdrawing the
-/// names would narrow the published surface as a side effect of a file split.
+/// The document theorem now reaches the composition rather than sitting beside
+/// it. `plan_spec_fold_chain.rs` records the spans the fold completes, and
+/// `lemma_spans_compose_regions` joins them into the document result, so the
+/// child is the step that turns the fold's per-span facts into
+/// `LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS` and not a proof island. Nothing
+/// here assumes that a released block preserves its interior: the induction in
+/// `plan_spec_fold_regions.rs` establishes that span by span.
 ///
 /// The four items the child needs from this file are `pub(super)`, so the move
 /// widens no public surface.

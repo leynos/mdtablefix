@@ -230,8 +230,9 @@ pub use release::{lemma_released_span_composes, lemma_released_span_reads_back};
 #[path = "plan_spec_compose_chain.rs"]
 mod chain;
 pub use chain::{
-    lemma_agreement_span_is_preserved, lemma_prefix_splits_at_seeded_state,
-    lemma_spans_compose_regions, spec_chain_preserved,
+    lemma_agreement_span_is_preserved, lemma_ends_at_components, lemma_ends_at_join,
+    lemma_prefix_splits_at_seeded_state, lemma_segment_is_ends_at, lemma_spans_compose_regions,
+    spec_chain_preserved,
 };
 
 } // verus!
