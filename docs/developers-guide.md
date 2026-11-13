@@ -676,13 +676,15 @@ depth-aware tracking.
    punctuation, links, code spans, and footnote markers. Span grouping helpers
    in `src/wrap/inline/span_helpers.rs` extend grouped spans over trailing
    punctuation, couple adjacent footnote references, and merge chained inline
-   code or link tokens. `determine_token_span` forward-couples opening
-   punctuation tokens (`(`, `[`, and CJK openers) and hyphen-prefix tokens to
-   the next inline code span or Markdown link so wrapping never leaves a lone
-   opener or prefix at the end of a line. `try_couple_inline_link_after_opener`
-   applies the same rule to parenthesized inline citation links such as
-   `([1](url))`, grouping the opener and link as one `SpanKind::Link` so
-   adjacent citations like `([1](url))([2](url2))` do not split at the boundary.
+   code or link tokens. `determine_token_span` starts from
+   `initial_token_span`, which forward-couples opening punctuation tokens (`(`,
+   `[`, and CJK openers) to the next inline code span or Markdown link so
+   wrapping never leaves a lone opener at the end of a line, and couples any
+   unspaced token to a following inline code span so a later join cannot turn
+   the break into a space. `try_couple_inline_link_after_opener` applies the
+   same rule to parenthesized inline citation links such as `([1](url))`,
+   grouping the opener and link as one `SpanKind::Link` so adjacent citations
+   like `([1](url))([2](url2))` do not split at the boundary.
    `looks_like_bracketed_reference` recognizes the tokenizer's split closing
    half `1]` as well as the merged `[1]`; only ASCII digits qualify, so the
    predicate stays disjoint from `looks_like_link` and

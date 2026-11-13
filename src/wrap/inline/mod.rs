@@ -68,7 +68,7 @@ use super::tokenize;
 /// Build the first atomic span at `start`, including punctuation and attached
 /// Markdown constructs that cannot be split across a line boundary.
 ///
-/// Opening punctuation, hyphen prefixes, code spans, links, and footnote
+/// Opening punctuation, unspaced runs before a code span, links, and footnote
 /// references are coupled before the general continuation loop runs. The
 /// returned width is the Unicode display width of that complete candidate.
 fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKind) {

@@ -56,6 +56,9 @@
 - [Environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md): Accepted
   decision prohibiting ambient process-environment access and naming the
   injection shapes that replace it.
+- [Keep unspaced inline syntax seams atomic](adrs/0013-unspaced-inline-seams.md):
+  Accepted decision coupling any unspaced token before an inline code span, in
+  place of the hyphen-prefix predicate.
 
 ## Reference material
 
