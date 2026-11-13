@@ -14,10 +14,10 @@ mod fixture_io;
 mod invariants;
 #[path = "reporting.rs"]
 mod reporting;
-#[path = "../common/fs.rs"]
-mod test_fs;
 #[path = "support_tests.rs"]
 mod support_tests;
+#[path = "../common/fs.rs"]
+mod test_fs;
 
 pub(crate) use cases::{ALL_FLAGS, BASE_MATRIX_CASES, STAGED_FILE};
 pub(crate) use fixture_io::{fixture_exists, fixture_path};
