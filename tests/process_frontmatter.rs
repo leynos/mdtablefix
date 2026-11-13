@@ -32,7 +32,7 @@ fn frontmatter_detection_behaviour(
     let first_line = raw[0].to_string();
     let input: Vec<String> = raw.into_iter().map(str::to_string).collect();
     let out = process_stream(&input);
-    assert_ne!(out, [] as [std::string::String; 0]);
+    assert!(!out.is_empty(), "expected content, got {out:?}");
 
     if has_frontmatter {
         if let Some(prefix) = expected_prefix {

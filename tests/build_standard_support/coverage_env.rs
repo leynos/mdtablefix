@@ -217,9 +217,7 @@ mod tests {
             coverage_command_problems(&[command(OK), command(OK)], EXPECTED, LINK).len(),
             1
         );
-        assert_eq!(
-            coverage_command_problems(&[command("echo hi"), command(OK)], EXPECTED, LINK),
-            [] as [std::string::String; 0]
-        );
+        let actual = coverage_command_problems(&[command("echo hi"), command(OK)], EXPECTED, LINK);
+        assert!(actual.is_empty(), "unexpected: {actual:?}");
     }
 }

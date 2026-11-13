@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthStr;
 mod common;
 
 fn assert_uniform_display_widths(output: &[String]) {
-    assert_ne!(output, [] as [String; 0]);
+    assert!(!output.is_empty(), "expected content, got {output:?}");
 
     let widths: Vec<usize> = output[0]
         .trim()

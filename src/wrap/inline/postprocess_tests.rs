@@ -164,10 +164,8 @@ fn merge_drops_single_space_before_atomic_starting_line() {
 
 #[test]
 fn merge_empty_input_returns_empty_output() {
-    assert_eq!(
-        merge_whitespace_only_lines(&[], 80),
-        [] as [Vec<InlineFragment>; 0]
-    );
+    let actual = merge_whitespace_only_lines(&[], 80);
+    assert!(actual.is_empty(), "unexpected: {actual:?}");
 }
 
 #[test]

@@ -234,7 +234,7 @@ fn empty_parsed_rows_log_discard_category() {
     let input = vec!["| | |".to_string()];
     let (rows, split_within_line) = parse_rows(&input);
 
-    assert_eq!(rows, [] as [Vec<Cell>; 0]);
+    assert!(rows.is_empty(), "unexpected: {rows:?}");
     assert!(!split_within_line);
 
     assert!(logs_contain("discarded empty parsed row"));

@@ -119,7 +119,8 @@ fn ignores_non_numeric_footnote_block() {
 #[test]
 fn empty_input_returns_empty_vec() {
     let input: Vec<String> = Vec::new();
-    assert_eq!(convert_footnotes(&input), [] as [String; 0]);
+    let actual = convert_footnotes(&input);
+    assert!(actual.is_empty(), "unexpected: {actual:?}");
 }
 
 #[test]
