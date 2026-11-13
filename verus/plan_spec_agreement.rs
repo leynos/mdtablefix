@@ -103,31 +103,70 @@ pub open spec fn spec_masked(state: Option<FenceState>, depth: usize) -> Option<
     }
 }
 
-/// The raw-text contract the document theorem was intended to be proved from.
+/// A [`SpecLine`] built from its five fields.
+///
+/// This is the constructor the document theorem uses to give
+/// [`spec_emission_reads_back`] a subject per source line. The three flags are
+/// *emitter facts* rather than a second copy of the source reading: they say
+/// which spelling the emitter wrote, and the caller takes them from the agendum
+/// the driver chose. [`spec_agendum_line`] is that derivation.
+pub open spec fn spec_specline(
+    source: LineFeatures,
+    emitted: LineFeatures,
+    rewritable: bool,
+    normalizable: bool,
+    verbatim: bool,
+) -> SpecLine {
+    SpecLine { source, emitted, rewritable, normalizable, verbatim }
+}
+
+/// The [`SpecLine`] the driver's agendum selects.
+///
+/// The three emitter facts are exactly the agendum's own classification: the
+/// emitter writes byte for byte only for [`Agendum::Verbatim`], in the source
+/// marker family and run only for [`Agendum::Normalized`], and as three
+/// backticks only for [`Agendum::Compressed`]. Deriving them here rather than
+/// letting a caller choose keeps the emission contract's antecedent tied to the
+/// decision the planner actually made.
+pub open spec fn spec_agendum_line(
+    source: LineFeatures,
+    emitted: LineFeatures,
+    agendum: Agendum,
+) -> SpecLine {
+    spec_specline(
+        source,
+        emitted,
+        agendum == Agendum::Compressed,
+        agendum == Agendum::Normalized,
+        agendum == Agendum::Verbatim,
+    )
+}
+
+/// The raw-text contract the document theorem consumes.
 ///
 /// The pass does not reason about text; it renders one of three agendas into
 /// bytes, and a separate regular expression reads those bytes back on the next
 /// pass. Verus cannot and should not reason about a compiled regular expression,
 /// so the relationship between the two is an external contract, recorded here as
-/// a predicate and in the verification ledger as an assumed boundary.
+/// a predicate and in the verification ledger as an assumed boundary. It says
+/// what the parser *reads off* the bytes the emitter writes, and never that
+/// those bytes preserve a region, which is the thing being proved.
 ///
-/// **This contract is not enforced and nothing consumes it.** Its only
-/// occurrence in the tree is this definition, and its input type `SpecLine` is
-/// never constructed, so no caller can supply it a subject. Seeding the
-/// `Normalized` arm below to `true` verifies cleanly at 178 verified, 0 errors,
-/// byte-identical to the unmutated control. Read the clauses as a statement of
-/// what the frontier *should* establish, not as an assumption any theorem below
-/// rests on; closing it means giving it a real consumer.
+/// The contract has real consumers in the `emission` child module:
+/// `lemma_verbatim_emission_agrees`, `lemma_normalized_emission_reads_back`, and
+/// `lemma_compressed_emission_shape` each extract one clause, and the released
+/// block theorems turn those clauses into the per-position facts their
+/// inductions need. Deleting or weakening a clause makes one of those consumers
+/// fail to close its postcondition; the two emission mutation gates injected by
+/// Task 2 exercise exactly that, and both are expected to be rejected.
 ///
-/// The contract says what the parser *reads off* the bytes the emitter writes,
-/// and never that those bytes preserve a region, which is the thing being
-/// proved. Each clause is a claim a counterexample could falsify at the
-/// frontier. A verbatim write that was not byte-identical would break the first;
-/// a normalization that changed the marker run or turned a blank tag non-blank
+/// Each clause is a claim a counterexample could falsify at the frontier. A
+/// verbatim write that was not byte-identical would break the first; a
+/// normalization that changed the marker run or turned a blank tag non-blank
 /// would break the second; a compressed write that did not carry the target
-/// marker and run at the source depth would break the third. The production
-/// regex and the production emitter are what hold it to account, and the
-/// property tests over both are the evidence.
+/// marker and run at the source depth, or that lowered a blank tag, would break
+/// the third. The production regex and the production emitter are what hold it
+/// to account, and the property tests over both are the evidence.
 pub open spec fn spec_emission_reads_back(agendum: Agendum, line: SpecLine) -> bool {
     match agendum {
         // Written byte for byte, so it reads back as itself.
@@ -143,9 +182,17 @@ pub open spec fn spec_emission_reads_back(agendum: Agendum, line: SpecLine) -> b
         // Written as three backticks at the line's own depth. The pass rewrites
         // only a line the fence grammar read as a delimiter, so the written
         // bytes are read back as a delimiter of the target family and run.
+        //
+        // The blank tag may only be raised, never lowered. `rewrite_marker`
+        // either keeps a non-null language specifier, which leaves the tag as it
+        // was, or drops a null one, which raises it; no route clears a tag that
+        // was set. That matters because the compressed closer is recognised by
+        // its blank tag: a record claiming the source closed the block while the
+        // written bytes did not would make the region theorem false.
         Agendum::Compressed => line.rewritable ==> (
             line.emitted.marker == Some('`') && line.emitted.marker_len == 3
                 && line.emitted.depth == line.source.depth
+                && (line.source.trailing_blank ==> line.emitted.trailing_blank)
         ),
     }
 }

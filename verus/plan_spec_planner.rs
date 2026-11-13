@@ -233,6 +233,66 @@ pub(super) proof fn lemma_block_agenda_length(
     }
 }
 
+/// `LEM-BLOCK-AGENDA-INDEX` — position `i` of a released block's agenda is the
+/// agendum for position `i`.
+///
+/// The document theorem reasons about a block position by position, so it needs
+/// to read one agendum out of the agenda the release wrote. This is that
+/// projection: whether the position is an outer delimiter is decided by
+/// [`spec_is_outer_delimiter`] alone, and the spelling by the block's single
+/// compression answer. Stating it separately keeps the released-block lemma from
+/// having to re-derive the agenda's recursion at every case split.
+pub(super) proof fn lemma_block_agenda_index(
+    len: int,
+    release: Release,
+    written: bool,
+    compressible: bool,
+    i: int,
+)
+    requires 0 <= i < len,
+    ensures
+        spec_block_agenda(len, release, written, compressible)[i]
+            == spec_delimiter_agendum(spec_is_outer_delimiter(i, len, release, written), compressible),
+{
+    reveal(spec_block_agenda);
+    lemma_block_agenda_seeded_index(len, release, written, compressible, len, i);
+}
+
+/// The same projection for a partial agenda, by induction on the prefix.
+proof fn lemma_block_agenda_seeded_index(
+    len: int,
+    release: Release,
+    written: bool,
+    compressible: bool,
+    upto: int,
+    i: int,
+)
+    requires 0 <= i < upto,
+    ensures
+        spec_block_agenda_seeded(len, release, written, compressible, upto)[i]
+            == spec_delimiter_agendum(spec_is_outer_delimiter(i, len, release, written), compressible),
+    decreases upto,
+{
+    reveal(spec_block_agenda_seeded);
+    let prefix = spec_block_agenda_seeded(len, release, written, compressible, upto - 1);
+    let last = spec_delimiter_agendum(
+        spec_is_outer_delimiter(upto - 1, len, release, written),
+        compressible,
+    );
+    assert(spec_block_agenda_seeded(len, release, written, compressible, upto) == prefix.push(last));
+    lemma_block_agenda_length(len, release, written, compressible, upto - 1);
+    // The two `Seq::push` indexing axioms are broadcast; naming the prefix length
+    // is what puts their triggers in the goal, so the case split below is over
+    // which of them applies rather than over what the sequence is.
+    assert(prefix.len() == upto - 1);
+    if i == upto - 1 {
+        assert(prefix.push(last)[i] == last);
+    } else {
+        lemma_block_agenda_seeded_index(len, release, written, compressible, upto - 1, i);
+        assert(prefix.push(last)[i] == prefix[i]);
+    }
+}
+
 /// `LEM-ABSORB-PRESERVES-OPENING`.
 ///
 /// Buffering a line accumulates only the conflict flag; the opener the block

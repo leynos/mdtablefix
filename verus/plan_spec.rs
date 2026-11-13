@@ -68,11 +68,23 @@ pub use agreement::{
     spec_delimiter_reads_back,
     spec_blank_tag_raised,
     spec_masked,
+    spec_specline,
+    spec_agendum_line,
     spec_emission_reads_back,
     lemma_same_reading_preserves_region,
     lemma_same_reading_preserves_next,
     lemma_agreement_preserves_prefix,
 };
+
+/// Consumers of the emission contract above.
+///
+/// Declared after `agreement` because each lemma names a specification defined
+/// there. The glob is public so the mutation mirror, the witnesses, and
+/// `verus/lib.rs` reach the consumers by the route they already use for the
+/// contract; the four names are new, and nothing is withdrawn.
+#[path = "plan_spec_emission.rs"]
+mod emission;
+pub use emission::*;
 
 #[path = "plan_spec_planner.rs"]
 mod planner;
