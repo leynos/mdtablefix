@@ -159,7 +159,7 @@ while (index < 70) invariant(
     index <= 70,
     result@.len() == index,
     forall|i: int| 0 <= i < result@.len() ==> result@[i] == '_',
-) {
+) decreases(70 - index) {
     result.push('_');
     index += 1;
 }

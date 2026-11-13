@@ -48,7 +48,7 @@ while (index < suffix.len()) invariant(
     index <= suffix@.len(),
     original.len() + suffix@.len() <= usize::MAX,
     result@ == original + suffix@.subrange(0, index as int),
-) {
+) decreases(suffix@.len() - index) {
     result.push(suffix[index]);
     index += 1;
 }

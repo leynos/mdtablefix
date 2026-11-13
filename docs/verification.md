@@ -15,9 +15,9 @@ that went were the executable constants `COMPRESSED_MARKER` and
 `COMPRESSED_MARKER_LEN`, which the new release cannot erase when they sit
 outside `verus!` syntax; `compressed` now writes the same two literals, and
 `spec_compressed` is unchanged. The new release also requires every executable
-loop to name a `decreases` clause, so `verus/lib.rs` opts the crate out with
-`#![verifier::exec_allows_no_decreases_clause]`, which keeps the previous
-release's semantics: the scanner loops prove partial correctness.
+loop to name a `decreases` clause; the twelve scanner loops in the kernels each
+carry one, a measure such as `chars@.len() - cursor`, so the proofs now show
+that each terminates.
 
 The pinned Verus release cannot compile `&str` range operations inside
 `verus!`. Production `classify_line` therefore converts the line to Unicode

@@ -295,7 +295,7 @@ while (index < features.len()) invariant(
     index <= features@.len(),
     out@ == crate::spec_regions_seeded(features@, index as int, None),
     state@ == crate::spec_state_seeded(features@, index as int, None),
-) {
+) decreases(features@.len() - index) {
     let (next, region) = fence_step(state, features[index]);
     state = next;
     out.push(region);

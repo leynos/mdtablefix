@@ -247,7 +247,7 @@ while (cursor < chars.len() && fuel > 0 && has_quote_prefix(chars, cursor, colum
     fuel >= chars@.len() - cursor,
     crate::spec_line_parts_from(chars@, cursor as int, column as int, fuel as nat)
         == crate::spec_line_parts(chars@),
-) {
+) decreases(fuel) {
         let (indent_width, after_indent) = indentation_at(chars, cursor, column);
         cursor = after_indent + 1;
         column = (column + indent_width + 1) % 4;
@@ -302,7 +302,7 @@ while (cursor < chars.len() && width < 4 && matches!(chars[cursor], ' ' | '\t'))
     width <= 7,
     crate::spec_indentation_at(chars@, cursor as int, column as int, width as int)
         == crate::spec_indentation_at(chars@, start as int, column as int, 0),
-) {
+) decreases(chars@.len() - cursor) {
         if chars[cursor] == ' ' {
             width += 1;
         } else {
