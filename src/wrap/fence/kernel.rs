@@ -139,26 +139,23 @@ ensures(result => result == crate::spec_agrees_with_opener(state, line));
 }
 }
 
-/// The marker character every compressed delimiter is written with.
-pub const COMPRESSED_MARKER: char = '`';
-
-/// The marker run length every compressed delimiter is written with.
-pub const COMPRESSED_MARKER_LEN: usize = 3;
-
 verified_kernel_function! {
 /// The delimiter compression writes in place of a state's opening marker.
 ///
 /// Normalization is deliberately a fixed target rather than a shortening:
 /// every compressed delimiter is three backticks, whatever the source used.
 /// The written delimiter covers exactly the run that was rewritten, so its
-/// string length is [`COMPRESSED_MARKER_LEN`] in every case.
+/// string length is three in every case. The marker character and run length are
+/// literals here rather than named constants: a plain `const` outside the
+/// verifier's own syntax makes Verus 0.2026.09.06 abort in its erasure pass, and
+/// `spec_compressed` states the same two values for the proof to check.
 #[must_use]
 pub fn compressed(state: FenceState) -> FenceState;
 ensures(result => result == crate::spec_compressed(state));
 {
     FenceState {
-        marker: COMPRESSED_MARKER,
-        marker_len: COMPRESSED_MARKER_LEN,
+        marker: '`',
+        marker_len: 3,
         open_depth: state.open_depth,
     }
 }

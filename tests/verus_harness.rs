@@ -24,7 +24,6 @@ use fake_prover_tools::{fake_prover_tools, make_command, runner_log};
 mod verus_mutation_checks;
 
 const VERUS_WORKFLOW: &str = include_str!("../.github/workflows/verus.yml");
-const VERUS_VERSION: &str = include_str!("../tools/verus/VERSION");
 const MAKEFILE: &str = include_str!("../Makefile");
 const MISSING_SYMBOL_DIAGNOSTIC: &str =
     "verification ledger names missing symbol: missing_verified_symbol";
@@ -159,43 +158,60 @@ fn workflow_has_read_only_contents_permission(workflow: &Value) -> Result<bool> 
             == Some("read"))
 }
 
-fn workflow_uses_pinned_verus_cache(workflow: &Value) -> Result<bool> {
-    let root = mapping(workflow, "workflow")?;
-    let environment = mapping(get(root, "env")?, "workflow environment")?;
-    let version = get(environment, "VERUS_VERSION")?
-        .as_str()
-        .context("Verus version should be a string")?;
-    let expected_version = VERUS_VERSION.trim();
-    if version != expected_version {
-        return Ok(false);
-    }
+/// The shared action that installs the provers, which the workflow must use.
+const INSTALL_ACTION: &str = "leynos/shared-actions/.github/actions/install-prover-tools@";
 
+/// The `with.tools` input of every step that uses `install-prover-tools`, and
+/// whether each such step is pinned by a full commit SHA.
+fn installer_steps(workflow: &Value) -> Result<Vec<(bool, Option<String>)>> {
+    let root = mapping(workflow, "workflow")?;
     let jobs = mapping(get(root, "jobs")?, "jobs")?;
     let verify = mapping(get(jobs, "verify")?, "verify job")?;
     let steps = get(verify, "steps")?
         .as_sequence()
         .context("verify job steps should be a sequence")?;
-    Ok(steps.iter().filter_map(Value::as_mapping).any(|step| {
-        step.get(Value::String("uses".to_owned()))
-            .and_then(Value::as_str)
-            .is_some_and(|uses| uses.starts_with("actions/cache@"))
-            && step
+    Ok(steps
+        .iter()
+        .filter_map(Value::as_mapping)
+        .filter_map(|step| {
+            let uses = step.get(Value::String("uses".to_owned()))?.as_str()?;
+            let revision = uses.strip_prefix(INSTALL_ACTION)?;
+            let is_pinned =
+                revision.len() == 40 && revision.bytes().all(|byte| byte.is_ascii_hexdigit());
+            let tools = step
                 .get(Value::String("with".to_owned()))
                 .and_then(Value::as_mapping)
-                .is_some_and(|config| {
-                    config
-                        .get(Value::String("path".to_owned()))
-                        .and_then(Value::as_str)
-                        == Some(".verus/${{ env.VERUS_VERSION }}")
-                        && config
-                            .get(Value::String("key".to_owned()))
-                            .and_then(Value::as_str)
-                            == Some(
-                                "verus-${{ runner.os }}-${{ runner.arch }}-${{ env.VERUS_VERSION \
-                                 }}",
-                            )
-                })
-    }))
+                .and_then(|with| with.get(Value::String("tools".to_owned())))
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            Some((is_pinned, tools))
+        })
+        .collect())
+}
+
+fn workflow_installs_verus_only_through_the_shared_action(workflow: &Value) -> Result<bool> {
+    let installers = installer_steps(workflow)?;
+    let has_verus_installer = installers
+        .iter()
+        .any(|(is_pinned, tools)| *is_pinned && tools.as_deref() == Some("verus"));
+    let root = mapping(workflow, "workflow")?;
+    let has_cache = format!("{root:?}").contains("actions/cache@");
+    Ok(has_verus_installer && !has_cache)
+}
+
+#[test]
+fn tools_verus_outside_the_installer_inputs_does_not_count() -> Result<()> {
+    let sha = "a".repeat(40);
+    let yaml = format!(
+        "jobs:\n  verify:\n    steps:\n      - uses: {INSTALL_ACTION}{sha}\n        env:\n          \
+         tools: verus\n        with:\n          tools: kani\n      - uses: actions/x@y\n        \
+         with:\n          tools: verus\n"
+    );
+    let workflow: Value = serde_yaml::from_str(&yaml).context("parse negative workflow")?;
+    ensure!(!workflow_installs_verus_only_through_the_shared_action(
+        &workflow
+    )?);
+    Ok(())
 }
 
 #[test]
@@ -216,7 +232,9 @@ fn workflow_runs_the_proof_and_non_vacuity_targets() -> Result<()> {
     ensure!(checkout_does_not_persist_credentials(&workflow)?);
     ensure!(workflow_has_required_pull_request_triggers(&workflow)?);
     ensure!(workflow_has_read_only_contents_permission(&workflow)?);
-    ensure!(workflow_uses_pinned_verus_cache(&workflow)?);
+    ensure!(workflow_installs_verus_only_through_the_shared_action(
+        &workflow
+    )?);
     ensure!(MAKEFILE.contains(
         "git+https://github.com/leynos/rust-prover-tools@$(shell cat tools/rust-prover-tools/REF)"
     ));
@@ -253,8 +271,23 @@ fn ledger_check_requires_an_exact_declaration(
     Ok(())
 }
 
+/// The proof targets run on an installed verifier: no install, and the solver
+/// path is the one the shared action and `make verus-install` both use.
+fn ensure_ran_without_installing(log: &str) -> Result<()> {
+    ensure!(
+        !log.lines().any(|line| line.contains(" install")),
+        "a proof target must not install a prover; log was {log:?}"
+    );
+    ensure!(
+        log.lines()
+            .any(|line| line.starts_with("VERUS_Z3_PATH=") && line.ends_with("/.verus/z3/z3")),
+        "a proof target must point Verus at the installed Z3; log was {log:?}"
+    );
+    Ok(())
+}
+
 #[test]
-fn make_verus_installs_and_runs_the_library_proof() -> Result<()> {
+fn make_verus_runs_the_library_proof_without_installing() -> Result<()> {
     let runner = fake_prover_tools("rejected")?;
     let output = make_command("verus", &runner)
         .output()
@@ -262,14 +295,10 @@ fn make_verus_installs_and_runs_the_library_proof() -> Result<()> {
 
     ensure!(output.status.success());
     let log = runner_log(&runner)?;
-    ensure!(
-        log.lines()
-            .any(|line| line == "verus install --repo-root .")
-    );
-    ensure!(
-        log.lines()
-            .any(|line| line == "verus run --repo-root . --proof-file verus/lib.rs")
-    );
+    ensure_ran_without_installing(&log)?;
+    ensure!(log.lines().any(
+        |line| line == "verus run --repo-root . --no-install-missing --proof-file verus/lib.rs"
+    ));
     Ok(())
 }
 
@@ -299,13 +328,10 @@ fn make_verus_selftest_accepts_only_a_rejected_smoke_proof(
         );
     }
     let log = runner_log(&runner)?;
+    ensure_ran_without_installing(&log)?;
     ensure!(
-        log.lines()
-            .any(|line| line == "verus install --repo-root .")
-    );
-    ensure!(
-        log.lines()
-            .any(|line| line == "verus run --repo-root . --proof-file verus/smoke.rs")
+        log.lines().any(|line| line
+            == "verus run --repo-root . --no-install-missing --proof-file verus/smoke.rs")
     );
     Ok(())
 }
