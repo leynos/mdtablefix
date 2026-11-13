@@ -1416,12 +1416,22 @@ helpers stay free of vendor-specific instrumentation:
   `unchanged` when it returned the text as it found it.
 - `mdtablefix_wrap_duration_seconds` is a histogram of one invocation's
   duration in seconds, with the unit declared by `metrics::Unit::Seconds` and
-  the same `outcome` label. The timer starts before wrapping begins, so the
-  sample covers the complete path.
+  the same `outcome` label. The timer starts before the lines are wrapped and
+  is read once `wrap_lines` returns, so the sample measures the wrapping work
+  alone: choosing the outcome label and recording the metrics are outside it.
+
+The two descriptions are re-registered on every invocation rather than cached
+in a `OnceLock`. A description reaches only the recorder active at that moment,
+so a process-wide cache would bind it to the first recorder present — the no-op
+recorder when a host wraps before installing one, or another thread's local
+recorder — and later recorders would receive samples with no unit or
+description.
 
 `src/wrap/metrics_tests.rs` installs a local recorder and asserts the declared
 names, unit, and description, the bounded `outcome` label, and one duration
-sample per invocation for both outcomes.
+sample per invocation for both outcomes. It never registers the descriptions
+itself: one test wraps once with no recorder active and then asserts that a
+recorder installed afterwards still receives both descriptions and units.
 
 Metric cardinality is bounded by construction: every metric name and every
 label value is a compile-time constant. Target paths, file names, and error

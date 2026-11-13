@@ -287,10 +287,12 @@ fn dispatch_continuation(
 
 /// Wrap text lines to the given width.
 ///
-/// The invocation is timed and counted so a host that installs a recorder can
-/// see how much of a run the wrapping path accounts for. The metrics are
-/// emitted from this boundary rather than from the domain modules, which stay
-/// free of vendor-specific instrumentation.
+/// The wrapping work is timed and the invocation counted so a host that
+/// installs a recorder can see how much of a run the wrapping path accounts
+/// for. The duration covers the wrapping itself; choosing the outcome label and
+/// recording the metrics sit outside the sample. The metrics are emitted from
+/// this boundary rather than from the domain modules, which stay free of
+/// vendor-specific instrumentation.
 #[must_use]
 pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let started = std::time::Instant::now();

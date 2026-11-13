@@ -9,7 +9,7 @@ use metrics::Unit;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 
 use super::{
-    metrics::{REFLOWED, UNCHANGED, WRAP_DURATION, WRAP_TOTAL, register_metrics},
+    metrics::{REFLOWED, UNCHANGED, WRAP_DURATION, WRAP_TOTAL},
     wrap_text,
 };
 
@@ -40,16 +40,13 @@ struct Recorded {
 
 /// Records the metrics emitted on this thread while `f` runs.
 ///
-/// The descriptions are registered with the test's own recorder first, so the
-/// assertions on the declared unit and description do not depend on which test
-/// warmed the boundary's one-per-process lock.
+/// Nothing is registered up front: `f` must drive the boundary for itself, so a
+/// missing or mis-timed description registration shows up as a failed
+/// assertion rather than being masked by the test.
 fn recorded<T>(f: impl FnOnce() -> T) -> (T, Vec<Recorded>) {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
-    let value = metrics::with_local_recorder(&recorder, || {
-        register_metrics();
-        f()
-    });
+    let value = metrics::with_local_recorder(&recorder, f);
     (value, metrics(snapshotter.snapshot()))
 }
 
@@ -94,6 +91,20 @@ fn only<'a>(recorded: &'a [Recorded], name: &str) -> &'a Recorded {
     metric
 }
 
+/// Returns the recorded metric named `name` whose `outcome` label is `outcome`.
+fn with_outcome<'a>(recorded: &'a [Recorded], name: &str, outcome: &str) -> &'a Recorded {
+    recorded
+        .iter()
+        .find(|metric| {
+            metric.name == name
+                && metric
+                    .labels
+                    .iter()
+                    .any(|(key, value)| key == "outcome" && value == outcome)
+        })
+        .unwrap_or_else(|| panic!("no {name} carrying outcome={outcome}"))
+}
+
 /// Returns the `outcome` label of a recorded metric.
 fn outcome(metric: &Recorded) -> &str {
     metric
@@ -128,6 +139,71 @@ fn wrap_text_counts_an_unchanged_invocation() {
     let counter = only(&recorded, WRAP_TOTAL);
     assert_eq!(outcome(counter), UNCHANGED);
     assert!(matches!(counter.value, Value::Counter(1)));
+}
+
+/// A host may wrap before it installs a recorder. The descriptions emitted by
+/// that first wrap reach the no-op recorder, so they must be re-emitted for
+/// whichever recorder is active later; a process-wide cache would leave the
+/// later histogram without its unit or description.
+#[test]
+fn a_recorder_installed_after_a_wrap_still_receives_the_descriptions() {
+    let long = vec!["a very long line that must be reflowed at a narrow width".to_string()];
+    let short = vec!["short".to_string()];
+
+    // No recorder is active here, so these descriptions have nowhere to go.
+    assert_ne!(wrap_text(&long, 20), long);
+
+    let (outputs, recorded) = recorded(|| (wrap_text(&long, 20), wrap_text(&short, 80)));
+    assert_ne!(outputs.0, long, "the long line must be reflowed");
+    assert_eq!(outputs.1, short, "the short line must be left alone");
+
+    let mut names: Vec<&str> = recorded.iter().map(|metric| metric.name.as_str()).collect();
+    names.sort_unstable();
+    names.dedup();
+    assert_eq!(
+        names,
+        vec!["mdtablefix_wrap_duration_seconds", "mdtablefix_wrap_total"],
+        "the boundary must report only its two documented names: {recorded:?}"
+    );
+
+    for metric in &recorded {
+        assert!(
+            metric
+                .description
+                .as_deref()
+                .is_some_and(|text| !text.is_empty()),
+            "{} arrived without a description: {metric:?}",
+            metric.name
+        );
+        assert_eq!(
+            metric.labels.len(),
+            1,
+            "{} must carry only the bounded outcome label: {metric:?}",
+            metric.name
+        );
+    }
+
+    for expected in [REFLOWED, UNCHANGED] {
+        let counter = with_outcome(&recorded, WRAP_TOTAL, expected);
+        assert!(
+            matches!(counter.value, Value::Counter(1)),
+            "{expected} is counted once: {counter:?}"
+        );
+        let histogram = with_outcome(&recorded, WRAP_DURATION, expected);
+        assert_eq!(
+            histogram.unit,
+            Some(Unit::Seconds),
+            "the duration must be declared in seconds: {histogram:?}"
+        );
+        match &histogram.value {
+            Value::Histogram(samples) => assert_eq!(
+                samples.len(),
+                1,
+                "{expected} records exactly one duration sample: {histogram:?}"
+            ),
+            Value::Counter(count) => panic!("expected a histogram, got counter {count}"),
+        }
+    }
 }
 
 #[test]

@@ -1119,11 +1119,12 @@ URLs, footnote labels, or token text — ever reaches a subscriber.
 
 This is a deliberate narrowing. The `fragment classified` event previously
 carried a `token` field holding a truncated, up-to-80-byte snippet of the
-actual document text, plus a `truncated` flag. It now carries `token_length`, a
-character count, and `kind`, the computed classification, so document text no
-longer reaches a subscriber through this event. A consumer that was reading
-`token=` from these logs must change: no replacement snippet of document
-content is available, only the count.
+actual document text, plus a `truncated` flag. Both are gone, and a new
+`token_length` field gives the token's character count, so document text no
+longer reaches a subscriber through this event. The `kind` field, which reports
+the computed classification, is unchanged. A consumer that was reading `token=`
+from these logs must change: no replacement snippet of document content is
+available, only the count, and there is no replacement for the truncation flag.
 
 See [Observability](developers-guide.md#observability) in the developer's guide
 for the full event and field reference; this section does not repeat it. The

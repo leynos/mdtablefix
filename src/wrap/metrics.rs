@@ -10,7 +10,7 @@
 //! emits these metrics but never installs a recorder; a host application
 //! installs one, as documented in the developers' guide.
 
-use std::{sync::OnceLock, time::Duration};
+use std::time::Duration;
 
 use metrics::{Unit, counter, describe_counter, describe_histogram, histogram};
 
@@ -26,20 +26,14 @@ pub(super) const REFLOWED: &str = "reflowed";
 /// The `outcome` label value for an invocation that left the text alone.
 pub(super) const UNCHANGED: &str = "unchanged";
 
-/// Declares the metrics emitted by the wrapping path.
-///
-/// The descriptions are registered once per process rather than per call: they
-/// never change, and the work is not worth repeating on the hot path.
-fn describe_metrics() {
-    static DESCRIPTION: OnceLock<()> = OnceLock::new();
-    DESCRIPTION.get_or_init(register_metrics);
-}
-
 /// Registers the descriptions of every metric the wrapping path emits.
 ///
-/// The tests call this directly, so their assertions on the declared unit and
-/// description do not depend on which test warmed [`describe_metrics`]'s
-/// `OnceLock`.
+/// Registration is repeated on each invocation rather than cached. A
+/// description reaches only the recorder that is active at that moment, so a
+/// process-wide cache would bind it to whichever recorder happened to be
+/// installed during the first wrap — the no-op recorder, or another thread's
+/// local one. Two calls through the façade's recorder pointer cost far less
+/// than the wrapping work they describe.
 pub(super) fn register_metrics() {
     describe_counter!(
         WRAP_TOTAL,
@@ -57,8 +51,10 @@ pub(super) fn register_metrics() {
 /// `input` and `output` are compared only to choose the bounded `outcome`
 /// label; neither is recorded. The duration is recorded for every invocation,
 /// so a wrap that stalls is visible rather than missing from the distribution.
+/// `elapsed` measures the wrapping work alone: it is read before the comparison
+/// below, so label selection and recording are outside the sample.
 pub(super) fn record_wrap(input: &[String], output: &[String], elapsed: Duration) {
-    describe_metrics();
+    register_metrics();
     let outcome = if output == input { UNCHANGED } else { REFLOWED };
     counter!(WRAP_TOTAL, "outcome" => outcome).increment(1);
     histogram!(WRAP_DURATION, "outcome" => outcome).record(elapsed.as_secs_f64());
