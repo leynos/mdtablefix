@@ -2348,7 +2348,11 @@ packaging dry run and `release.yml`) use the same pinned nightly with LLVM,
 because the dev profile does not reach the release profile. Coverage selects
 LLVM too, since Cranelift cannot instrument coverage. Two `should_panic` tests
 in `tests/wrap/spanning_code_spans.rs` replace the `catch_unwind` assertions
-that Cranelift cannot unwind through.
+that Cranelift cannot unwind through. The Windows atomic-write job
+(`windows-atomic-contract` in `ci.yml`) builds with LLVM through
+`CARGO_PROFILE_DEV_CODEGEN_BACKEND: llvm`, because under Cranelift on Windows
+MSVC the `cli_matrix` and `wrap` test binaries exit abnormally with
+`0xe06d7363`. Linux and macOS run the whole suite under Cranelift.
 
 ## Runner placement
 
