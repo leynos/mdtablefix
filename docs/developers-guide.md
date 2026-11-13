@@ -894,16 +894,17 @@ depth-aware tracking.
    footnote markers. Span grouping helpers in `src/wrap/inline/span_helpers.rs`
    extend grouped spans over trailing punctuation, couple adjacent footnote
    references, and merge chained inline code or link tokens.
-   `determine_token_span_observed` forward-couples opening punctuation tokens
-   (`(`, `[`, and CJK openers) and hyphen-prefix tokens to the next inline code
-   span or Markdown link so wrapping never leaves a lone opener or prefix at
-   the end of a line. `try_couple_inline_link_after_opener` applies the same
-   rule to parenthesized inline citation links such as `([1](url))`, grouping
-   the opener and link as one `SpanKind::Link` so adjacent citations like
-   `([1](url))([2](url2))` do not split at the boundary.
-   `looks_like_bracketed_reference` recognizes the tokenizer's split closing
-   half `1]` as well as the merged `[1]`; only ASCII digits qualify, so the
-   predicate stays disjoint from `looks_like_link` and
+   `determine_token_span_observed` starts from `initial_token_span`, which
+   forward-couples opening punctuation tokens (`(`, `[`, and CJK openers) to
+   the next inline code span or Markdown link so wrapping never leaves a lone
+   opener at the end of a line, and couples any unspaced token to a following
+   inline code span so a later join cannot turn the break into a space.
+   `try_couple_inline_link_after_opener` applies the same rule to parenthesized
+   inline citation links such as `([1](url))`, grouping the opener and link as
+   one `SpanKind::Link` so adjacent citations like `([1](url))([2](url2))` do
+   not split at the boundary. `looks_like_bracketed_reference` recognizes the
+   tokenizer's split closing half `1]` as well as the merged `[1]`; only ASCII
+   digits qualify, so the predicate stays disjoint from `looks_like_link` and
    `looks_like_footnote_ref`. `try_couple_bracketed_reference` couples an
    opening bracket to its reference and absorbs trailing punctuation.
    `SpanKind::BracketedRef` and `FragmentKind::BracketedRef` keep the merged
@@ -1118,17 +1119,14 @@ coupled to its opening bracket.
   `scan_code_suffix_end` in `src/wrap/tokenize/scanning.rs`; the combined
   token is recognized as atomic by `has_inline_code_structure` in
   `src/wrap/inline/fragment.rs`, so wrapping treats the full string as one
-  unit. Leading-hyphen compounds — a token that ends with a hyphen and contains
-  at least one alphabetic character (for example `pre-`, `LLM-`, `(API-`) — are
-  coupled forward to the next inline code span during span grouping by the
-  `ends_with_hyphen_prefix` predicate in `src/wrap/inline/predicates.rs`,
-  applied in `determine_token_span_observed` in
-  `src/wrap/inline/span_grouping.rs`. The coupling mirrors the existing
-  opening-punctuation pattern, so compounds such as `` pre-`LLMPort` `` and
-  `` (API-`Foo`) `` remain atomic during wrapping. Internal hyphen chains (e.g.
-  `state-of-the-art-`) are accepted by design; bare dash runs such as `-` or
-  `---` are rejected. Unicode alphabetic characters (e.g. `pré-`, `字-`) are
-  intentionally supported.
+  unit. A non-whitespace token immediately before an inline code span is
+  grouped forward by the `couple_unspaced_before_code` helper applied from
+  `initial_token_span` in `src/wrap/inline/span_grouping.rs`. This makes
+  unspaced runs such as `` **bold**`code` ``, `` pre-`LLMPort` ``, and
+  `` (API-`Foo`) `` atomic, because emitting a line break inside one would
+  introduce a space when the next pass rejoins the paragraph. Whitespace
+  remains a break opportunity, so separately spaced inline code spans may still
+  wrap independently.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur. A source hard break ends its wrapped segment, so it is
   always on the segment's final line, the only line `render_line` keeps

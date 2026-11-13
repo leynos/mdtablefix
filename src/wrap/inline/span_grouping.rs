@@ -15,7 +15,6 @@ use unicode_width::UnicodeWidthStr;
 
 use super::{
     predicates::{
-        ends_with_hyphen_prefix,
         is_inline_code_token,
         is_opening_punct,
         is_trailing_punctuation_token,
@@ -99,19 +98,24 @@ fn couple_opening_punctuation(
     Some((extend_punctuation(tokens, start + 2, width), kind))
 }
 
-/// Couples a hyphen-prefix token to the inline code span that follows it.
+/// Couples an adjacent unspaced token to the inline code span that follows it.
 ///
-/// This keeps wrapping from splitting a hyphen-terminated prefix from the
-/// inline code span that follows it, such as a `pre-` prefix before code.
+/// A wrap boundary between two unspaced tokens becomes a space when the
+/// formatter rereads the paragraph, so the seam has to stay atomic. The rule is
+/// defined over the token class rather than a spelling: any non-whitespace
+/// token binds to a following code span, which covers `` pre-`code` `` as well
+/// as the emphasis and link seams a hyphen test missed. Whitespace is
+/// deliberately still a break opportunity.
+///
 /// Returns the new exclusive end when coupling happened.
-fn couple_hyphen_prefix(
+fn couple_unspaced_before_code(
     tokens: &[String],
     start: usize,
     end: usize,
     width: &mut usize,
 ) -> Option<usize> {
     let next = tokens.get(end)?;
-    if !ends_with_hyphen_prefix(&tokens[start]) || !is_code_token(next) {
+    if is_whitespace_token(&tokens[start]) || !is_code_token(next) {
         return None;
     }
     *width += UnicodeWidthStr::width(next.as_str());
@@ -154,10 +158,10 @@ fn classify_first_token(
 /// Build the first atomic span at `start`, including punctuation and attached
 /// Markdown constructs that cannot be split across a line boundary.
 ///
-/// Opening punctuation, hyphen prefixes, code spans, links, bare bracket
-/// references, and footnote references are coupled before the general
-/// continuation loop runs. The returned width is the Unicode display width of
-/// that complete candidate.
+/// Opening punctuation, unspaced runs before a code span, code spans, links,
+/// bare bracket references, and footnote references are coupled before the
+/// general continuation loop runs. The returned width is the Unicode display
+/// width of that complete candidate.
 fn initial_token_span(
     tokens: &[String],
     start: usize,
@@ -171,7 +175,7 @@ fn initial_token_span(
     {
         end = coupled_end;
         kind = coupled_kind;
-    } else if let Some(coupled_end) = couple_hyphen_prefix(tokens, start, end, &mut width) {
+    } else if let Some(coupled_end) = couple_unspaced_before_code(tokens, start, end, &mut width) {
         end = coupled_end;
         kind = SpanKind::Code;
     }

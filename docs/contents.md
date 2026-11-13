@@ -64,6 +64,9 @@
 - [Observer boundary for tracing](adrs/0015-observer-boundary-for-tracing.md):
   Accepted decision covering the `Observer` port and `TracingObserver` adapter
   for inline-wrapping domain diagnostics.
+- [Keep unspaced inline syntax seams atomic](adrs/0016-unspaced-inline-seams.md):
+  Accepted decision coupling any unspaced token before an inline code span, in
+  place of the hyphen-prefix predicate.
 
 ## Reference material
 

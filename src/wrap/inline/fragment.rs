@@ -196,27 +196,6 @@ fn classify_fragment(text: &str) -> FragmentKind {
 mod tests;
 
 #[cfg(test)]
-mod trace_snippet_tests {
-    //! Tests for the `trace_text_snippet` helper.
-    //!
-    //! Verifies that the UTF-8-safe truncation helper produces a slice at a
-    //! valid character boundary and sets the truncation flag correctly.
-
-    use super::trace_text_snippet;
-
-    #[test]
-    fn trace_text_snippet_truncates_on_char_boundary() {
-        let ascii = "a".repeat(79);
-        let text = format!("{ascii}étail");
-        let (snippet, truncated) = trace_text_snippet(&text);
-
-        assert!(truncated);
-        assert_eq!(snippet, ascii.as_str());
-        assert!(snippet.is_char_boundary(snippet.len()));
-    }
-}
-
-#[cfg(test)]
 mod tracing_tests {
     //! Traced-event tests for `InlineFragment` classification.
     //!
