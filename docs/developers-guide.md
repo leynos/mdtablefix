@@ -1161,6 +1161,14 @@ coupled to its opening bracket.
   a matching closing fence invisible. All tokenizer entry points that close
   code spans use `position_after_close` so they also reject candidate closers
   embedded in a longer backtick run.
+- **Tokenizer byte offsets.** Callers should pass UTF-8 byte offsets at
+  `char_indices()` boundaries. A `&str` is already valid UTF-8, so these checks
+  concern offsets into valid text. An offset inside a multibyte scalar is
+  rejected with helper-specific fallbacks: `scan_while` and
+  `scan_code_suffix_end` return the supplied start, `collect_range` returns an
+  empty string for a rejected range, and `position_after_close`,
+  `parse_link_text`, and `parse_link_url` return `None`. These fallbacks differ
+  by helper; they do not promise to clamp offsets to `text.len()`.
 - **Width-aware inline-code carries.** `merge_whitespace_only_lines` receives
   the active wrap width from `wrap_preserving_code`. Before carrying a previous
   inline-code tail across a single-space wrap artefact, it must compute the

@@ -29,6 +29,8 @@ fn scan_while_cases(
 #[case::first_two("αβγδε", 0, "αβ".len(), "αβ")]
 #[case::middle("αβγδε", "αβ".len(), "αβ".len() + "γδ".len(), "γδ")]
 #[case::invalid_utf8_boundary("åx", 1, 3, "")]
+#[case::end_past_end("abc", 0, 4, "")]
+#[case::start_past_end("abc", 4, 5, "")]
 #[case::reversed_range("abc", 2, 1, "")]
 fn collect_range_cases(
     #[case] text: &str,
@@ -47,6 +49,8 @@ fn collect_range_cases(
 #[case("`code`.", "`code`".len(), "`code`".len())]
 #[case("`code`**", "`code`".len(), "`code`".len())]
 #[case("`code`'2 next", "`code`".len(), "`code`".len())]
+#[case::invalid_utf8_boundary("åx", 1, 1)]
+#[case::past_end("abc", 4, 4)]
 fn scan_code_suffix_end_cases(#[case] text: &str, #[case] start: usize, #[case] expected: usize) {
     assert_eq!(scan_code_suffix_end(text, start), expected);
 }
@@ -111,6 +115,8 @@ fn has_unclosed_code_span_rejects_mid_run_closers(#[case] text: &str, #[case] ex
 // span is closed by the escaped backtick before `x`, not the literal backtick
 // after it.
 #[case::escaped_closer_before_reopening_literal(r"`a\` x `b\`", 1, 1, Some(r"`a\`".len()))]
+#[case::mid_character_search_start("å`", 1, 1, None)]
+#[case::past_end_search_start("`", 2, 1, None)]
 fn position_after_close_alternating_cases(
     #[case] text: &str,
     #[case] search_start: usize,
@@ -124,12 +130,64 @@ fn position_after_close_alternating_cases(
 }
 
 proptest! {
+    /// A valid byte range from `char_indices` collects its character subsequence.
+    #[test]
+    fn collect_range_matches_character_subsequence(
+        chars in prop::collection::vec(any::<char>(), 0..64),
+        start_seed in 0usize..64,
+        end_seed in 0usize..64,
+    ) {
+        let text = chars.iter().copied().collect::<String>();
+        let boundaries = text
+            .char_indices()
+            .map(|(offset, _)| offset)
+            .chain(std::iter::once(text.len()))
+            .collect::<Vec<_>>();
+        let first_slot = start_seed.min(chars.len());
+        let second_slot = end_seed.min(chars.len());
+        let start_slot = first_slot.min(second_slot);
+        let end_slot = first_slot.max(second_slot);
+        let expected = chars
+            .get(start_slot..end_slot)
+            .expect("ordered character range should stay within generated input")
+            .iter()
+            .copied()
+            .collect::<String>();
+        let start = boundaries
+            .get(start_slot)
+            .copied()
+            .expect("character start slot should have a byte boundary");
+        let end = boundaries
+            .get(end_slot)
+            .copied()
+            .expect("character end slot should have a byte boundary");
+
+        prop_assert_eq!(collect_range(&text, start, end), expected);
+    }
+
+    /// Invalid offsets inside a multibyte scalar use each helper's fallback.
+    #[test]
+    fn invalid_multibyte_offset_uses_helper_specific_fallbacks(
+        tail in prop::collection::vec(any::<char>(), 0..32),
+    ) {
+        let text = format!("å{}", tail.into_iter().collect::<String>());
+        let inside_scalar = 'å'.len_utf8() - 1; // Offset 1 is inside this scalar.
+
+        prop_assert_eq!(scan_while(&text, inside_scalar, char::is_alphabetic), inside_scalar);
+        prop_assert_eq!(scan_code_suffix_end(&text, inside_scalar), inside_scalar);
+        prop_assert_eq!(collect_range(&text, inside_scalar, text.len()), "");
+    }
+
     /// `position_after_close` must always terminate (no infinite loop) and must
     /// never return an offset beyond `text.len()`.
     #[test]
     fn position_after_close_always_terminates_within_bounds(
-        text in "[ -~]{0,200}",   // printable ASCII, up to 200 chars
-        search_start in 0usize..=200usize,
+        text in prop::collection::vec(
+            prop_oneof![2 => Just('`'), 1 => Just('\\'), 7 => any::<char>()],
+            0..=200,
+        )
+            .prop_map(|chars| chars.into_iter().collect::<String>()),
+        search_start in 0usize..=800usize,
         fence_len in 1usize..=4usize,
     ) {
         let search_start = search_start.min(text.len());
@@ -164,8 +222,12 @@ proptest! {
     /// inside a longer backtick run.
     #[test]
     fn position_after_close_returns_isolated_fence_of_exact_length(
-        text in "[ -~]{0,200}",
-        search_start in 0usize..=200usize,
+        text in prop::collection::vec(
+            prop_oneof![2 => Just('`'), 1 => Just('\\'), 7 => any::<char>()],
+            0..=200,
+        )
+            .prop_map(|chars| chars.into_iter().collect::<String>()),
+        search_start in 0usize..=800usize,
         fence_len in 1usize..=4usize,
     ) {
         let search_start = search_start.min(text.len());

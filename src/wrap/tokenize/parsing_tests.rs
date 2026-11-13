@@ -76,6 +76,7 @@ fn parse_link_or_image_handles_nested_parentheses() {
     assert_eq!(token, "![alt](path(a(b)c))");
     assert_eq!(idx, token.len());
 }
+
 #[test]
 fn parse_link_or_image_falls_back_on_malformed_input() {
     let text = "[broken";
@@ -83,6 +84,7 @@ fn parse_link_or_image_falls_back_on_malformed_input() {
     assert_eq!(token, "[");
     assert_eq!(idx, "[".len());
 }
+
 #[test]
 fn parse_link_or_image_handles_deeply_nested_parentheses() {
     let text = "[link](url(a(b(c)d)e)) tail";
@@ -149,6 +151,23 @@ fn parse_link_or_image_preserves_reference_style_link() {
     );
 }
 
+#[rstest]
+#[case::mid_character("å[", 1)]
+#[case::past_end("å[", "å[".len() + 1)]
+fn parse_link_text_returns_none_for_invalid_start_offsets(
+    #[case] text: &str,
+    #[case] start: usize,
+) {
+    assert_eq!(parse_link_text(text, start), None);
+}
+
+#[rstest]
+#[case::mid_character("å(", 1)]
+#[case::past_end("å(", "å(".len() + 1)]
+fn parse_link_url_returns_none_for_invalid_start_offsets(#[case] text: &str, #[case] start: usize) {
+    assert_eq!(parse_link_url(text, start), None);
+}
+
 proptest! {
     #[test]
     fn parse_link_or_image_preserves_footnote_references_with_escaped_brackets(
@@ -159,7 +178,7 @@ proptest! {
         let expected_len = expected.len();
         let text = format!("{expected} tail");
 
-        let (token, idx) = parse_link_or_image(&text, 0, &mut None);
+        let (token, idx) = parse_link_or_image(&text, 0);
 
         prop_assert_eq!(token, expected);
         prop_assert_eq!(idx, expected_len);
@@ -342,3 +361,4 @@ mod tracing_tests {
         assert!(logs_contain("unterminated_bracket"));
     }
 }
+// weave: run 'weave explain src/wrap/tokenize/parsing_tests.rs' for per-hunk detail, 'weave check' to verify your resolution
