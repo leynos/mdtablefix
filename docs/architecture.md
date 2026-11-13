@@ -1070,11 +1070,16 @@ when wrapping. This prevents sentences such as:
 from splitting the full stop onto a new line, preserving the code span's
 readability.
 
-This grouping is deliberately narrow. Whitespace between separate inline code
-spans remains a valid break opportunity, so sequences such as `.toml`, `.json`,
-`.json5`, `.yaml`, and `.yml` can wrap between spans when required. The
-coupling rule only keeps immediately trailing punctuation with the preceding
-code span.
+Whitespace between separate inline code spans remains a valid break
+opportunity, so sequences such as `.toml`, `.json`, `.json5`, `.yaml`, and
+`.yml` can wrap between spans when required. Two coupling rules give the span
+its boundaries. Trailing punctuation is absorbed after the span. An unspaced
+token immediately before the span is grouped forward with it, so a run such as
+`` **bold**`code` `` or `` pre-`LLMPort` `` stays atomic: a line break inside
+one would become a space when the next pass rejoins the paragraph. The leading
+coupling is stated over the token class rather than a spelling, and
+`initial_token_span` in `src/wrap/inline/mod.rs` applies it. See
+[ADR 0013](adrs/0013-unspaced-inline-seams.md).
 
 Inflectional affixes and possessive markers (`s`, `'s`, `ed`, `ing`) and
 hyphenated compounds that appear immediately after a closing backtick fence are
