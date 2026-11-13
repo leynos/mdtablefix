@@ -4,13 +4,6 @@
 //! `#[path]` attribute, or otherwise carry a refinement proof to the formatter
 //! function that calls it. Do not add a standalone reimplementation here.
 
-// Verus 0.2026.09.06 requires every executable loop to name a `decreases`
-// clause unless the crate opts out. The previous release accepted a loop
-// without one, so the kernels' scanner loops prove partial correctness, with
-// termination argued by their `fuel` counters in the proofs that mention them.
-// The opt-out keeps that exact semantics rather than strengthening the claim.
-#![verifier::exec_allows_no_decreases_clause]
-
 use vstd::prelude::*;
 
 verus! {

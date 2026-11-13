@@ -14,10 +14,12 @@ Under the previous release, `0.2025.04.19.1b16620`, it reported 178. The two
 that went were the executable constants `COMPRESSED_MARKER` and
 `COMPRESSED_MARKER_LEN`, which the new release cannot erase when they sit
 outside `verus!` syntax; `compressed` now writes the same two literals, and
-`spec_compressed` is unchanged. The new release also requires every executable
-loop to name a `decreases` clause, so `verus/lib.rs` opts the crate out with
-`#![verifier::exec_allows_no_decreases_clause]`, which keeps the previous
-release's semantics: the scanner loops prove partial correctness.
+`spec_compressed` is unchanged. The new release also requires every verified
+executable loop to name a `decreases` clause; the twelve scanner loops in
+verified bodies each carry one, a measure such as `chars@.len() - cursor`, so
+the proofs show that each of them terminates. Loops inside
+`verifier::external_body` functions, such as those in `is_table_delimiter` and
+`is_thematic_break`, are trusted and have no termination proof.
 
 The pinned Verus release cannot compile `&str` range operations inside
 `verus!`. Production `classify_line` therefore converts the line to Unicode

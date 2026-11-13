@@ -36,7 +36,7 @@ while (cursor < chars.len()) invariant(
     start <= cursor,
     cursor <= chars@.len() || cursor == start,
     forall|i: int| start <= i < cursor ==> crate::spec_is_markdown_whitespace(#[trigger] chars@[i]),
-) {
+) decreases(chars@.len() - cursor) {
         if !is_markdown_whitespace(chars[cursor]) {
             return false;
         }
@@ -89,7 +89,7 @@ while (first < end && is_markdown_whitespace(chars[first])) invariant(
     end <= chars@.len(),
     crate::spec_trim_start(chars@, first as int, end as int)
         == crate::spec_trim_start(chars@, start as int, end as int),
-) {
+) decreases(end - first) {
     first += 1;
 }
 after { first }
@@ -109,7 +109,7 @@ while (last > start && is_markdown_whitespace(chars[last - 1])) invariant(
     end <= chars@.len(),
     crate::spec_trim_end(chars@, start as int, last as int)
         == crate::spec_trim_end(chars@, start as int, end as int),
-) {
+) decreases(last) {
     last -= 1;
 }
 after { last }
@@ -265,7 +265,7 @@ while (cursor < end && chars[cursor] == marker) invariant(
     cursor - start + crate::spec_marker_run_len(chars@, cursor as int, end as int, marker)
         == crate::spec_marker_run_len(chars@, start as int, end as int, marker),
     forall|i: int| start <= i < cursor ==> chars@[i] == marker,
-) {
+) decreases(end - cursor) {
         cursor += 1;
 }
 after {
@@ -292,7 +292,7 @@ while (cursor < end) invariant(
     start <= cursor <= end,
     end <= chars@.len(),
     forall|i: int| start <= i < cursor ==> chars@[i] != target,
-) {
+) decreases(end - cursor) {
         if chars[cursor] == target {
             return true;
         }
@@ -315,7 +315,7 @@ while (cursor < end) invariant(
     start <= cursor <= end,
     end <= chars@.len(),
     forall|i: int| start <= i < cursor ==> chars@[i] == expected,
-) {
+) decreases(end - cursor) {
         if chars[cursor] != expected {
             return false;
         }

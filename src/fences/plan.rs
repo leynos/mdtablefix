@@ -357,7 +357,7 @@ while (index < len) invariant(
         compressible,
         index as int,
     ),
-) {
+) decreases(len - index) {
     let is_delimiter = is_outer_delimiter(index, len, release, written);
     out.push(delimiter_agendum(is_delimiter, compressible));
     index += 1;

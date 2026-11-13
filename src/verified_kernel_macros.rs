@@ -71,7 +71,7 @@ macro_rules! verified_loop_function {
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
         $(ghost_before { $($ghost_before:tt)* })?
-        while ($condition:expr) invariant($($invariant:tt)*) { $($loop_body:tt)* }
+        while ($condition:expr) invariant($($invariant:tt)*) $(decreases($($decreases:tt)*))? { $($loop_body:tt)* }
         $(proof_loop { $($proof_loop:tt)* })?
         $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
@@ -93,7 +93,7 @@ macro_rules! verified_loop_function {
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
         $(ghost_before { $($ghost_before:tt)* })?
-        while ($condition:expr) invariant($($invariant:tt)*) { $($loop_body:tt)* }
+        while ($condition:expr) invariant($($invariant:tt)*) $(decreases($($decreases:tt)*))? { $($loop_body:tt)* }
         $(proof_loop { $($proof_loop:tt)* })?
         $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
@@ -120,7 +120,7 @@ macro_rules! verified_loop_function {
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
         $(ghost_before { $($ghost_before:tt)* })?
-        while ($condition:expr) invariant($($invariant:tt)*) { $($loop_body:tt)* }
+        while ($condition:expr) invariant($($invariant:tt)*) $(decreases($($decreases:tt)*))? { $($loop_body:tt)* }
         $(proof_loop { $($proof_loop:tt)* })?
         $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
@@ -137,6 +137,7 @@ macro_rules! verified_loop_function {
                 $($($ghost_before)*)?
                 while $condition
                     invariant $($invariant)*
+                    $(decreases $($decreases)*)?
                     {
                         $($loop_body)*
                         $(proof { $($proof_loop)* })?
@@ -154,7 +155,7 @@ macro_rules! verified_loop_function {
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
         $(ghost_before { $($ghost_before:tt)* })?
-        while ($condition:expr) invariant($($invariant:tt)*) { $($loop_body:tt)* }
+        while ($condition:expr) invariant($($invariant:tt)*) $(decreases($($decreases:tt)*))? { $($loop_body:tt)* }
         $(proof_loop { $($proof_loop:tt)* })?
         $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
@@ -170,6 +171,7 @@ macro_rules! verified_loop_function {
                 $($($ghost_before)*)?
                 while $condition
                     invariant $($invariant)*
+                    $(decreases $($decreases)*)?
                     {
                         $($loop_body)*
                         $(proof { $($proof_loop)* })?
