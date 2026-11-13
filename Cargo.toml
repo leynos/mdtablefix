@@ -58,7 +58,7 @@ similar = "3.2"
 html5ever = "0.39.0"
 # `markup5ever_rcdom` must stay on the same parser stack as `html5ever`
 # because `RcDom` implements `TreeSink` from that shared `markup5ever` line.
-markup5ever_rcdom = "0.39.0"
+markup5ever_rcdom = "0.40.1"
 textwrap = "0.16.2"
 metrics = "0.24"
 # Domain error enums for the binary's file-selection tree. `AGENTS.md` mandates
