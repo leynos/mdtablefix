@@ -35,6 +35,7 @@ use tracing::debug;
 use super::{
     lists::{footnote_block_range, has_existing_footnote_block, trimmed_range},
     parsing::{FOOTNOTE_LINE_RE, is_definition_continuation, parse_definition},
+    strip_blockquote_markers,
 };
 use crate::{
     textproc::{Token, push_original_token, tokenize_markdown},
@@ -54,20 +55,7 @@ static FOOTNOTE_REF_RE: LazyLock<Regex> = lazy_regex!(
 ///
 /// Whitespace and blockquote markers are valid before a definition header;
 /// other prose means the matching reference is ordinary document content.
-fn matches_definition_prefix(prefix: &str) -> bool {
-    let mut remaining = prefix;
-    loop {
-        remaining = remaining.trim_start_matches(char::is_whitespace);
-        if remaining.is_empty() {
-            return true;
-        }
-        if let Some(stripped) = remaining.strip_prefix('>') {
-            remaining = stripped;
-            continue;
-        }
-        return false;
-    }
-}
+fn matches_definition_prefix(prefix: &str) -> bool { strip_blockquote_markers(prefix).is_empty() }
 
 /// Determines whether a reference-shaped match is part of a definition header.
 ///
