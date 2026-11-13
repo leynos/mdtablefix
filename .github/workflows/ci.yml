@@ -95,6 +95,10 @@ jobs:
           output-path: lcov.info
           format: lcov
           with-ratchet: 'true'
+          # A new path starts a new baseline: the cache entry's version hashes
+          # this path, so the restore misses the 95.43% measured on the previous
+          # toolchain and the committed file sets the baseline.
+          baseline-rust-file: .coverage-baseline-v2.rust
           publish-artefact: 'false'
 
   windows-atomic-contract:

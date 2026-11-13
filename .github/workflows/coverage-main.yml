@@ -83,6 +83,10 @@ jobs:
           output-path: lcov.info
           format: lcov
           with-ratchet: 'true'
+          # A new path starts a new baseline: the cache entry's version hashes
+          # this path, so the restore misses the 95.43% measured on the previous
+          # toolchain and the committed file sets the baseline.
+          baseline-rust-file: .coverage-baseline-v2.rust
       # Whether the token is set, as a plain step output. The expression is
       # evaluated before the shell runs, so this step binds nothing: the token
       # sits in no `env` in this workflow, because the upload action is
