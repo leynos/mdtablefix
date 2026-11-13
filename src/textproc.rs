@@ -143,6 +143,8 @@ pub fn leading_indent(s: &str) -> &str {
 mod tests {
     //! Unit tests for token processing.
 
+    use rstest::rstest;
+
     use super::*;
 
     #[test]
@@ -198,21 +200,15 @@ mod tests {
         assert_eq!(out, lines);
     }
 
-    #[test]
-    fn token_stream_handles_fences() {
-        let lines = vec![
+    #[rstest]
+    #[case::token_stream_handles_fences(
+        vec![
             "```rust".to_owned(),
             "fn main() {".to_owned(),
             "    println!(\"hi\");".to_owned(),
             "```".to_owned(),
-        ];
-        let mut tokens = Vec::new();
-        let processed = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
-        assert!(
-            processed.is_empty(),
-            "token capture must leave output empty"
-        );
-        let expected = vec![
+        ],
+        vec![
             "Fence(\"```rust\")".to_owned(),
             "Newline".to_owned(),
             "Fence(\"fn main() {\")".to_owned(),
@@ -220,41 +216,34 @@ mod tests {
             "Fence(\"    println!(\\\"hi\\\");\")".to_owned(),
             "Newline".to_owned(),
             "Fence(\"```\")".to_owned(),
-        ];
-        assert_eq!(tokens, expected);
-    }
-
-    #[test]
-    fn malformed_fence_sequence_returns_tokens() {
-        let lines = vec!["```".to_owned(), "code".to_owned()];
-        let mut tokens = Vec::new();
-        let processed = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
-        assert!(
-            processed.is_empty(),
-            "token capture must leave output empty"
-        );
-        let expected = vec![
+        ],
+    )]
+    #[case::malformed_fence_sequence_returns_tokens(
+        vec!["```".to_owned(), "code".to_owned()],
+        vec![
             "Fence(\"```\")".to_owned(),
             "Newline".to_owned(),
             "Fence(\"code\")".to_owned(),
-        ];
-        assert_eq!(tokens, expected);
-    }
-
-    #[test]
-    fn multi_backtick_spans_are_recognised() {
-        let lines = vec!["A ``code`` span".to_owned()];
+        ],
+    )]
+    #[case::multi_backtick_spans_are_recognised(
+        vec!["A ``code`` span".to_owned()],
+        vec![
+            "Text(\"A \")".to_owned(),
+            "Code { raw: \"``code``\", fence: \"``\", code: \"code\" }".to_owned(),
+            "Text(\" span\")".to_owned(),
+        ],
+    )]
+    fn token_capture_preserves_expected_tokens(
+        #[case] lines: Vec<String>,
+        #[case] expected: Vec<String>,
+    ) {
         let mut tokens = Vec::new();
         let processed = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
         assert!(
             processed.is_empty(),
             "token capture must leave output empty"
         );
-        let expected = vec![
-            "Text(\"A \")".to_owned(),
-            "Code { raw: \"``code``\", fence: \"``\", code: \"code\" }".to_owned(),
-            "Text(\" span\")".to_owned(),
-        ];
         assert_eq!(tokens, expected);
     }
 
