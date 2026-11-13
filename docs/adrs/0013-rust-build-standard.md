@@ -33,8 +33,8 @@ artefacts also need a baseline that the fast flags would disturb.
   and CI step that assigns `RUSTFLAGS` without them.
 - Restate the flags in each recipe and step, held by a contract test. This is
   the option taken.
-- Adopt Cranelift for development builds. The developers' guide records why
-  this repository does not.
+- Adopt Cranelift for development builds. The repository did not at first and
+  does since 2026-11-13; see the consequences below.
 
 ## Decision outcome
 
@@ -44,8 +44,8 @@ flags into each development recipe, keeping the caller's own `RUSTFLAGS`.
 Coverage assigns its own flags and ignores the caller's. The release recipe
 keeps the caller's flags and names neither fast flag, so it ships from the
 platform linker; a direct `cargo build --release` takes the configuration's
-flags unless `RUSTFLAGS` is assigned. Cranelift is not adopted; the developers'
-guide records the measurement and the reason.
+flags unless `RUSTFLAGS` is assigned. Cranelift was not adopted at first; the
+consequences below record the 2026-11-13 change.
 
 `tests/build_standard_contract.rs` reads the Cargo configuration sources and
 the commands `make -n` prints for each target, and the `setup-rust` steps of
@@ -57,7 +57,9 @@ the workflows, so a flag lost through a recipe or workflow edit fails there.
   must be GCC 12.1 or newer, or clang.
 - A change to a recipe or workflow step that assigns `RUSTFLAGS` must restate
   the flags, and the contract says which clause fails when it does not.
-- Revisit Cranelift when the toolchain or the failing tests change.
+- Cranelift is the development default from 2026-11-13; coverage selects LLVM
+  explicitly, and release builds keep LLVM on the pinned nightly because
+  `[profile.dev]` does not reach them.
 
 ## Addendum (2026-11-06)
 

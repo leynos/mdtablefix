@@ -198,18 +198,19 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@0606ca899ce2995a0c4bc78e660e80832e6e8855
         with:
           install-mold: 'true'
-          toolchain: 1.89.0
           install-binstall: false
           use-sccache: false
       - name: Add release target
-        run: rustup target add --toolchain 1.89.0 ${{ matrix.target }}
+        run: rustup target add ${{ matrix.target }}
       - name: Build the release binary
-        # The stable release toolchain must never see the configuration's
-        # nightly-only `-Zthreads` flag: an assigned RUSTFLAGS displaces every
-        # `rustflags` table in .cargo/config.toml, so this step states its own.
+        # The release builds on the nightly pinned in rust-toolchain.toml with
+        # the LLVM backend: [profile.dev]'s Cranelift setting does not reach the
+        # release profile. An assigned RUSTFLAGS displaces every `rustflags`
+        # table in .cargo/config.toml, so this step builds without the
+        # development standard's flags.
         env:
           RUSTFLAGS: -D warnings
-        run: cargo +1.89.0 build --release --bin mdtablefix --target ${{ matrix.target }}
+        run: cargo build --release --bin mdtablefix --target ${{ matrix.target }}
       - name: Stage the release assets
         run: |
           set -euo pipefail

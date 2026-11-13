@@ -503,7 +503,7 @@ configuration flag.
   such as `camino`, `cap-std`, `tracing`, `thiserror`, and `clap`, this
   workspace already depends on, so only the remainder is new. The declared
   minimum supported Rust version does not move: the framework's floor is 1.89.0
-  and this workspace already declares `rust-version = "1.89"`.
+  and this workspace, which builds on a pinned nightly, declares none.
 
 ## References
 

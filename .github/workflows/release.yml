@@ -14,7 +14,6 @@ on:
 env:
   REPO_NAME: ${{ github.event.repository.name }}
   RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
-  RELEASE_RUST_VERSION: 1.89.0
   CROSS_VERSION: 0.2.5
   CROSS_LINUX_X64_SHA256: 642375d1bcf3bd88272c32ba90e999f3d983050adf45e66bd2d3887e8e838bad
 
@@ -109,10 +108,11 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
       - name: Set reproducible release timestamp
         run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "${GITHUB_ENV}"
+      # No toolchain input: setup-rust installs the nightly that the tagged
+      # tree's rust-toolchain.toml pins, and cross and Cargo build with it.
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@0606ca899ce2995a0c4bc78e660e80832e6e8855
         with:
-          toolchain: ${{ env.RELEASE_RUST_VERSION }}
           install-binstall: false
           use-sccache: false
       - name: Cache the official cross binaries
@@ -161,23 +161,25 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-${{ matrix.target }}-rust-${{ env.RELEASE_RUST_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-rust-${{ hashFiles('rust-toolchain.toml') }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-rust-${{ env.RELEASE_RUST_VERSION }}-cargo-
+            ${{ runner.os }}-${{ matrix.target }}-rust-${{ hashFiles('rust-toolchain.toml') }}-cargo-
       - name: Add release target
-        run: rustup target add --toolchain "${RELEASE_RUST_VERSION}" ${{ matrix.target }}
+        run: rustup target add ${{ matrix.target }}
       - name: Build release binary
-        # The stable release toolchain must never see the configuration's
-        # nightly-only `-Zthreads` flag: an assigned RUSTFLAGS displaces every
-        # `rustflags` table in .cargo/config.toml, so this step states its own.
+        # The release builds on the nightly pinned in rust-toolchain.toml with
+        # the LLVM backend: [profile.dev]'s Cranelift setting does not reach the
+        # release profile. An assigned RUSTFLAGS displaces every `rustflags`
+        # table in .cargo/config.toml, so this step builds without the
+        # development standard's flags.
         env:
           RUSTFLAGS: -D warnings
         run: |
           set -euo pipefail
           if [[ "${{ matrix.builder }}" == "cross" ]]; then
-            cross +"${RELEASE_RUST_VERSION}" build --release --target ${{ matrix.target }}
+            cross build --release --target ${{ matrix.target }}
           else
-            cargo +"${RELEASE_RUST_VERSION}" build --release --target ${{ matrix.target }}
+            cargo build --release --target ${{ matrix.target }}
           fi
       - name: Prepare artifact
         run: |

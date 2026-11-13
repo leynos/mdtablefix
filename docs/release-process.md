@@ -4,12 +4,11 @@ This project publishes prebuilt binaries for multiple operating systems and
 architectures. It also publishes a `cargo-binstall` archive for every release
 target.
 
-The project targets the stable Rust `1.89.0` toolchain, as specified in
-`rust-toolchain.toml`.
-
-This Minimum Supported Rust Version (MSRV) is also declared in `Cargo.toml`
-(`rust-version = "1.89"`). The `build-test` job in `.github/workflows/ci.yml`
-uses this toolchain to guard against regressions.
+The project builds on the pinned Rust nightly specified in
+`rust-toolchain.toml`, for development and release alike. It is an application
+and declares no minimum supported Rust version. Release builds use the LLVM
+backend: the Cranelift selection in `.cargo/config.toml` is limited to the
+`dev` profile.
 
 The GitHub Actions workflow `.github/workflows/release.yml` builds and uploads
 binaries for:
@@ -70,10 +69,10 @@ diverge. The helper compares the first version-output line because `cross`
 appends host-Cargo fallback diagnostics when no package metadata is present,
 but it preserves the command's status so a failed cached probe is replaced and
 a failed post-installation probe stops the job. Release targets are likewise
-installed explicitly for the version-pinned Rust 1.89.0 toolchain used by
-`cross`, rather than inheriting the tagged tree's toolchain or a moving stable
-channel. The Cargo cache key includes that compiler version so a toolchain
-change cannot silently reuse incompatible build state.
+installed explicitly for the pinned nightly that the tagged tree's
+`rust-toolchain.toml` selects, which `cross` and Cargo both use. The Cargo
+cache key includes the hash of `rust-toolchain.toml` so a toolchain change
+cannot silently reuse incompatible build state.
 
 `scripts/package_release_artifacts.py` stages the assets. It uses only the
 Python standard library, because the three runner images do not agree on GNU
