@@ -18,7 +18,7 @@ fn parse_numbered_with_tab() {
 }
 
 /// Returns owned lines for a renumbering case.
-fn owned(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_string()).collect() }
+fn owned(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_owned()).collect() }
 
 #[rstest::rstest]
 #[case::simple(&["1. a", "3. b"], &["1. a", "2. b"])]

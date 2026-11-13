@@ -5,7 +5,7 @@ use proptest::prelude::*;
 
 use super::{DefinitionLine, reorder_definition_block};
 
-fn strings(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_string()).collect() }
+fn strings(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_owned()).collect() }
 
 #[test]
 fn reorder_definition_block_sorts_segments_by_new_number() {
@@ -21,12 +21,12 @@ fn reorder_definition_block_sorts_segments_by_new_number() {
         DefinitionLine {
             index: 2,
             new_number: 2,
-            line: "[^2]: Second".to_string(),
+            line: "[^2]: Second".to_owned(),
         },
         DefinitionLine {
             index: 5,
             new_number: 1,
-            line: "[^1]: First".to_string(),
+            line: "[^1]: First".to_owned(),
         },
     ];
 
@@ -50,7 +50,7 @@ proptest! {
     fn reorder_definition_block_orders_generated_definition_mappings(
         numbers in proptest::collection::vec(1usize..=20, 2..=8),
     ) {
-        let mut lines = vec!["## Footnotes".to_string(), String::new()];
+        let mut lines = vec!["## Footnotes".to_owned(), String::new()];
         let mut definitions = Vec::new();
         for (offset, number) in numbers.iter().enumerate() {
             let index = lines.len();
