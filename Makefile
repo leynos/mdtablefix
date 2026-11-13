@@ -19,7 +19,16 @@ MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences
 NIXIE ?= nixie
 RG ?= rg
 PROVER_TOOLS ?= uvx --from git+https://github.com/leynos/rust-prover-tools@$(shell cat tools/rust-prover-tools/REF) prover-tools
-VERUS_RUN ?= env -u RUSTUP_TOOLCHAIN $(PROVER_TOOLS) verus run --repo-root .
+# The pinned Verus release uses the solver at `VERUS_Z3_PATH`, which is where
+# `install-prover-tools` in CI and `make verus-install` locally both put it.
+# The proof targets install nothing: CI installs through the shared action, and
+# a developer runs `make verus-install` once.
+#
+# The path is exported rather than written into `VERUS_RUN`: the mutation gates
+# expand `VERUS_RUN` by word splitting, which would keep any quotes around it.
+VERUS_Z3_PATH ?= $(CURDIR)/.verus/z3/z3
+export VERUS_Z3_PATH
+VERUS_RUN ?= env -u RUSTUP_TOOLCHAIN $(PROVER_TOOLS) verus run --repo-root . --no-install-missing
 
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
@@ -98,13 +107,14 @@ check-prover-tools: ## Verify the configured prover-tools runner is available
 		exit 1; \
 	}
 
-verus-install: check-prover-tools ## Install the pinned Verus release
+verus-install: check-prover-tools ## Install the pinned Verus release and Z3 solver for local runs
 	$(PROVER_TOOLS) verus install --repo-root .
+	$(PROVER_TOOLS) z3 install --repo-root . --install-dir .verus/z3 --cache-dir .verus/z3-archive
 
-verus: verus-install ## Verify the production-used Verus proof entry point
+verus: check-prover-tools ## Verify the production-used Verus proof entry point
 	$(VERUS_RUN) --proof-file verus/lib.rs
 
-verus-selftest: verus-install ## Confirm Verus rejects the deliberately false smoke proof
+verus-selftest: check-prover-tools ## Confirm Verus rejects the deliberately false smoke proof
 	@output="$$(mktemp)"; \
 	if $(VERUS_RUN) --proof-file verus/smoke.rs >"$$output" 2>&1; then \
 		cat "$$output"; \
@@ -121,13 +131,13 @@ verus-selftest: verus-install ## Confirm Verus rejects the deliberately false sm
 	cat "$$output"; \
 	rm -f "$$output"
 
-verus-mutation: verus-install ## Confirm a wrong production classifier decision is rejected
+verus-mutation: check-prover-tools ## Confirm a wrong production classifier decision is rejected
 	VERUS_RUN='$(VERUS_RUN)' scripts/check-classifier-mutation.sh .
 
-verus-fence-mutation: verus-install ## Confirm a wrong production fence closing rule is rejected
+verus-fence-mutation: check-prover-tools ## Confirm a wrong production fence closing rule is rejected
 	VERUS_RUN='$(VERUS_RUN)' scripts/check-fence-mutation.sh .
 
-verus-compression-mutation: verus-install ## Confirm a wrong fence-compression emission decision is rejected
+verus-compression-mutation: check-prover-tools ## Confirm a wrong fence-compression emission decision is rejected
 	VERUS_RUN='$(VERUS_RUN)' scripts/check-compression-mutation.sh .
 
 markdownlint: ## Lint Markdown files

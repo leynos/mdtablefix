@@ -30,6 +30,7 @@ pub fn fake_prover_tools(smoke_mode: &'static str) -> Result<FakeProverTools> {
     let script = r#"#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "${FAKE_PROVER_TOOLS_LOG:?}"
+printf 'VERUS_Z3_PATH=%s\n' "${VERUS_Z3_PATH:-}" >> "${FAKE_PROVER_TOOLS_LOG:?}"
 if [[ "$*" == *".atx-mutation-"* ]]; then
     case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
         mutation_accepted) exit 0 ;;
@@ -53,7 +54,7 @@ if [[ "$*" == *".atx-mutation-"* ]]; then
     echo "verification results:: 70 verified, 1 errors"
     exit 1
 fi
-if [[ "$*" == "verus run --repo-root . --proof-file verus/smoke.rs" ]]; then
+if [[ "$*" == "verus run --repo-root . --no-install-missing --proof-file verus/smoke.rs" ]]; then
     case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
         rejected)
             echo "Verus proofs failed"
@@ -101,10 +102,6 @@ pub fn make_command(target: &str, runner: &FakeProverTools) -> Command {
         .arg(target)
         .current_dir(manifest_dir())
         .env("PROVER_TOOLS", runner_command(runner))
-        .env(
-            "VERUS_RUN",
-            format!("{} verus run --repo-root .", runner_command(runner)),
-        )
         .env("FAKE_PROVER_TOOLS_LOG", &runner.log_path)
         .env("FAKE_PROVER_TOOLS_SMOKE_MODE", runner.smoke_mode);
     command

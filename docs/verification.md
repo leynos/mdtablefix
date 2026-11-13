@@ -8,6 +8,17 @@ connects it to the production function.
 
 ## Current status
 
+The proofs run under Verus `0.2026.09.06.8dea4a2`, the release pinned in
+`tools/verus/VERSION`; `make verus` reports 176 verified items with no errors.
+Under the previous release, `0.2025.04.19.1b16620`, it reported 178. The two
+that went were the executable constants `COMPRESSED_MARKER` and
+`COMPRESSED_MARKER_LEN`, which the new release cannot erase when they sit
+outside `verus!` syntax; `compressed` now writes the same two literals, and
+`spec_compressed` is unchanged. The new release also requires every executable
+loop to name a `decreases` clause, so `verus/lib.rs` opts the crate out with
+`#![verifier::exec_allows_no_decreases_clause]`, which keeps the previous
+release's semantics: the scanner loops prove partial correctness.
+
 The pinned Verus release cannot compile `&str` range operations inside
 `verus!`. Production `classify_line` therefore converts the line to Unicode
 scalars and delegates to the executable `classify_seq` body included by

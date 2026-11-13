@@ -97,9 +97,11 @@ default `PROVER_TOOLS` command uses `uvx` to fetch the pinned runner, while
 overridden when diagnosing a local tooling issue or using a prepared
 environment.
 
-Run `make verus-install` to resolve the pinned runner, install the matching
-Verus release and Rust toolchain, and populate the repository's `.verus` cache.
-`make verus` then verifies `verus/lib.rs`, the proof entry point for
+Run `make verus-install` once to resolve the pinned runner, install the
+matching Verus release, Rust toolchain and Z3 solver, and populate the
+repository's `.verus` directory. The proof targets install nothing themselves,
+and `make` exports `VERUS_Z3_PATH` (default `.verus/z3/z3`) so Verus finds the
+solver. `make verus` then verifies `verus/lib.rs`, the proof entry point for
 production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
 deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
@@ -134,9 +136,9 @@ change to any gate.
 
 The pull-request workflow runs `make verus`, `make verus-selftest`,
 `make verus-mutation`, `make verus-fence-mutation`, and
-`make verus-compression-mutation` on Ubuntu. It caches the version-specific
-`.verus` directory using the runner operating system, architecture, and pinned
-Verus version, then executes the same Makefile targets used locally. The
+`make verus-compression-mutation` on Ubuntu. It installs Verus and Z3 through
+the shared `install-prover-tools` action, which reads the same pins and caches
+the verified archives, then executes the same Makefile targets used locally. The
 [verification ledger](verification.md) records each claim and its trusted
 boundary; [ADR 0011](adrs/0011-verified-normalization-core.md) documents why
 the proof scope remains a narrow production-used core.

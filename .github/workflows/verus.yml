@@ -16,9 +16,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  VERUS_VERSION: 0.2025.04.19.1b16620
-
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -30,11 +27,15 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@0606ca899ce2995a0c4bc78e660e80832e6e8855
         with:
           install-mold: 'true'
-      - name: Cache Verus
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      # The shared action installs the Verus release named in
+      # `tools/verus/VERSION`, and the Z3 solver beside it, through the pinned
+      # rust-prover-tools. It checks the digest in `tools/verus/SHA256SUMS` and
+      # caches the verified archives. The Make targets below install nothing.
+      - name: Install Verus
+        uses: leynos/shared-actions/.github/actions/install-prover-tools@a0519a1476ab769ca7b8badfa794f3751213f1ea
         with:
-          path: .verus/${{ env.VERUS_VERSION }}
-          key: verus-${{ runner.os }}-${{ runner.arch }}-${{ env.VERUS_VERSION }}
+          tools: verus
+          runner-image: ubuntu2404
       - name: Verify proofs
         run: make verus
       - name: Verify the harness rejects false proofs
@@ -42,7 +43,7 @@ jobs:
       # The three negative controls. Each mutates one production module and
       # requires the run to fail with that module's own postcondition named, so
       # a proof that still verified would be proved from something other than
-      # the property it claims. They reuse the cache restored above.
+      # the property it claims. They reuse the installation above.
       - name: Verify complete Setext assembly rejects a missing separator
         run: make verus-mutation
       - name: Verify the fence mutation is rejected
