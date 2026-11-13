@@ -7,7 +7,7 @@ proptest! {
     #[test]
     fn leading_indent_preserves_its_unicode_whitespace_contract(s: String) {
         let indent = leading_indent(&s);
-        let remainder = &s[indent.len()..];
+        let remainder = s.strip_prefix(indent).unwrap_or_default();
 
         prop_assert!(s.starts_with(indent));
         if let Some(character) = remainder.chars().next() {
