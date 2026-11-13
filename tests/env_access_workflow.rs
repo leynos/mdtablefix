@@ -186,25 +186,25 @@ fn ensure_unconditional(entry: &Mapping, subject: Subject<'_>) -> Result<()> {
 /// exists to judge. Without it every check is skipped and the pull request is
 /// green because nothing looked.
 #[test]
-fn the_workflow_runs_on_pull_request() -> Result<()> {
-    let workflow = workflow()?;
-    let triggers = triggers(&workflow)?;
+fn the_workflow_runs_on_pull_request() {
+    let workflow = workflow().expect("the checked-in CI workflow should be valid YAML");
+    let triggers = triggers(&workflow).expect("the CI workflow should declare triggers");
     let names = trigger_events(triggers);
-    ensure!(
+    assert!(
         names.contains(&"pull_request"),
         "the workflow must run on pull_request, found {names:?}"
     );
-    Ok(())
 }
 
 /// Scenario: the job carrying the policy's gates is read.
 /// Invariant: it exists and carries no condition, so it cannot be skipped
 /// wholesale while its steps still look correct.
 #[test]
-fn the_gate_job_runs_unconditionally() -> Result<()> {
-    let workflow = workflow()?;
-    let job = job(&workflow, GATE_JOB)?;
+fn the_gate_job_runs_unconditionally() {
+    let workflow = workflow().expect("the checked-in CI workflow should be valid YAML");
+    let job = job(&workflow, GATE_JOB).expect("the CI workflow should declare the gate job");
     ensure_unconditional(job, Subject(&format!("{GATE_JOB} job")))
+        .expect("the gate job should run unconditionally");
 }
 
 /// Return why `entry` would not block a merge on failure, if it would not.
@@ -297,15 +297,16 @@ fn uses_action(step: &Mapping, action: &str) -> bool {
 /// Matching a substring rather than the whole value would accept
 /// `if false; then make lint; fi`, which runs nothing while reading correctly.
 #[test]
-fn a_step_runs_the_lint_target_unconditionally() -> Result<()> {
-    let workflow = workflow()?;
-    let job = job(&workflow, GATE_JOB)?;
-    let steps = steps(job, GATE_JOB)?;
+fn a_step_runs_the_lint_target_unconditionally() {
+    let workflow = workflow().expect("the checked-in CI workflow should be valid YAML");
+    let job = job(&workflow, GATE_JOB).expect("the CI workflow should declare the gate job");
+    let steps = steps(job, GATE_JOB).expect("the gate job should declare steps");
     ensure_some_step_runs_unconditionally(
         steps,
         Subject(&format!("runs `{LINT_COMMAND}` as its whole command")),
         |step| runs_command(step, LINT_COMMAND),
     )
+    .expect("an unconditional step should run the lint target");
 }
 
 /// Scenario: the steps are searched for one that runs the test suite.
@@ -314,14 +315,15 @@ fn a_step_runs_the_lint_target_unconditionally() -> Result<()> {
 /// are tests, so a skipped test step is a skipped contract, and every other
 /// assertion in this file would still pass.
 #[test]
-fn a_step_runs_the_test_suite_unconditionally() -> Result<()> {
-    let workflow = workflow()?;
-    let job = job(&workflow, GATE_JOB)?;
-    let steps = steps(job, GATE_JOB)?;
+fn a_step_runs_the_test_suite_unconditionally() {
+    let workflow = workflow().expect("the checked-in CI workflow should be valid YAML");
+    let job = job(&workflow, GATE_JOB).expect("the CI workflow should declare the gate job");
+    let steps = steps(job, GATE_JOB).expect("the gate job should declare steps");
     let subject = format!("uses {COVERAGE_ACTION}");
     ensure_some_step_runs_unconditionally(steps, Subject(&subject), |step| {
         uses_action(step, COVERAGE_ACTION)
     })
+    .expect("an unconditional step should run the test suite");
 }
 
 // The fixture cases for the trigger forms and for `continue-on-error` live in
