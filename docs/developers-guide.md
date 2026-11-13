@@ -2339,7 +2339,7 @@ builds can exceed 180 s.
 ### Cranelift
 
 Exception: Cranelift is not the development-profile backend. The repository pins
-`nightly-2026-03-26`, but the release build (`cargo +1.89.0 build --release`,
+`nightly-2026-11-12`, but the release build (`cargo +1.89.0 build --release`,
 in `ci.yml` and `release.yml`) builds on a stable toolchain against
 `.cargo/config.toml`, and stable Cargo refuses a
 `[profile.dev] codegen-backend` key ("config profile `dev` is not valid"), so

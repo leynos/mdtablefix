@@ -367,7 +367,7 @@ fn rewrite_empty_file_no_extra_newline() {
     fs::write(&file, "").expect("write empty input file");
     rewrite(&file).expect("rewrite empty input file");
     let contents = fs::read_to_string(&file).expect("read rewritten empty file");
-    assert!(contents.is_empty());
+    assert!(contents.is_empty(), "unexpected: {contents:?}");
 }
 
 #[cfg(test)]

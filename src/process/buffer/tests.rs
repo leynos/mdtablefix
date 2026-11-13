@@ -51,7 +51,7 @@ fn plain_table_line_enters_table_mode() {
     assert!(passthrough.is_none());
     assert!(buffer.in_table);
     assert_eq!(buffer.buf, owned(&["| a | b |"]));
-    assert!(buffer.out.is_empty());
+    assert!(buffer.out.is_empty(), "unexpected: {:?}", buffer.out);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn quoted_table_row_does_not_enter_table_mode(
 ) {
     assert_eq!(handle_line(&mut buffer, line), Some(line.to_string()));
     assert!(!buffer.in_table);
-    assert!(buffer.buf.is_empty());
+    assert!(buffer.buf.is_empty(), "unexpected: {:?}", buffer.buf);
 }
 
 #[rstest]
@@ -89,7 +89,7 @@ fn indented_code_block_line_does_not_enter_table_mode(
 
     assert_eq!(passthrough, Some(line.to_string()));
     assert!(!buffer.in_table);
-    assert!(buffer.buf.is_empty());
+    assert!(buffer.buf.is_empty(), "unexpected: {:?}", buffer.buf);
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn empty_line_flushes_active_table() {
 
     assert_eq!(passthrough, Some(String::new()));
     assert!(!buffer.in_table);
-    assert!(buffer.buf.is_empty());
+    assert!(buffer.buf.is_empty(), "unexpected: {:?}", buffer.buf);
     assert_eq!(buffer.out, owned(&["| a | b |"]));
 }
 
@@ -167,7 +167,7 @@ fn canonical_break_after_table_flushes_table(#[from(new_buffer)] mut buffer: Pro
 
     assert_eq!(passthrough, Some(break_line.to_string()));
     assert!(!buffer.in_table);
-    assert!(buffer.buf.is_empty());
+    assert!(buffer.buf.is_empty(), "unexpected: {:?}", buffer.buf);
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn plain_pipe_continuation_is_buffered() {
     assert!(passthrough.is_none());
     assert!(buffer.in_table);
     assert_eq!(buffer.buf, owned(&["| a | b |", "c | d"]));
-    assert!(buffer.out.is_empty());
+    assert!(buffer.out.is_empty(), "unexpected: {:?}", buffer.out);
 }
 
 #[test]
@@ -192,8 +192,8 @@ fn flush_empty_buffer_is_noop() {
 
     buffer.flush();
 
-    assert!(buffer.out.is_empty());
-    assert!(buffer.buf.is_empty());
+    assert!(buffer.out.is_empty(), "unexpected: {:?}", buffer.out);
+    assert!(buffer.buf.is_empty(), "unexpected: {:?}", buffer.buf);
     // The empty-buffer guard returns before resetting `in_table`, so the call
     // genuinely changes nothing.
     assert!(buffer.in_table);
@@ -208,7 +208,7 @@ fn flush_non_table_emits_lines_verbatim() {
     buffer.flush();
 
     assert_eq!(buffer.out, owned(&["plain text", "more text"]));
-    assert!(buffer.buf.is_empty());
+    assert!(buffer.buf.is_empty(), "unexpected: {:?}", buffer.buf);
 }
 
 #[test]
@@ -295,7 +295,7 @@ fn table_continuation_then_block_line_splits_correctly() {
     );
 
     assert!(!buffer.in_table);
-    assert!(buffer.buf.is_empty());
+    assert!(buffer.buf.is_empty(), "unexpected: {:?}", buffer.buf);
     assert_eq!(
         buffer.out,
         owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]),
@@ -315,7 +315,7 @@ fn table_followed_by_indented_pipe_line_flushes_table() {
     );
 
     assert!(!buffer.in_table);
-    assert!(buffer.buf.is_empty());
+    assert!(buffer.buf.is_empty(), "unexpected: {:?}", buffer.buf);
     assert_eq!(
         buffer.out,
         owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]),

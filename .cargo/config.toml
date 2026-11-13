@@ -15,11 +15,12 @@
 
 # The development footprint rule (concordat `rust-dev-build-footprint`): no
 # incremental state and no debug information in default dev builds, and
-# dependencies built without embedded metadata. The pin predates nightly-2026-07-31,
-# so the older `no-embed-metadata` key applies; whoever moves the pin across that
-# boundary switches to `embed-metadata = false`. Stable Cargo ignores `[unstable]`.
+# dependencies built without embedded metadata. The pin is later than
+# nightly-2026-07-31, so the native `embed-metadata = false` key applies; a pin
+# earlier than that boundary needs the older `no-embed-metadata = true`.
+# Stable Cargo ignores `[unstable]`.
 [unstable]
-no-embed-metadata = true
+embed-metadata = false
 
 [profile.dev]
 incremental = false

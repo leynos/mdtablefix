@@ -164,7 +164,8 @@ fn merge_drops_single_space_before_atomic_starting_line() {
 
 #[test]
 fn merge_empty_input_returns_empty_output() {
-    assert!(merge_whitespace_only_lines(&[], 80).is_empty());
+    let actual = merge_whitespace_only_lines(&[], 80);
+    assert!(actual.is_empty(), "unexpected: {actual:?}");
 }
 
 #[test]

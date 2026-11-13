@@ -48,7 +48,8 @@ fn serialize_lines_uses_the_chosen_ending() {
         serialize_lines(&lines, LineEnding::Crlf),
         "| A | B |\r\n| 1 | 2 |\r\n"
     );
-    assert!(serialize_lines(&[], LineEnding::Crlf).is_empty());
+    let actual = serialize_lines(&[], LineEnding::Crlf);
+    assert!(actual.is_empty(), "unexpected: {actual:?}");
 }
 
 /// The counts behind a decision are available without restating the rule.

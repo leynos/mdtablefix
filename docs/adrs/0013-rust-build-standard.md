@@ -71,7 +71,7 @@ writes far fewer intermediate artefacts. A debugger needs
 The same file sets the `[unstable]` key that disables embedded metadata in
 dependency rlibs. Its name depends on the toolchain in `rust-toolchain.toml`:
 nightlies before the native key use `no-embed-metadata = true`, and later ones
-use `embed-metadata = false`. Whoever moves the pin across that boundary
-switches the key, and stable Cargo ignores the table. This records the decision
-in the architectural record; the developers' guide section "The build standard"
-is left to the documentation train that owns that file.
+use `embed-metadata = false`, which the pin now does. Whoever moves the pin
+across that boundary switches the key, and stable Cargo ignores the table. This
+records the decision in the architectural record; the developers' guide section
+"The build standard" is left to the documentation train that owns that file.

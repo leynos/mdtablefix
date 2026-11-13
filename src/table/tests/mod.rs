@@ -94,7 +94,8 @@ fn format_separator_cells_preserves_alignment_markers(
 fn format_separator_cells_returns_empty_when_counts_mismatch() {
     let sep_cells = vec!["---".to_string()];
 
-    assert!(format_separator_cells(&[3, 4], &sep_cells).is_empty());
+    let actual = format_separator_cells(&[3, 4], &sep_cells);
+    assert!(actual.is_empty(), "unexpected: {actual:?}");
 }
 
 #[test]

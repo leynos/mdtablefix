@@ -161,14 +161,14 @@ mod tests {
     fn empty_input_returns_empty_vector() {
         let lines: Vec<String> = Vec::new();
         let out = process_tokens(&lines, |_tok, _out| unreachable!());
-        assert!(out.is_empty());
+        assert!(out.is_empty(), "unexpected: {out:?}");
     }
 
     #[test]
     fn transformation_can_remove_all_content() {
         let lines = vec!["data".to_string()];
         let out = process_tokens(&lines, |_tok, _out| {});
-        assert!(out.is_empty());
+        assert!(out.is_empty(), "unexpected: {out:?}");
     }
 
     #[test]

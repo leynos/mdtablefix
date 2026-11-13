@@ -200,7 +200,7 @@ mod tests {
     use super::*;
 
     proptest! {
-        /// has_inline_code_structure must not panic on arbitrary Unicode input.
+        /// `has_inline_code_structure` must not panic on arbitrary Unicode input.
         #[test]
         fn has_inline_code_structure_never_panics(text in "\\PC*") {
             let _ = has_inline_code_structure(&text);

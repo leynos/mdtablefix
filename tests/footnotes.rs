@@ -233,7 +233,7 @@ fn test_converts_list_with_blank_lines() {
 fn test_empty_input() {
     let input: Vec<String> = Vec::new();
     let output = convert_footnotes(&input);
-    assert!(output.is_empty());
+    assert!(output.is_empty(), "unexpected: {output:?}");
 }
 
 #[test]

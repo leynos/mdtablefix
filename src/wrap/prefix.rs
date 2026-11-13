@@ -27,10 +27,9 @@ pub(super) fn prefix_line<'a>(
         let inner_prefix = cap.get(1).map(|m| m.as_str())?;
         let rest = cap.get(2).map(|m| m.as_str())?;
         return Some(PrefixLine {
-            prefix: outer_prefix.map_or_else(
-                || Cow::Borrowed(inner_prefix),
-                |outer| Cow::Owned(format!("{outer}{inner_prefix}")),
-            ),
+            prefix: outer_prefix.map_or(Cow::Borrowed(inner_prefix), |outer| {
+                Cow::Owned(format!("{outer}{inner_prefix}"))
+            }),
             rest,
             repeat_prefix: false,
             outer_prefix: outer_prefix.map(Cow::Borrowed),

@@ -15,7 +15,7 @@ macro_rules! lines_vec {
 ///
 /// Example:
 /// ```
-/// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
+/// let input: Vec<String> = include_lines!("data/bold_header_input.txt");
 /// ```
 #[macro_export]
 macro_rules! include_lines {
