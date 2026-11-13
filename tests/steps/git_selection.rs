@@ -238,7 +238,8 @@ fn exit_status_is(state: &GitSelectionState, expected: i32) -> Result<()> {
     let run = last_run(state)?;
     ensure!(
         run.status == expected,
-        "exit status, stderr: {}",
+        "exit status was {}, expected {expected}, stderr: {}",
+        run.status,
         run.stderr
     );
     Ok(())
@@ -265,8 +266,9 @@ fn stdout_is(state: &GitSelectionState, expected: String) -> Result<()> {
     let run = last_run(state)?;
     ensure!(
         run.stdout == format!("{expected}\n"),
-        "standard output: {:?}",
-        run.stdout
+        "standard output: {:?}, expected: {:?}",
+        run.stdout,
+        format!("{expected}\n")
     );
     Ok(())
 }
