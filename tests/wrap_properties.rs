@@ -19,17 +19,10 @@ use mdtablefix::{process::WRAP_COLS, wrap::wrap_text};
 use proptest::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
-/// Reports whether what sits between two backticks is a code span carrying the
-/// MD038 defect: a span whose content begins or ends with a space.
-///
-/// An empty pair of backticks is not a span, so it is never padded; it reports
-/// `false` rather than being special-cased by every caller.
-fn is_space_padded_code_span(code: &str) -> bool {
-    if code.is_empty() {
-        return false;
-    }
-    code.starts_with(' ') || code.ends_with(' ')
-}
+#[path = "support/wrap_output_predicates.rs"]
+mod wrap_output_predicates;
+
+use wrap_output_predicates::{is_checklist_marker, is_space_padded_code_span};
 
 fn has_md038_code_span(rendered: &str) -> bool {
     let mut remaining = rendered;
@@ -58,15 +51,6 @@ fn footnote_label_strategy() -> impl Strategy<Value = String> {
         1..16,
     )
     .prop_map(|chars| chars.into_iter().collect())
-}
-
-/// Reports whether `line` opens a GitHub task-list item.
-///
-/// Both spellings count: an unticked box and a ticked one are the same
-/// construct, and the property that uses this only cares that a marker was
-/// emitted.
-fn is_checklist_marker(line: &str) -> bool {
-    line.starts_with("- [ ] ") || line.starts_with("- [x] ")
 }
 
 fn checklist_marker_count(lines: &[String]) -> usize {
