@@ -205,20 +205,35 @@ fn expected(key: Key, scenario: Scenario) -> &'static str {
         | Key::Footnotes
         | Key::CodeEmphasis
         | Key::Git
-        | Key::IncludeUntracked => match scenario {
-            Scenario::Defaults | Scenario::EnvOnly | Scenario::FileAndEnv => "false",
-            Scenario::FileOnly | Scenario::AllThree => "true",
-        },
-        Key::Headings => match scenario {
-            Scenario::Defaults | Scenario::FileOnly => "false",
-            Scenario::EnvOnly | Scenario::FileAndEnv | Scenario::AllThree => "true",
-        },
-        Key::MdExts => match scenario {
-            Scenario::Defaults => "md,mdc,markdown",
-            Scenario::FileOnly => "toml",
-            Scenario::EnvOnly | Scenario::FileAndEnv => "rst,xml",
-            Scenario::AllThree => "yaml",
-        },
+        | Key::IncludeUntracked => enabled_only_by_file(scenario),
+        Key::Headings => disabled_only_by_file(scenario),
+        Key::MdExts => md_exts(scenario),
+    }
+}
+
+/// The keys that are off everywhere except when the file turns them on.
+fn enabled_only_by_file(scenario: Scenario) -> &'static str {
+    match scenario {
+        Scenario::Defaults | Scenario::EnvOnly | Scenario::FileAndEnv => "false",
+        Scenario::FileOnly | Scenario::AllThree => "true",
+    }
+}
+
+/// `headings`, which is on unless the file itself turns it off.
+fn disabled_only_by_file(scenario: Scenario) -> &'static str {
+    match scenario {
+        Scenario::Defaults | Scenario::FileOnly => "false",
+        Scenario::EnvOnly | Scenario::FileAndEnv | Scenario::AllThree => "true",
+    }
+}
+
+/// `md_exts`, whose value differs at every scope because it is a list.
+fn md_exts(scenario: Scenario) -> &'static str {
+    match scenario {
+        Scenario::Defaults => "md,mdc,markdown",
+        Scenario::FileOnly => "toml",
+        Scenario::EnvOnly | Scenario::FileAndEnv => "rst,xml",
+        Scenario::AllThree => "yaml",
     }
 }
 

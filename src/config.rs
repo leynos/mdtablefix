@@ -385,6 +385,9 @@ fn extension_filter(config: &ConfigFile, cli: &Cli) -> Result<ExtensionFilter, C
 mod error_tests;
 #[path = "config_extends.rs"]
 mod extends;
+#[cfg(test)]
+#[path = "config_missing_file_tests.rs"]
+mod missing_file_tests;
 #[path = "config_schema.rs"]
 mod schema;
 #[cfg(test)]

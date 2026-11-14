@@ -249,25 +249,50 @@ fn nearest_existing(
     mut read: impl FnMut(&Utf8Path) -> Reading,
 ) -> Option<io::Error> {
     while let Some(current) = ancestor {
-        match read(current) {
-            Reading::Directory => return None,
-            Reading::NotADirectory => {
-                return Some(io::Error::new(
-                    ErrorKind::NotADirectory,
-                    format!("{current} is not a directory"),
-                ));
-            }
-            // An absence is the one reading the walk climbs past: a whole
-            // subtree may be missing, and what is missing is what the walk is
-            // looking for. Anything else is a question that went unasked, and
-            // is reported as it arrived.
-            Reading::Failed(error) if error.kind() == ErrorKind::NotFound => {
-                ancestor = current.parent();
-            }
-            Reading::Failed(error) => return Some(error),
+        match step(current, read(current)) {
+            Step::Found => return None,
+            Step::Climb => ancestor = current.parent(),
+            Step::Failed(error) => return Some(error),
         }
     }
     None
+}
+
+/// What the walk does with one ancestor's reading.
+///
+/// Kept apart from [`nearest_existing`] so the loop reads as a walk and this
+/// reads as the policy: which readings end the walk, and which one climbs.
+enum Step {
+    /// The ancestor is a directory, so the walk is over without an error.
+    Found,
+    /// The ancestor is absent, so the walk continues at its parent.
+    Climb,
+    /// The search ends here, with this error to report.
+    Failed(io::Error),
+}
+
+/// Decides the next move from one ancestor's reading.
+///
+/// [`Step::Failed`] ends the search with an error: something is there and is
+/// not a directory, or the question could not be asked at all. An absence is
+/// the one reading the walk climbs past — a whole subtree may be missing, and
+/// what is missing is what the walk is looking for — while anything else went
+/// unasked, and is reported as it arrived.
+fn step(ancestor: &Utf8Path, reading: Reading) -> Step {
+    match reading {
+        Reading::Directory => Step::Found,
+        Reading::NotADirectory => Step::Failed(not_a_directory(ancestor)),
+        Reading::Failed(error) if error.kind() == ErrorKind::NotFound => Step::Climb,
+        Reading::Failed(error) => Step::Failed(error),
+    }
+}
+
+/// The error reported when an ancestor exists but is not a directory.
+fn not_a_directory(ancestor: &Utf8Path) -> io::Error {
+    io::Error::new(
+        ErrorKind::NotADirectory,
+        format!("{ancestor} is not a directory"),
+    )
 }
 
 #[cfg(test)]

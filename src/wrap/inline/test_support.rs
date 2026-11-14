@@ -12,7 +12,7 @@ pub(crate) fn attach_punctuation_to_previous_line(
     current: &str,
     token: &str,
 ) -> bool {
-    if !current.is_empty() || token.len() != 1 || !".?!,:;".contains(token) {
+    if !current.is_empty() || !is_single_punctuation_mark(token) {
         return false;
     }
 
@@ -27,3 +27,10 @@ pub(crate) fn attach_punctuation_to_previous_line(
 
     false
 }
+
+/// Reports whether `token` is exactly one of the trailing punctuation marks.
+///
+/// The length check is what rejects a multi-character run that merely contains
+/// punctuation; without it a token like `",,"` would pass the `contains` test
+/// and be appended as though it were a single mark.
+fn is_single_punctuation_mark(token: &str) -> bool { token.len() == 1 && ".?!,:;".contains(token) }

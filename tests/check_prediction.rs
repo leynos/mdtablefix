@@ -230,8 +230,14 @@ fn predict(name: &str, input: &str, flags: &[&str]) -> Result<bool, TestCaseErro
 }
 
 /// The corpus test's view of [`predict`]: a failure is a panic naming the case.
+///
+/// `expect` rather than a panicking `unwrap_or_else` closure: the
+/// [`TestCaseError`] this propagates already renders the case it failed on, so
+/// there is nothing for a custom message to add. The caller is a case body
+/// rather than a helper that could return the error, which is why the panic
+/// belongs here.
 fn assert_predicts(name: &str, input: &str, flags: &[&str]) -> bool {
-    predict(name, input, flags).unwrap_or_else(|error| panic!("{error}"))
+    predict(name, input, flags).expect("prediction failed")
 }
 
 /// Every singleton flag and the full set must predict the rewrite over the

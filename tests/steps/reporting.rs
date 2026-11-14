@@ -194,9 +194,10 @@ fn stdout_is(state: &ReportingState, expected: String) {
 fn stdout_lists_before(state: &ReportingState, first: String, second: String) {
     let run = last_run(state);
     let position = |needle: &str| {
-        run.stdout
-            .find(needle)
-            .unwrap_or_else(|| panic!("{needle} is not reported in {:?}", run.stdout))
+        let Some(index) = run.stdout.find(needle) else {
+            panic!("{needle} is not reported in {:?}", run.stdout);
+        };
+        index
     };
     assert!(
         position(&first) < position(&second),

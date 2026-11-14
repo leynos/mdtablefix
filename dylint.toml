@@ -1,0 +1,100 @@
+# Whitaker lint configuration.
+#
+# Everything here is an exemption, and each one is scoped as narrowly as the
+# lint allows, so the capability policy still applies to production code.
+# In-source `#[allow]`/`#[expect]` cannot express these: the lint emits through
+# `LintContext::emit_span_lint`, which resolves the lint level at the visitor's
+# current lint node rather than at the node that owns the offending code, so an
+# attribute on the item leaves the diagnostic firing. See the "In-source
+# attributes are not honoured" note in the vendored guide,
+# `docs/whitaker-users-guide.md`.
+#
+# Module entries are Rust module paths anchored at the crate identifier. A
+# `crate::`-prefixed entry would silently match nothing, and a trailing `::`
+# would collapse to the whole crate.
+#
+# Test crates are named in `excluded_crates` because the ambient filesystem
+# calls there are fixture staging, which the guide lists as a sanctioned
+# reason ("Test support utilities that manage fixtures with ambient access").
+# Integration-test targets compile as their own crate named after the test
+# file, so the library's package entry would not reach them and each is named
+# individually. The library and binary themselves are NOT excluded: every
+# content read and write they make still has to flow through a capability.
+#
+# The crate list was derived rather than discovered wave by wave: each
+# `tests/*.rs` was scanned for ambient calls, together with every helper it
+# pulls in by `#[path]`, and a crate is named only if that scan found one. An
+# exclusion for a crate with no ambient calls would record a policy decision
+# that was never made, and would hide a future one.
+#
+# The debt this records is real and has an owner: the fixtures should move to
+# `cap_std` so these entries can be deleted. See issue #418, "Adopt
+# camino/cap-std path types across the integration test suite", which covers
+# this migration suite-wide rather than file by file.
+
+[no_std_fs_operations]
+# `fs_probe` is the working-tree adapter for `PathProbe`, and its ambient
+# reads are the point of the module rather than a shortcut. ADR 0010 states
+# the rule: "Classification is the one part outside that rule, and it stays
+# on the ambient filesystem deliberately: _whether_ a candidate is inside the
+# working tree is the question it answers, and through a capability rooted at
+# the working directory a candidate that escapes and one that cannot be read
+# are the same `PermissionDenied`, so the policy's rule for the first — skip
+# it silently — could not be stated at all."
+#
+# A capability-scoped rewrite is therefore not available: it would make the
+# distinction this module exists to draw unstatable. Every content read and
+# write in the binary still flows through the directory capability that
+# `open_file_parent` returns, which is the boundary that matters.
+#
+# The lib's own `#[cfg(test)]` modules are reached through `--all-targets` as
+# the same crate identifier as production code, so they are named by module
+# rather than by crate. Excluding `mdtablefix` itself would drop the policy
+# for the library and the binary, which is the opposite of the point.
+excluded_paths = [
+    "mdtablefix::select::fs_probe",
+    "mdtablefix::config::test_support",
+    "mdtablefix::config::error_tests",
+    "mdtablefix::config::tests",
+    "mdtablefix::tests",
+    "mdtablefix::driver::in_place_tests",
+    "mdtablefix::select::git_ls_files::git_tests",
+    # The `io` module's own tests. Named module by module rather than excluding
+    # `mdtablefix::io`, so the module's production reads and writes stay under
+    # the policy; these three are fixture staging beside the code under test.
+    "mdtablefix::io::tests",
+    "mdtablefix::io::line_ending_tests",
+    "mdtablefix::io::metrics_tests",
+]
+
+# Integration-test crates. Each `tests/*.rs` file compiles as its own crate
+# named after the file, and its `tests/<name>/*.rs` helpers join that crate, so
+# a directory entry is covered by naming the file. The ambient calls here are
+# fixture staging and payload staging for child processes; the assertions
+# themselves go through the CLI under test.
+excluded_crates = [
+    "bdd_reporting",
+    "check_prediction",
+    "check_properties",
+    "cli_check",
+    "cli_config_binary",
+    "cli_config_dependency_contract",
+    "cli_config_failure_binary",
+    "cli_diff",
+    "cli_git",
+    "cli_git_mode_inputs",
+    "codescene_uploader_contract",
+    "fence_regions",
+    "git_file_selection",
+    "idempotence",
+    # `support/idempotence_harness.rs` is shared by both of these crates, so the
+    # entry has to name each of them: excluding only the one the lint happened
+    # to report would leave the other to fail at the next depth.
+    "idempotence_adjacencies",
+    "idempotence_drift",
+    "idempotence_properties",
+    "in_place_atomic",
+    "line_endings",
+    "rewrite_atomic",
+    "workflow_concurrency",
+]

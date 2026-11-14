@@ -36,7 +36,7 @@ pub(crate) use run::execute;
 // tests, which pin their behaviour from `src/main_tests.rs`.
 #[cfg(test)]
 pub(crate) use run::{format_stdin, open_file_parent, render_stdin_output};
-pub use source::{Inputs, ReadOnlyDir, assess, write_back};
+pub use source::{Assessment, Inputs, ReadOnlyDir, assess, write_back};
 
 use crate::select::{
     ConflictGuard,
@@ -118,39 +118,19 @@ pub fn analyse(
         Mode::Print => assessment.formatted,
         Mode::Check if is_changed => format!("{}\n", render_report_line(display_path, delta)),
         Mode::Diff if is_changed => render_diff(display_path, &assessment)?,
-        // A conflicted file is refused where the write would happen, and the
-        // refusal is `is_changed`-gated: a file this run would not write has
-        // nothing to refuse. Reflowing across a marker restructures text on
-        // both sides of the boundary, so the user would resolve against
-        // corrupted content and commit it into a rewritten history, where
-        // `git rebase --abort` is gone. The one arm holds both the refusal and
-        // the write because the state probe is itself a `Result`: a `match`
-        // guard cannot ask with `?`, and a write whose guard went unread is not
-        // a write this arm may make. The decision stays pure: it combines the
-        // marker classification with the explicit state the adapter returns.
+        // The refusal and the write live together in one helper because the
+        // state probe is itself a `Result`: a `match` guard cannot ask with
+        // `?`, and a write whose guard went unread is not a write this arm may
+        // make. See [`rewrite_in_place`].
         Mode::InPlace if is_changed => {
-            let markers = marker_state(&assessment.original);
-            if markers == ConflictMarkerState::Present && refuses(markers, guard.operation_state()?)
-            {
-                return Err(anyhow!(
-                    "refusing to rewrite {display_path}: it contains conflict markers and a \
-                     merge, rebase, revert, or cherry-pick is in progress. Resolve it first, or \
-                     pass --allow-conflicted to rewrite it anyway."
-                ));
-            }
-            // The write is conditional on the file still holding the text the
-            // assessment read. A file that changed in the meantime is not this
-            // run's to overwrite: another writer's version is newer, and
-            // replacing it would discard work this run never saw. Failing is
-            // the honest answer — the user asked for a rewrite that did not
-            // happen — and the message says which file and why.
-            if !write_back(directory, storage_key, &assessment)? {
-                return Err(anyhow!(
-                    "not rewriting {display_path}: it changed while it was being formatted, so \
-                     the text this run read is no longer there. Run mdtablefix again to format \
-                     the file as it is now."
-                ));
-            }
+            rewrite_in_place(
+                guard,
+                directory,
+                display_path,
+                storage_key,
+                &assessment,
+                marker_state(&assessment.original),
+            )?;
             String::new()
         }
         // A clean file is left alone byte for byte, and nothing consults the
@@ -173,6 +153,47 @@ pub fn analyse(
         },
         payload,
     ))
+}
+
+/// Rewrites one file in place, refusing the two cases where writing would lose
+/// work.
+///
+/// A conflicted file is refused *here*, where the write would happen, rather
+/// than earlier: reflowing across a marker restructures text on both sides of
+/// the boundary, so the user would resolve against corrupted content and
+/// commit it into a rewritten history, where `git rebase --abort` is gone.
+///
+/// The write is then conditional on the file still holding the text the
+/// assessment read. A file that changed in the meantime is not this run's to
+/// overwrite: another writer's version is newer, and replacing it would discard
+/// work this run never saw. Failing is the honest answer — the user asked for a
+/// rewrite that did not happen — and the message names the file and the reason.
+///
+/// Extracted from [`analyse`] so each refusal reads as one decision rather than
+/// as two clusters nested inside a mode dispatch.
+fn rewrite_in_place(
+    guard: &ConflictGuard,
+    directory: &Dir,
+    display_path: &Utf8Path,
+    storage_key: &Utf8Path,
+    assessment: &Assessment,
+    markers: ConflictMarkerState,
+) -> anyhow::Result<()> {
+    if markers == ConflictMarkerState::Present && refuses(markers, guard.operation_state()?) {
+        return Err(anyhow!(
+            "refusing to rewrite {display_path}: it contains conflict markers and a merge, \
+             rebase, revert, or cherry-pick is in progress. Resolve it first, or pass \
+             --allow-conflicted to rewrite it anyway."
+        ));
+    }
+    if !write_back(directory, storage_key, assessment)? {
+        return Err(anyhow!(
+            "not rewriting {display_path}: it changed while it was being formatted, so the text \
+             this run read is no longer there. Run mdtablefix again to format the file as it is \
+             now."
+        ));
+    }
+    Ok(())
 }
 
 /// Orders indexed results by argument index.

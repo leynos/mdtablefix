@@ -79,11 +79,17 @@ fn metrics(snapshot: Snapshot) -> Vec<Recorded> {
 }
 
 /// Returns the one recorded metric named `name`.
+///
+/// A miss is the test's verdict rather than an arrangement failure: these
+/// helpers read metrics the test has just recorded, so an absent or duplicated
+/// entry means the expectation under test did not hold. The `let`-`else` states
+/// that outcome directly; `unwrap_or_else` would spell a failure as a default
+/// value the caller never receives.
 fn only<'a>(recorded: &'a [Recorded], name: &str) -> &'a Recorded {
     let mut matching = recorded.iter().filter(|metric| metric.name == name);
-    let metric = matching
-        .next()
-        .unwrap_or_else(|| panic!("no metric named {name}"));
+    let Some(metric) = matching.next() else {
+        panic!("no metric named {name}");
+    };
     assert!(
         matching.next().is_none(),
         "more than one metric named {name}"
@@ -93,28 +99,26 @@ fn only<'a>(recorded: &'a [Recorded], name: &str) -> &'a Recorded {
 
 /// Returns the recorded metric named `name` whose `outcome` label is `outcome`.
 fn with_outcome<'a>(recorded: &'a [Recorded], name: &str, outcome: &str) -> &'a Recorded {
-    recorded
-        .iter()
-        .find(|metric| {
-            metric.name == name
-                && metric
-                    .labels
-                    .iter()
-                    .any(|(key, value)| key == "outcome" && value == outcome)
-        })
-        .unwrap_or_else(|| panic!("no {name} carrying outcome={outcome}"))
+    let found = recorded.iter().find(|metric| {
+        metric.name == name
+            && metric
+                .labels
+                .iter()
+                .any(|(key, value)| key == "outcome" && value == outcome)
+    });
+    let Some(metric) = found else {
+        panic!("no {name} carrying outcome={outcome}");
+    };
+    metric
 }
 
 /// Returns the `outcome` label of a recorded metric.
 fn outcome(metric: &Recorded) -> &str {
-    metric
-        .labels
-        .iter()
-        .find(|(key, _)| key == "outcome")
-        .map_or_else(
-            || panic!("no outcome label on {}", metric.name),
-            |(_, value)| value,
-        )
+    let found = metric.labels.iter().find(|(key, _)| key == "outcome");
+    let Some((_, value)) = found else {
+        panic!("no outcome label on {}", metric.name);
+    };
+    value
 }
 
 #[test]
