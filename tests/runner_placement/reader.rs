@@ -90,10 +90,9 @@ pub fn jobs(workflow: &Value) -> Vec<(&str, &Mapping)> {
         .as_mapping()
         .and_then(|root| get(root, "jobs"))
         .and_then(Value::as_mapping)
-        .map(|jobs| {
+        .map_or_else(Vec::new, |jobs| {
             jobs.iter()
                 .filter_map(|(id, job)| Some((id.as_str()?, job.as_mapping()?)))
                 .collect()
         })
-        .unwrap_or_default()
 }

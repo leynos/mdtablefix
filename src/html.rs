@@ -212,10 +212,9 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
 ///
 /// If no `<table>` elements are present, the input is returned unchanged.
 fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
-    let indent: String = lines
-        .first()
-        .map(|line| crate::textproc::leading_indent(line).to_owned())
-        .unwrap_or_default();
+    let indent: String = lines.first().map_or_else(String::new, |line| {
+        crate::textproc::leading_indent(line).to_owned()
+    });
     let html: String = lines.join("\n");
     let opts = ParseOpts::default();
     let dom: RcDom = parse_document(RcDom::default(), opts).one(html);

@@ -2324,9 +2324,9 @@ missing instead of skipping, so a missing tool cannot read as a pass.
 `tests/ci_rustflags_contract.rs` holds the workflow places that assign
 `RUSTFLAGS` themselves: the Windows atomic-write job restates the parallel
 frontend beside the warning deny at job level, the two coverage steps take the
-deny alone, and the two stable release-build steps state the deny alone in
-their own `env:` block so they never see the nightly-only `-Zthreads`. A step
-is judged by its own `env:` block and a job by its own, so a sibling's, a
+deny alone, and the two release-build steps state the deny alone in their own
+`env:` block so they take the platform linker and not the development flags. A
+step is judged by its own `env:` block and a job by its own, so a sibling's, a
 comment or a job-level assignment does not stand in.
 
 ### Cold-cache allowance for the trybuild tests
@@ -2341,14 +2341,18 @@ builds can exceed 180 s.
 
 ### Cranelift
 
-Exception: Cranelift is not the development-profile backend. The repository pins
-`nightly-2026-11-12`, but the release build (`cargo +1.89.0 build --release`,
-in `ci.yml` and `release.yml`) builds on a stable toolchain against
-`.cargo/config.toml`, and stable Cargo refuses a
-`[profile.dev] codegen-backend` key ("config profile `dev` is not valid"), so
-selecting the backend would break that build (recorded 2026-09-29). That build
-assigns `RUSTFLAGS`, so the nightly-only `-Zthreads` flag never reaches it.
-Revisit if that build moves to the pinned nightly.
+Cranelift is the default backend for development builds, set in
+`.cargo/config.toml` (`[profile.dev] codegen-backend = "cranelift"`) on the
+nightly pinned in `rust-toolchain.toml`. The release builds (`ci.yml`'s
+packaging dry run and `release.yml`) use the same pinned nightly with LLVM,
+because the dev profile does not reach the release profile. Coverage selects
+LLVM too, since Cranelift cannot instrument coverage. Two `should_panic` tests
+in `tests/wrap/spanning_code_spans.rs` replace the `catch_unwind` assertions
+that Cranelift cannot unwind through. The Windows atomic-write job
+(`windows-atomic-contract` in `ci.yml`) builds with LLVM through
+`CARGO_PROFILE_DEV_CODEGEN_BACKEND: llvm`, because under Cranelift on Windows
+MSVC the `cli_matrix` and `wrap` test binaries exit abnormally with
+`0xe06d7363`. Linux and macOS run the whole suite under Cranelift.
 
 ## Runner placement
 
