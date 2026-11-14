@@ -66,7 +66,7 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
             None,
         );
         if setext_text_lines[idx]
-            && let Some(emitted) = candidate.detect_verified_heading()
+            && let Some(emitted) = detect_verified_setext_heading(candidate)
         {
             out.push(emitted);
             idx += 2;
@@ -159,24 +159,29 @@ impl<'a> SetextCandidate<'a> {
             continuation_indent,
         }
     }
+}
 
-    /// Constructs the replacement heading and independently checks its ATX class.
-    ///
-    /// For example, `Title` followed by `===` returns `Some("# Title")`.
-    /// The sequence kernel proves construction; this guard checks the emitted
-    /// line, so a kernel that drifted from the emitted form would still be
-    /// caught here rather than producing a heading the classifier rejects.
-    fn detect_verified_heading(self) -> Option<String> {
-        let underline = self.underline?;
-        let heading = detect_setext_heading(
-            self.line,
-            Some(underline),
-            self.link_matcher,
-            self.continuation_indent,
-        )?;
-        let emitted = convert_setext(&heading, self.line, underline)?;
-        is_atx_heading_line(&emitted, &ClassifyCtx::default()).then_some(emitted)
-    }
+/// Constructs the replacement heading and independently checks its ATX class.
+///
+/// For example, `Title` followed by `===` returns `Some("# Title")`. The
+/// sequence kernel proves construction; this guard checks the emitted line, so
+/// a kernel that drifted from the emitted form would still be caught here
+/// rather than producing a heading the classifier rejects.
+///
+/// This is the symbol `docs/verification.md` names for the Setext
+/// checked-output guarantee, which is why it stays a free function rather than
+/// a method on [`SetextCandidate`]: the verification-ledger check only
+/// recognises a module-level declaration.
+fn detect_verified_setext_heading(candidate: SetextCandidate<'_>) -> Option<String> {
+    let underline = candidate.underline?;
+    let heading = detect_setext_heading(
+        candidate.line,
+        Some(underline),
+        candidate.link_matcher,
+        candidate.continuation_indent,
+    )?;
+    let emitted = convert_setext(&heading, candidate.line, underline)?;
+    is_atx_heading_line(&emitted, &ClassifyCtx::default()).then_some(emitted)
 }
 
 /// Reports whether `line` is the text half of a valid Setext heading pair.
@@ -188,7 +193,7 @@ fn is_setext_text_line(fence: FenceObservation, candidate: SetextCandidate<'_>) 
     if is_fence_line(fence) {
         return false;
     }
-    candidate.detect_verified_heading().is_some()
+    detect_verified_setext_heading(candidate).is_some()
 }
 
 /// Marks both lines of every valid Setext heading: its text and its underline.
