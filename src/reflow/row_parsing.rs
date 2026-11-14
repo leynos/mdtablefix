@@ -162,24 +162,46 @@ mod tests {
         ]
     }
 
+    /// Returns how many logical rows `row` encodes, if its shape admits any.
+    ///
+    /// This is the pre-refactor guard chain, renamed: a zero width, a row no
+    /// wider than the width, and a cell count that does not divide into
+    /// whole rows plus separators all mean "this is not a concatenation".
+    /// Returning the count keeps the arithmetic in one place; callers that
+    /// only care whether the shape fits can test for `None`.
+    fn reference_row_count(len: usize, width: usize) -> Option<usize> {
+        let is_row_shaped = width > 0 && len > width && (len + 1).is_multiple_of(width + 1);
+        is_row_shaped.then(|| (len + 1) / (width + 1))
+    }
+
+    /// Reports whether every separator cell between two logical rows is empty.
+    fn reference_separators_are_empty(row: &[Cell], width: usize, count: usize) -> bool {
+        (1..count).all(|index| cell_is_semantically_empty(&row[index * (width + 1) - 1]))
+    }
+
+    /// Reports whether every logical row carries at least one non-empty cell.
+    fn reference_every_logical_row_has_content(row: &[Cell], width: usize, count: usize) -> bool {
+        (0..count).all(|index| {
+            let start = index * (width + 1);
+            row[start..start + width]
+                .iter()
+                .any(|cell| !cell_is_semantically_empty(cell))
+        })
+    }
+
     /// Reimplements `is_concatenated_rows` from the pre-refactor formula.
     ///
-    /// The guards are restated identically on purpose: the point is to compare
-    /// the checked implementation against the previous index arithmetic over
-    /// shapes that satisfy them, so the two must differ only in how they read.
+    /// The arithmetic and the conjuncts are restated identically on purpose:
+    /// the point is to compare the checked implementation against the previous
+    /// index arithmetic over shapes that satisfy and violate the guards, so
+    /// the two must differ only in how they read, never in what they decide.
     fn reference_is_concatenated_rows(row: &[Cell], width: usize) -> bool {
-        if width == 0 || row.len() <= width || !(row.len() + 1).is_multiple_of(width + 1) {
+        let Some(count) = reference_row_count(row.len(), width) else {
             return false;
-        }
-        let row_count = (row.len() + 1) / (width + 1);
-        row_count >= 2
-            && (1..row_count).all(|index| cell_is_semantically_empty(&row[index * (width + 1) - 1]))
-            && (0..row_count).all(|index| {
-                let start = index * (width + 1);
-                row[start..start + width]
-                    .iter()
-                    .any(|cell| !cell_is_semantically_empty(cell))
-            })
+        };
+        count >= 2
+            && reference_separators_are_empty(row, width, count)
+            && reference_every_logical_row_has_content(row, width, count)
     }
 
     /// Reimplements `has_embedded_separator_row` from the pre-refactor formula.
