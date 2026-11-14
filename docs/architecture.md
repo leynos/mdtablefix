@@ -1295,3 +1295,11 @@ records cross-pass checks separately from local kernel correctness, and its
 symbol names are enforced rather than merely documented:
 `scripts/check-verification-ledger.sh` runs under `make lint`, so renaming a
 claimed symbol fails the build instead of silently orphaning its row.
+
+A claimed symbol must be a module-level `fn`. The check scans masked Rust
+source for a declaration, and a method inside an `impl` cannot match, so
+extracting a claimed function into a method breaks the gate even though the
+behaviour and every test are unchanged. Keep claimed symbols free functions,
+and mask literals carefully: the masker must tell a lifetime from a character
+literal, because reading a lifetime as a literal unbalances the quote and hides
+every later declaration in the file.
