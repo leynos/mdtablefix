@@ -1,6 +1,7 @@
-.PHONY: help all clean test bench build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation verus-fence-mutation verus-compression-mutation markdownlint nixie mutants test-workflow-contracts
+.PHONY: help all clean test bench build release lint lint-clippy lint-whitaker typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation verus-fence-mutation verus-compression-mutation markdownlint nixie mutants test-workflow-contracts
 
 APP ?= mdtablefix
+WHITAKER ?= whitaker
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
 BUILD_JOBS ?=
 MUTANTS_JOBS ?= 3
@@ -76,8 +77,23 @@ target/%/$(APP): ## Build binary in debug or release mode
 # member, `test-macros` included, in its own right rather than as a capped
 # dependency. Issue #439 made the two packages one workspace and retired the
 # second, `--manifest-path` invocation this recipe used to carry.
-lint: check-static-regexes check-verification-ledger ## Run Clippy with warnings denied
+lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker suite with warnings denied
+
+lint-clippy: check-static-regexes check-verification-ledger ## Run Clippy with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
+
+# The Dylint driver inherits whatever RUSTFLAGS the caller exported, and a
+# value meant for the cargo build (the parallel frontend, the mold linker)
+# breaks the driver's own compile of the lint libraries. Clear the ones that
+# name a linker, a codegen backend or a target before invoking the suite.
+WHITAKER_CLEAN_ENV = env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS \
+	-u CARGO_PROFILE_DEV_CODEGEN_BACKEND -u CARGO_BUILD_TARGET \
+	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER \
+	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS -u CFLAGS -u LDFLAGS
+
+lint-whitaker: ## Run the Whitaker Dylint suite with clean driver inputs and warnings denied
+	$(WHITAKER_CLEAN_ENV) DYLINT_RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --workspace --all-targets --all-features
+
 
 typecheck: ## Type-check all targets and features
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
