@@ -27,7 +27,9 @@ pub(super) fn parse_link_or_image(
     let start = idx;
 
     if let Some(text_end) = find_footnote_end(text, idx, observer)
-        && !text.get(text_end..).is_some_and(|rest| rest.starts_with('('))
+        && !text
+            .get(text_end..)
+            .is_some_and(|rest| rest.starts_with('('))
     {
         if let (Some(observer), Some(token)) = (observer.as_deref_mut(), text.get(start..text_end))
         {
@@ -49,7 +51,8 @@ pub(super) fn parse_link_or_image(
         .is_some_and(|rest| rest.starts_with('('))
     {
         if let Some(url_end) = parse_link_url(text, text_end) {
-            if let (Some(observer), Some(token)) = (observer.as_deref_mut(), text.get(start..url_end))
+            if let (Some(observer), Some(token)) =
+                (observer.as_deref_mut(), text.get(start..url_end))
             {
                 let is_image = text.get(start..).is_some_and(|rest| rest.starts_with('!'));
                 observer.observe(Event::LinkOrImageParsed { token, is_image });
@@ -258,4 +261,3 @@ mod tests;
 #[cfg(test)]
 #[path = "parsing_tracing_snapshots.rs"]
 mod parsing_tracing_snapshots;
-// weave: run 'weave explain src/wrap/tokenize/parsing.rs' for per-hunk detail, 'weave check' to verify your resolution
