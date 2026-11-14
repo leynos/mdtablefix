@@ -50,7 +50,7 @@ test-workflow-contracts: ## Check the CV-005 CodeScene workflow contracts
 # RUSTFLAGS replaces every `rustflags` table in .cargo/config.toml, so each
 # recipe that sets it composes these onto any inherited value (CI's
 # setup-rust exports one), except coverage, which stays on LLVM and the
-# platform linker.
+# platform linker, and lint-whitaker, which assigns only `-D warnings`.
 BUILD_HOST_OS := $(shell uname -s)
 STANDARD_RUSTFLAGS := -Zthreads=8$(if $(filter Linux,$(BUILD_HOST_OS)), -Clink-arg=-fuse-ld=mold)
 

@@ -156,10 +156,23 @@ fn is_isolated_whitaker(command: &str) -> bool {
         .iter()
         .filter(|word| word.starts_with("RUSTFLAGS="))
         .collect();
-    rustflags == [&"RUSTFLAGS=\"-D warnings\""]
-        && words
-            .iter()
-            .any(|word| word.rsplit('/').next() == Some("whitaker"))
+    rustflags == [&"RUSTFLAGS=\"-D warnings\""] && executable(&words) == Some("whitaker")
+}
+
+/// Returns the executable a command runs: the first word that is not `env`, an `env` `-u NAME`
+/// option, or a leading `NAME=value` assignment, reduced to its final path segment.
+fn executable<'a>(words: &[&'a str]) -> Option<&'a str> {
+    let mut unset_name_next = false;
+    for word in words {
+        if unset_name_next {
+            unset_name_next = false;
+        } else if *word == "-u" {
+            unset_name_next = true;
+        } else if *word != "env" && !word.contains('=') {
+            return word.rsplit('/').next();
+        }
+    }
+    None
 }
 
 /// A shell command line, read word by word with each double-quoted span kept whole.
@@ -304,3 +317,31 @@ pub fn held_out_problems_for(
 
 /// Returns the number of held-out targets the repository defines.
 pub const fn held_out_target_count() -> usize { HELD_OUT_TARGETS.len() }
+
+#[cfg(test)]
+mod isolated_whitaker_tests {
+    //! Positive and negative cases for the isolated Whitaker exemption.
+
+    use super::is_isolated_whitaker;
+
+    #[test]
+    fn the_whitaker_executable_under_a_literal_boundary_is_isolated() {
+        for command in [
+            "env -u CFLAGS RUSTFLAGS=\"-D warnings\" whitaker --all",
+            "RUSTFLAGS=\"-D warnings\" /home/u/.local/bin/whitaker --all",
+        ] {
+            assert!(is_isolated_whitaker(command), "{command}");
+        }
+    }
+
+    #[test]
+    fn other_commands_are_not_isolated() {
+        for command in [
+            "RUSTFLAGS=\"-D warnings\" cargo build --bin whitaker",
+            "env -u CFLAGS RUSTFLAGS=\"-D warnings -Zthreads=8\" whitaker --all",
+            "env -u CFLAGS whitaker --all",
+        ] {
+            assert!(!is_isolated_whitaker(command), "{command}");
+        }
+    }
+}

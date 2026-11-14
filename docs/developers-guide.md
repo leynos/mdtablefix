@@ -2345,13 +2345,15 @@ source repeats the same flags apart from the linker.
 
 An assigned `RUSTFLAGS` replaces the configuration's flags, so the Makefile
 recipes that set it compose the standard's flags onto any inherited value (CI's
-`setup-rust` exports one). Two builds are deliberately excluded: coverage
-assigns `RUSTFLAGS` without the fast flags, because a measurement should not
-depend on them, and the release recipe and workflow keep the platform linker,
-because they assign `RUSTFLAGS` (even an empty value displaces the
-configuration). Cargo has no per-profile `rustflags`, so a direct
-`cargo build --release` takes the configuration's flags unless `RUSTFLAGS` is
-assigned too.
+`setup-rust` exports one). Three builds are deliberately excluded: the Whitaker
+recipe (`lint-whitaker`) assigns the literal `RUSTFLAGS="-D warnings"`, because
+Whitaker runs under the toolchain its installer manages and takes none of the
+standard (the contract reads that isolated command as exempt); coverage assigns
+`RUSTFLAGS` without the fast flags, because a measurement should not depend on
+them, and the release recipe and workflow keep the platform linker, because
+they assign `RUSTFLAGS` (even an empty value displaces the configuration).
+Cargo has no per-profile `rustflags`, so a direct `cargo build --release` takes
+the configuration's flags unless `RUSTFLAGS` is assigned too.
 
 On Linux, install `mold` before building: the configuration names it, so a
 build without it fails at link time. CI installs it through `setup-rust`'s

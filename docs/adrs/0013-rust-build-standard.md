@@ -67,6 +67,14 @@ the workflows, so a flag lost through a recipe or workflow edit fails there.
   needs neither. Coverage keeps LLVM, and release builds use LLVM on the pinned
   nightly.
 
+## Addendum (2026-11-14): Whitaker is isolated from the standard
+
+`make lint-whitaker` assigns the literal `RUSTFLAGS="-D warnings"` instead of
+composing the standard's flags onto the caller's value. Whitaker runs under the
+toolchain its installer manages, so it takes no parallel frontend or `mold`
+flag, as the concordat `rust-build-defaults` rule (BD-008) requires. The
+contract reads that command as exempt from the restatement clauses.
+
 ## Addendum (2026-11-06)
 
 The development build footprint is part of this standard. `.cargo/config.toml`
