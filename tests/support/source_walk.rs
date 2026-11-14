@@ -20,8 +20,7 @@ use anyhow::{Context, Result};
 fn is_walkable(directory: &Path) -> bool {
     let name = directory
         .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
 
     !name.starts_with('.') && name != "target"
 }

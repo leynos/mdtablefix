@@ -2,7 +2,6 @@
 name = "mdtablefix"
 version = "0.6.1"
 edition = "2024"
-rust-version = "1.89"
 license = "ISC"
 repository = "https://github.com/leynos/mdtablefix"
 description = """

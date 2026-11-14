@@ -18,13 +18,20 @@
 # dependencies built without embedded metadata. The pin is later than
 # nightly-2026-07-31, so the native `embed-metadata = false` key applies; a pin
 # earlier than that boundary needs the older `no-embed-metadata = true`.
-# Stable Cargo ignores `[unstable]`.
+# The same table enables the codegen-backend key that selects Cranelift for
+# development builds. Stable Cargo refuses it, so only the pinned nightly may
+# read this file.
 [unstable]
 embed-metadata = false
+codegen-backend = true
 
 [profile.dev]
 incremental = false
 debug = 0
+# Cranelift trades runtime performance for compile speed, so it applies to the
+# dev profile only. Release builds keep LLVM, and coverage selects LLVM
+# explicitly.
+codegen-backend = "cranelift"
 
 [build]
 rustflags = ["-Zthreads=8"]

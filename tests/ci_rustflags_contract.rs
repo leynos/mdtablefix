@@ -8,8 +8,8 @@
 //! - the Windows atomic-write job runs `cargo` directly on a runner without mold, so its job-level
 //!   `env:` restates the parallel frontend beside the warning deny (`-D warnings -Zthreads=8`);
 //! - the two coverage steps are measurements, so they take the deny alone;
-//! - the two stable release-build steps must never see the nightly-only `-Zthreads`, so each states
-//!   the deny alone in its own `env:` block.
+//! - the two release-build steps take the platform linker and not the development flags, so each
+//!   states the deny alone in its own `env:` block.
 //!
 //! A workflow step is judged by its own `env:` block and a job by its own
 //! job-level one, so a sibling's environment, a comment and an inline comment

@@ -4,12 +4,11 @@ This project publishes prebuilt binaries for multiple operating systems and
 architectures. It also publishes a `cargo-binstall` archive for every release
 target.
 
-The project targets the stable Rust `1.89.0` toolchain, as specified in
-`rust-toolchain.toml`.
-
-This Minimum Supported Rust Version (MSRV) is also declared in `Cargo.toml`
-(`rust-version = "1.89"`). The `build-test` job in `.github/workflows/ci.yml`
-uses this toolchain to guard against regressions.
+The project builds on the pinned Rust nightly specified in
+`rust-toolchain.toml`, for development and release alike. It is an application
+and declares no minimum supported Rust version. Release builds use the LLVM
+backend: the Cranelift selection in `.cargo/config.toml` is limited to the
+`dev` profile.
 
 The GitHub Actions workflow `.github/workflows/release.yml` builds and uploads
 binaries for:
@@ -26,7 +25,11 @@ that the tag's version, without the leading `v`, matches the `Cargo.toml`
 Maintainers can also dispatch the workflow manually with an existing release
 tag. This backfill path runs the current workflow definition but checks out and
 builds the tagged source. Use it when a historical release is missing an asset;
-it must not be used to rebuild a tag from different source.
+it must not be used to rebuild a tag from different source. The backfill builds
+with the nightly that the tagged tree's `rust-toolchain.toml` pins, so a tag
+released before 2026-11-13 (built with the 1.89.0 stable toolchain) is rebuilt
+with its own, different pin. Compare a rebuilt asset against the published one
+before relying on it, and expect a byte difference for such a tag.
 
 Runs for the same release tag are serialized without cancellation, while runs
 for different tags remain independent. Third-party actions in the release jobs
@@ -70,10 +73,10 @@ diverge. The helper compares the first version-output line because `cross`
 appends host-Cargo fallback diagnostics when no package metadata is present,
 but it preserves the command's status so a failed cached probe is replaced and
 a failed post-installation probe stops the job. Release targets are likewise
-installed explicitly for the version-pinned Rust 1.89.0 toolchain used by
-`cross`, rather than inheriting the tagged tree's toolchain or a moving stable
-channel. The Cargo cache key includes that compiler version so a toolchain
-change cannot silently reuse incompatible build state.
+installed explicitly for the pinned nightly that the tagged tree's
+`rust-toolchain.toml` selects, which `cross` and Cargo both use. The Cargo
+cache key includes the hash of `rust-toolchain.toml` so a toolchain change
+cannot silently reuse incompatible build state.
 
 `scripts/package_release_artifacts.py` stages the assets. It uses only the
 Python standard library, because the three runner images do not agree on GNU

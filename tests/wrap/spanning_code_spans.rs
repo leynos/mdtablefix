@@ -290,9 +290,15 @@ fn test_assert_no_md038_code_span_allows_backtick_disambiguation_spaces() {
 }
 
 #[test]
-fn test_assert_no_md038_code_span_rejects_invalid_backtick_disambiguation() {
-    assert!(std::panic::catch_unwind(|| assert_no_md038_code_span("`` `foo  ``")).is_err());
-    assert!(std::panic::catch_unwind(|| assert_no_md038_code_span("``  `foo`  ``")).is_err());
+#[should_panic(expected = "code span has leading or trailing space")]
+fn test_assert_no_md038_code_span_rejects_trailing_double_space_in_disambiguation() {
+    assert_no_md038_code_span("`` `foo  ``");
+}
+
+#[test]
+#[should_panic(expected = "code span has leading or trailing space")]
+fn test_assert_no_md038_code_span_rejects_padded_backtick_disambiguation() {
+    assert_no_md038_code_span("``  `foo`  ``");
 }
 
 #[test]
