@@ -347,13 +347,15 @@ They are evidence, not proof, and none should be cited as a theorem.
   postcondition located in a named module, and the summary line must show the
   verifier ran to completion. An unrelated obligation, a parse error, or a
   runner failure therefore cannot pass as a detection. Each error must also
-  carry exactly one source location, so a location-free postcondition failure
-  cannot leave the module check looking complete. A coded header such as
-  `error[E0425]:` counts as an error too, and since it is never a failed
-  postcondition it rejects the run rather than hiding beside the intended
-  failure. Both gates are exercised in seven shapes by
-  `tests/support/verus_mutation_checks.rs`, where only the intended rejection
-  may succeed.
+  carry exactly one source location: none would leave the module check looking
+  complete, and a second one could name an unrelated module after an expected
+  one. A coded header such as `error[E0425]:` counts as an error too, and since
+  it is never a failed postcondition it rejects the run rather than hiding
+  beside the intended failure. A `note:` or `warning:` header ends the error
+  block it follows, so a trigger suggestion's own location is not counted as a
+  second one. Both gates are exercised in nine shapes by
+  `tests/support/verus_mutation_checks.rs`, where only the intended rejection —
+  plain, or followed by a trigger-suggestion note — may succeed.
 
 ## Remaining external contracts
 

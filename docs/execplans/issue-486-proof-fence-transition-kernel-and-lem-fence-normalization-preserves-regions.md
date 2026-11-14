@@ -2288,3 +2288,17 @@ is the honest form recorded in the ledger.
   `emission_coded_error` and `blank_tag_coded_error` to produce it.
   `docs/verification.md` and `docs/developers-guide.md` now state the coded
   header rule and the seven shapes.
+- 2026-11-14: The fifth review round found that the parser stopped collecting
+  locations at the first `-->` in a block, so an error naming an expected
+  module and then an unrelated one passed with `located == total` while the
+  documentation promised exactly one location. The parser now collects every
+  location in a block and emits one verdict per error -- the location, `!` for
+  none, `**` for several -- and the shell rejects the last two, so the
+  documented "exactly one" rule is enforced rather than approximated. The first
+  attempt at that rule rejected both real gates: Verus follows a failed
+  postcondition with `note: automatically chose triggers for this expression`,
+  whose own `-->` was being read as a second location. A `note:` or `warning:`
+  header now ends the block it trails, which is the actual transcript grammar,
+  and the tables gained a ninth shape in which the intended rejection is
+  followed by such a note and must still be accepted. Both real gates and all
+  34 harness tests pass on the stricter rule.

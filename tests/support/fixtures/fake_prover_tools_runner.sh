@@ -27,7 +27,7 @@ if [[ "$*" == *".atx-mutation-"* ]]; then
 fi
 if [[ "$*" == *".emission-mutation-"* ]]; then
     case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
-        emission_rejected)
+        emission_rejected | emission_trigger_note)
             cat <<'OUT'
 error: postcondition not satisfied
   --> verus/.emission-mutation-fake/plan_spec_emission.rs:71:13
@@ -40,9 +40,16 @@ error: postcondition not satisfied
     |
 258 |   proof fn lemma_witness_normalized_contract_refuses_a_wrong_respelling()
     |         ----------------------------------------------------------------- at the end of the function body
-
-verification results:: 229 verified, 2 errors
 OUT
+            if [[ "${FAKE_PROVER_TOOLS_SMOKE_MODE}" == emission_trigger_note ]]; then
+                cat <<'OUT'
+
+note: automatically chose triggers for this expression:
+  --> verus/.emission-mutation-fake/plan_spec_fold_invariant.rs:82:9
+OUT
+            fi
+            echo
+            echo "verification results:: 229 verified, 2 errors"
             exit 1
             ;;
         emission_accepted) exit 0 ;;
@@ -78,6 +85,16 @@ verification results:: 229 verified, 2 errors
 OUT
             exit 1
             ;;
+        emission_double_location)
+            cat <<'OUT'
+error: postcondition not satisfied
+  --> verus/.emission-mutation-fake/plan_spec_emission.rs:71:13
+  --> verus/.emission-mutation-fake/plan_spec_agreement.rs:12:5
+
+verification results:: 229 verified, 1 errors
+OUT
+            exit 1
+            ;;
         emission_coded_error)
             cat <<'OUT'
 error: postcondition not satisfied
@@ -95,7 +112,7 @@ OUT
 fi
 if [[ "$*" == *".blank-tag-mutation-"* ]]; then
     case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
-        blank_tag_rejected)
+        blank_tag_rejected | blank_tag_trigger_note)
             cat <<'OUT'
 error: postcondition not satisfied
   --> verus/.blank-tag-mutation-fake/plan_spec_witnesses.rs:293:9
@@ -104,9 +121,16 @@ error: postcondition not satisfied
     |          --------------------------------------- at the end of the function body
 293 |         spec_delimiter_reads_back(spec_witness_null_opener(), spec_witness_null_emitted()),
     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ failed this postcondition
-
-verification results:: 230 verified, 1 errors
 OUT
+            if [[ "${FAKE_PROVER_TOOLS_SMOKE_MODE}" == blank_tag_trigger_note ]]; then
+                cat <<'OUT'
+
+note: automatically chose triggers for this expression:
+  --> verus/.blank-tag-mutation-fake/plan_spec_witnesses.rs:305:9
+OUT
+            fi
+            echo
+            echo "verification results:: 230 verified, 1 errors"
             exit 1
             ;;
         blank_tag_accepted) exit 0 ;;
@@ -140,6 +164,16 @@ error: postcondition not satisfied
 error: postcondition not satisfied
 
 verification results:: 229 verified, 2 errors
+OUT
+            exit 1
+            ;;
+        blank_tag_double_location)
+            cat <<'OUT'
+error: postcondition not satisfied
+  --> verus/.blank-tag-mutation-fake/plan_spec_witnesses.rs:293:9
+  --> verus/.blank-tag-mutation-fake/plan_spec_emission.rs:71:13
+
+verification results:: 230 verified, 1 errors
 OUT
             exit 1
             ;;

@@ -1,12 +1,14 @@
 //! Mutation-gate attribution checks with the existing scoped fake runner.
 //!
 //! A negative control is only evidence if it fails for its stated reason, so
-//! the contract gates are exercised in seven shapes: the intended rejection, a
-//! run that verifies, a runner that never reaches the verifier, a failure
-//! attributed to an unrelated module, a failure that is not a failed
-//! postcondition at all, a postcondition failure with no source location, and
-//! an intended rejection sitting beside a coded compiler error. Only the first
-//! may pass.
+//! the contract gates are exercised in nine shapes: the intended rejection, the
+//! same rejection followed by a trigger-suggestion note, a run that verifies, a
+//! runner that never reaches the verifier, a failure attributed to an unrelated
+//! module, a failure that is not a failed postcondition at all, a postcondition
+//! failure with no source location, an intended rejection sitting beside a
+//! coded compiler error, and one carrying two source locations. Only the first
+//! two may pass, and the second is there because a note's own location is not a
+//! second location of the error above it.
 
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
@@ -123,6 +125,12 @@ fn mutation_gate_requires_output_classification_failure(
     None,
     Some("confirmed the expected read-back rejection")
 )]
+#[case::intended_rejection_then_note(
+    "emission_trigger_note",
+    true,
+    None,
+    Some("confirmed the expected read-back rejection")
+)]
 #[case::unexpected_success(
     "emission_accepted",
     false,
@@ -159,6 +167,12 @@ fn mutation_gate_requires_output_classification_failure(
     Some("Verifier failed with an error that was not a failed postcondition"),
     None
 )]
+#[case::two_source_locations(
+    "emission_double_location",
+    false,
+    Some("Verifier reported an error with more than one source location"),
+    None
+)]
 fn emission_mutation_gate_requires_an_attributed_rejection(
     #[case] mode: &'static str,
     #[case] should_succeed: bool,
@@ -179,6 +193,12 @@ fn emission_mutation_gate_requires_an_attributed_rejection(
 #[rstest]
 #[case::witness_postcondition(
     "blank_tag_rejected",
+    true,
+    None,
+    Some("confirmed the expected read-back rejection")
+)]
+#[case::intended_rejection_then_note(
+    "blank_tag_trigger_note",
     true,
     None,
     Some("confirmed the expected read-back rejection")
@@ -217,6 +237,12 @@ fn emission_mutation_gate_requires_an_attributed_rejection(
     "blank_tag_coded_error",
     false,
     Some("Verifier failed with an error that was not a failed postcondition"),
+    None
+)]
+#[case::two_source_locations(
+    "blank_tag_double_location",
+    false,
+    Some("Verifier reported an error with more than one source location"),
     None
 )]
 fn blank_tag_mutation_gate_requires_an_attributed_rejection(

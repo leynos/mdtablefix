@@ -142,16 +142,25 @@ assert_failures_attributed() {
     local location
     local base
     local located=0
-    # One line per counted error: its location, or `!` when the next `error:`
-    # header — or the end of the transcript — arrived before any location did.
-    # This pass counts the same headers the first one does, coded errors
-    # included, so the two counts can be compared.
+    # One line per counted error: its location when the error block named
+    # exactly one, `!` when it named none, `**` when it named several. An
+    # error that named an expected module first and an unrelated one second
+    # would otherwise have its second location ignored, so "exactly one" is
+    # the rule rather than "at least one". This pass counts the same headers
+    # the first one does, coded errors included, so the two counts can be
+    # compared.
     while IFS= read -r location; do
         located=$((located + 1))
-        if [ "${location}" = "!" ]; then
-            echo "Verifier reported an error with no source location" >&2
-            return 1
-        fi
+        case "${location}" in
+            "!")
+                echo "Verifier reported an error with no source location" >&2
+                return 1
+                ;;
+            "**")
+                echo "Verifier reported an error with more than one source location" >&2
+                return 1
+                ;;
+        esac
         base="${location##*/}"
         case "${expected}" in
             *" ${base} "*) ;;
@@ -161,18 +170,31 @@ assert_failures_attributed() {
                 ;;
         esac
     done < <(awk '
-        /^error(\[[^]]*\])?:/ && !/^error: aborting due to / {
-            if (pending) print "!"
-            pending = 1
+        # One verdict per error block, emitted at the next diagnostic header
+        # or at the end of the transcript. `note:` and `warning:` end a block
+        # as surely as another error does: their own `-->` lines point at
+        # source too, and counting one as a second location would reject every
+        # transcript that reports a trigger suggestion after a failure.
+        function emit() {
+            if (!open) return
+            if (count == 0) print "!"
+            else if (count > 1) print "**"
+            else print first
+            open = 0
+        }
+        /^(error|warning|note)(\[[^]]*\])?:/ {
+            emit()
+            open = $0 ~ /^error(\[[^]]*\])?:/ && $0 !~ /^error: aborting due to /
+            count = 0
             next
         }
-        pending && /-->/ {
+        open && /-->/ {
             sub(/^[[:space:]]*-->[[:space:]]*/, "")
             sub(/:[0-9]+:[0-9]+$/, "")
-            print
-            pending = 0
+            if (count == 0) first = $0
+            count++
         }
-        END { if (pending) print "!" }
+        END { emit() }
     ' "${output_file}")
     if [ "${located}" -ne "${total}" ]; then
         echo "Verifier reported ${total} errors but ${located} source locations" >&2

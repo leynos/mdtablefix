@@ -131,14 +131,18 @@ and demand a named postcondition rather than a bare "did not verify", so a gate
 cannot pass on a parse error or an unrelated obligation. The two contract gates
 add a stricter rule through `assert_failures_attributed`: every reported error
 must be a failed postcondition located in a named module, and the summary line
-must show the verifier ran to completion, and every error must carry exactly
-one source location, so a location-free failure cannot slip past the module
-check, and a coded header such as `error[E0425]:` counts as an error so that a
-compiler failure cannot ride along with the intended rejection. Both are
-exercised in seven shapes by `tests/support/verus_mutation_checks.rs` — the
-intended rejection, an unexpected success, a runner failure, an unrelated
-module, a non-postcondition error, an unlocated postcondition error, and a
-coded compiler error — and only the first may succeed.
+must show the verifier ran to completion, every error must carry exactly one
+source location, so neither a location-free failure nor a second, unrelated
+location can slip past the module check, and a coded header such as
+`error[E0425]:` counts as an error so that a compiler failure cannot ride along
+with the intended rejection. A `note:` or `warning:` header ends the block it
+follows, so a trigger suggestion's location is not read as a second location of
+the error above it. Both are exercised in nine shapes by
+`tests/support/verus_mutation_checks.rs` — the intended rejection, that
+rejection followed by a trigger-suggestion note, an unexpected success, a
+runner failure, an unrelated module, a non-postcondition error, an unlocated
+postcondition error, a coded compiler error, and an error with two source
+locations — and only the first two may succeed.
 
 Every gate needs a self-contained proof tree, because it supplies a mutated
 copy of a production module and must not touch the working tree. That tree is
