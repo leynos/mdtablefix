@@ -11,8 +11,9 @@
 //!    exact line-by-line equality: `regions(compress(lines))` must equal `regions(lines)` at every
 //!    index. This sweep checks that shape over the corpus and fails the moment a rewrite moves a
 //!    payload line out of the literal region. It is evidence, not the theorem: a corpus says
-//!    nothing about a document no fixture holds, and the driver induction that would generalize it
-//!    is still owed (`docs/verification.md`).
+//!    nothing about a document no fixture holds. The induction that generalizes it is
+//!    `lemma_document_regions_preserved`, which builds its chain of preserved spans from the fold
+//!    itself (`docs/verification.md`).
 //! 2. Through the real binary, every line the classifier calls literal must survive the full flag
 //!    set byte-for-byte. This is what a user observes: fenced code is not rewritten.
 //!

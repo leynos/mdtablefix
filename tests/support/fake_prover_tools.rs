@@ -211,4 +211,3 @@ pub fn runner_log(runner: &FakeProverTools) -> Result<String> {
         .read_to_string("prover-tools.log")
         .context("read fake prover-tools log")
 }
-// weave: run 'weave explain tests/support/fake_prover_tools.rs' for per-hunk detail, 'weave check' to verify your resolution

@@ -107,7 +107,7 @@ production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
 deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
 
-Three mutation gates are the negative controls for the proofs, and each is run
+Five mutation gates are the negative controls for the proofs, and each is run
 by its own Makefile target. `make verus-mutation` runs
 `scripts/check-classifier-mutation.sh`, which removes the mandatory separator
 from the production ATX assembly kernel and confirms Verus rejects the complete
@@ -117,13 +117,28 @@ from `closes_fence` and requires the failed obligation to name that function's
 contract against `spec_closes`. `make verus-compression-mutation` runs
 `scripts/check-compression-mutation.sh`, which makes `delimiter_agendum` ignore
 its `compressible` argument and requires the run to fail with that kernel's own
-postcondition named. Each gate mutates one production module, leaves every
-other proof in place, and demands a named postcondition rather than a bare "did
-not verify", so a gate cannot pass on a parse error or an unrelated obligation.
+postcondition named. `make verus-emission-mutation` runs
+`scripts/check-emission-mutation.sh`, which replaces the `Normalized` arm of
+`spec_emission_reads_back` with `true` and requires the block theorem and the
+contract's own witness to fail. `make verus-blank-tag-mutation` runs
+`scripts/check-blank-tag-mutation.sh`, which deletes the
+`spec_blank_tag_raised` disjunct and requires
+`lemma_witness_null_specifier_reads_back` to fail — the one obligation that
+makes the narrowed hypothesis's satisfiability visible.
+
+The first three mutate one production module, leave every other proof in place,
+and demand a named postcondition rather than a bare "did not verify", so a gate
+cannot pass on a parse error or an unrelated obligation. The two contract gates
+add a stricter rule through `assert_failures_attributed`: every reported error
+must be a failed postcondition located in a named module, and the summary line
+must show the verifier ran to completion. Both are exercised in five shapes by
+`tests/support/verus_mutation_checks.rs` — the intended rejection, an
+unexpected success, a runner failure, an unrelated module, and a
+non-postcondition error — and only the first may succeed.
 
 Every gate needs a self-contained proof tree, because it supplies a mutated
 copy of a production module and must not touch the working tree. That tree is
-built by `scripts/verus-mutation-mirror.sh`, sourced by all three gates.
+built by `scripts/verus-mutation-mirror.sh`, sourced by every gate.
 `verus/lib.rs` names its production modules through `#[path]` attributes, so
 the builder mirrors the whole `src/` tree and rewrites that one prefix; each
 `#[path]` and `include!` inside a production module is already relative to its
@@ -136,10 +151,11 @@ refused to count it. Adding a production module to `verus/lib.rs` now needs no
 change to any gate.
 
 The pull-request workflow runs `make verus`, `make verus-selftest`,
-`make verus-mutation`, `make verus-fence-mutation`, and
-`make verus-compression-mutation` on Ubuntu. It installs Verus and Z3 through
-the shared `install-prover-tools` action, which reads the same pins and caches
-the verified archives, then executes the same Makefile targets used locally. The
+`make verus-mutation`, `make verus-fence-mutation`,
+`make verus-compression-mutation`, `make verus-emission-mutation`, and
+`make verus-blank-tag-mutation` on Ubuntu. It installs Verus and Z3 through the
+shared `install-prover-tools` action, which reads the same pins and caches the
+verified archives, then executes the same Makefile targets used locally. The
 [verification ledger](verification.md) records each claim and its trusted
 boundary; [ADR 0011](adrs/0011-verified-normalization-core.md) documents why
 the proof scope remains a narrow production-used core.

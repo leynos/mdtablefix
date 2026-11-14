@@ -27,15 +27,15 @@ After this work, the classification is a small pure function, the compression
 rewrite decision is a pure function of `(opening state, line)`, and a Verus
 proof establishes that delimiter *spelling* may change while payload *regions*
 may not. The proof is *one-sided* and scoped: it holds over already-reduced
-`LineFeatures`, so it does not cover the recognition that produces them, and it
-instantiates the document-level composition over a caller-supplied chain of
-preserved spans rather than deriving that chain from the pass's own fold. Those
-two boundaries are named in
+`LineFeatures`, so it does not cover the recognition that produces them. The
+document-level composition used to take the caller-supplied chain of preserved
+spans as a hypothesis; M6 item 5b removed that boundary by deriving the chain
+from the pass's own fold. What remains outside the proof is named in
 [the verification ledger](../../verification.md#remaining-external-contracts)
-rather than left implicit; closing the second is M6 item 5b, and issue #486
-stays open until it is met. A reader can observe what *is* proved by running
+rather than left implicit: recognition, blockquote parsing, and the rendered
+spelling of the emitted run. A reader can observe what *is* proved by running
 `make verus`, and the corpus-wide `regions` equality test over every file in
-`tests/data/` as executable evidence for the driver in the meantime.
+`tests/data/` as executable evidence for the parts no proof covers.
 
 ## Conformance basis
 
@@ -358,19 +358,44 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       surface is measured at 44 names at the crate root before and after, with
       nothing lost or gained. `make verus` reports 178 verified, 0 errors with
       no warnings, and all ten commit gates pass.
-- [ ] M6 Item 5b — the driver composition. `plan_step`'s routing relation
-      already models every release the pass can name, but the emitted readings
-      are related to the source readings by the external emission contract
-      rather than by a composition lemma over the buffered-bucket fold. This is
-      the last gap between the block-level proofs and the pass, and the full
-      specification is recorded in the M6 section below and in CodeRabbit's
-      AI-agent prompt of 2026-10-13. **Do not mark issue #486 fully addressed
-      while this remains open.**
-- [ ] M6 Item 2 — the document-level fence-compression preservation proof as
-      a whole. Partially delivered: the block-interior and compressed-block
-      lemmas, the non-vacuity witnesses, and the mutation gate are in; the
-      driver composition above is not. The full specification is recorded in the
-      M6 section below and in CodeRabbit's AI-agent prompt of 2026-10-13.
+- [x] M6 Item 5b (first half) — the emission contract acquired real consumers.
+      `spec_specline` and `spec_agendum_line` construct the contract's
+      `SpecLine` from the agendum the driver chose, `verus/plan_spec_emission.rs`
+      extracts the three shapes, and `lemma_released_block_reads_back` derives
+      every position's emitter fact instead of taking agreement as a free
+      hypothesis. Weakening the `Normalized` arm now makes that theorem
+      unprovable. Committed as `8a8c4c4`; `make verus` reported 185 verified, 0
+      errors.
+- [x] M6 Item 5b (second half) and Item 2 — the driver composition is closed.
+      `spec_chain_of` records the spans the fold has completed after each
+      prefix, `lemma_fold_invariant` proves `INV-DRIVER-FOLD` at every prefix
+      from the plan alone, and `lemma_document_regions_preserved` composes the
+      chain the fold built rather than one supplied by a caller, appending the
+      tail a document ended inside through `lemma_document_tail_composes`. The
+      supporting lemmas live where their subjects live: `fold_span`,
+      `fold_transition`, `fold_release`, `fold_progress`, `fold_invariant`, the
+      three induction-step route modules, and the chain-extension pair
+      `lemma_chain_preserved_prefix` / `lemma_chain_preserved_push`, which are
+      needed because `spec_chain_preserved` peels its last span. Committed as
+      `3f2c2d5`; `make verus` reports 231 verified, 0 errors with no warnings.
+- [x] M6 Item 5b (falsification checks) — the two contract halves now have
+      negative controls, because a contract whose weakening leaves the tree
+      verifying is a comment. `make verus-emission-mutation` replaces the
+      `Normalized` arm with `true` and fails in `plan_spec_emission.rs` and the
+      read-back witness; `make verus-blank-tag-mutation` deletes the
+      `spec_blank_tag_raised` disjunct and fails in
+      `lemma_witness_null_specifier_reads_back`, which is the honest limit
+      recorded in the script header: every theorem takes read-back as a
+      hypothesis, so narrowing it can only break the evidence that the
+      hypothesis is inhabited. Both gates require every error to be a failed
+      postcondition in a named module. Committed as `65a8eb4`, with five-case
+      harness tables in `tests/support/verus_mutation_checks.rs` and both
+      targets wired into CI.
+- [x] M6 Item 2 (witness for the normalized route) — a fifth fold witness pins
+      a *matched* block released `Normalized`, the one route the other four
+      cannot reach. Split into `verus/plan_spec_witnesses_fold_normalized.rs` so
+      both witness files stay under the 400-line ceiling; committed with
+      `3f2c2d5`.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -523,8 +548,10 @@ See the decision log.
   `LEM-INSIDE-OPEN-MEANS-FENCE-SHAPED`, which is the side condition the
   induction's `Extend` case needs. Every one of those is a genuine obligation
   discharged rather than a restatement, and each is a prerequisite the
-  induction would consume. **Recorded as a reduction, not as a completion:** M6
-  items 2 and 5b remain open, and issue #486 must not be closed while they are.
+  induction would consume. **Recorded at the time as a reduction, not as a
+  completion:** M6 items 2 and 5b were both still open, and the note that issue
+  #486 must not be closed while they were is what the paragraphs below then
+  discharge.
 
   The reduction has since been carried further, and the contract itself has
   been corrected. The restatement over the agendum alone was attempted and the
@@ -539,21 +566,34 @@ See the decision log.
   stated over `spec_delimiter_reads_back`, which keeps family, run, and depth
   and admits only the raised blank tag; it is discarded harmlessly at a written
   outer delimiter, where no fence is in force and the transition never reads
-  the tag. The production behaviour is pinned by a regression test, and the
-  necessity of the guard is exhibited by
-  `lemma_blank_tag_flip_needs_the_guard`. The seeding experiment below then
-  showed the reduction is **not enforced**: the lemma naming the relation never
-  mentions it, so reducing it to plain agreement still verifies at 178, 0.
-  Recording the correction was right; the claim that proves it is not yet in
-  place. With the correction in hand the agendum-alone restatement verifies,
-  which retires the half of the gap that concerned the flags: the emitted
-  reading is a function of the agendum and the source reading, so no `SpecLine`
-  need ever be built from emitter bytes. **The remaining half — the per-index
-  content correspondence — is still open.** The claim that a specification need
-  not compute the flags from the agendum is now stated; the claim that agenda
-  position `j` is the emission of source line `j` is not, and
-  `spec_emission_reads_back` — the contract that would connect them — has no
-  consumer, so the flags half is not discharged by a checked obligation either.
+  the tag. The production behaviour is pinned by a regression test.
+  `lemma_blank_tag_flip_needs_the_guard` is a concrete example rather than a
+  necessity proof: it evaluates the masked spelling and both region sequences
+  on a `null`-tagged line and on its untagged emission, so it shows the two
+  readings differ without arguing that no weaker guard would do.
+
+  At the time of that correction the reduction was **not enforced**: the lemma
+  naming the relation never mentioned it, so reducing the `Normalized` arm to
+  plain agreement still verified at 178, 0. Recording the correction was right;
+  the claim that proves it was not yet in place. Commit `8a8c4c4` gave the
+  contract consumers — the block theorem takes `spec_emission_reads_back` as
+  its hypothesis, and two witnesses inhabit and refuse it — and commit
+  `65a8eb4` added mutation gates for both arms, each requiring the mutated run
+  to fail with a postcondition attributed to a named module. With the
+  correction in hand the agendum-alone restatement verifies, which retires the
+  half of the gap that concerned the flags: the emitted reading is a function
+  of the agendum and the source reading, so no `SpecLine` need ever be built
+  from emitter bytes.
+
+  **The remaining half is one-sided, and that is the honest form.** The
+  statement that agenda position `j` is the emission of source line `j` is not
+  proved, because it lives in the emitter rather than in Verus code. What the
+  document theorem now does is compose it: `lemma_document_regions_preserved`
+  takes the rendered spelling as its only hypothesis about the emitted run and
+  builds the chain of preserved spans from the pass's own fold. The spelling
+  itself is guarded by the corpus sweep in `tests/fence_regions.rs` and by the
+  two mutation gates, and it is recorded as an external contract in
+  `docs/verification.md` rather than presented as a theorem.
 
 - The CodeRabbit finding asking the literal-line sweep to compare whole output
   lines rather than substrings was not cosmetic: the stricter assertion failed
@@ -1118,7 +1158,7 @@ See the decision log.
   repository as it actually stands rather than a new divergence. Date
   2026-10-14.
 - Decision: correct `spec_emission_reads_back`'s `Normalized` clause rather than
-  narrow its input domain, and prove the guard's necessity. Rationale: the
+  narrow its input domain, and exhibit the guard's necessity. Rationale: the
   falsifying case is a `null` language specifier, which
   `src/fences.rs::is_null_lang` drops and which
   `tests/fences.rs::preserves_null_language_during_interior_conflict` already
@@ -1131,19 +1171,26 @@ See the decision log.
   (agreement *or* blank tag raised, never lowered),
   `lemma_delimiter_reads_back_preserves` carries it through both transitions
   under the `spec_masked` guard, and `lemma_blank_tag_flip_needs_the_guard`
-  exhibits the guarded case to show the hypothesis cannot be dropped.
+  works the guarded case through both transitions to show the two readings
+  differ without it.
 
-  **What this decision did not achieve is as important as what it did.** The
-  seeding experiment recorded in the entry below showed that neither of those
-  two lemmas is load-bearing: `spec_emission_reads_back` has no consumer, and
+  **What this decision did not achieve at the time is now supplied, and it is
+  worth keeping both halves in view.** The seeding experiment recorded in the
+  entry below showed that neither of the two lemmas was load-bearing as written:
+  `spec_emission_reads_back` had no consumer, and
   `lemma_delimiter_reads_back_preserves` concludes over `spec_fence_next` and
   `spec_fence_region` without ever mentioning the relation it names, so
-  reducing that relation to plain agreement verifies cleanly. The two lemmas
-  therefore do **not** carry or prove the guard in any sense that a theorem
-  rests on; they state it, and seeding shows they do not enforce it. The
-  correction above is still the right statement of the frontier, but it is a
-  statement awaiting a consumer rather than a discharged obligation. Date
-  2026-10-14.
+  reducing that relation to plain agreement verified cleanly at 178, 0. Commit
+  `8a8c4c4` supplied the missing consumers — the block theorem takes the
+  contract as its hypothesis, and two witnesses inhabit and refuse it — and
+  commit `65a8eb4` supplied the negative controls:
+  `make verus-emission-mutation` mutates the `Normalized` arm and
+  `make verus-blank-tag-mutation` deletes the blank-tag disjunct, and each gate
+  requires the mutated run to fail with a postcondition attributed to a named
+  module. `lemma_blank_tag_flip_needs_the_guard` remains a concrete example
+  rather than a necessity proof: it shows a case where the readings diverge,
+  not that no weaker guard would do. That limit is stated in
+  `docs/verification.md` rather than papered over. Date 2026-11-14.
 - Decision: run `mdtablefix --in-place` with explicit file arguments rather than
   `make fmt` to clear the `check-fmt` failure. Rationale: `make fmt` runs
   `mdformat-all` repo-wide and would have rewritten unrelated documents,
@@ -1244,7 +1291,8 @@ See the decision log.
   emission contract plus the corpus sweep. The block-level theorem is complete
   and is the larger half of the work, but marking the issue addressed while a
   required obligation is open would misreport the state of the proof. Date
-  2026-10-05.
+  2026-10-05. **Superseded:** the driver composition landed in `3f2c2d5`, so
+  the reason to keep the issue open no longer applies.
 - Decision: audit the fence-skipping consumers by inspection and record the
   result as evidence rather than attempting to prove each adapter. Rationale:
   the obligation is that every pass which skips fenced content consumes the
@@ -1428,13 +1476,15 @@ the user rather than a defect in this work.
 
 The formatter now classifies every line of a document through one pure
 transition kernel, and the region-preservation theorem is machine-checked
-against that same production body — over pre-parsed `LineFeatures`, and with
-the document-level composition instantiated from a caller-supplied chain of
-preserved spans rather than from the pass's own fold. The driver induction that
-would remove that last hypothesis is M6 item 5b and remains open. `make verus`
-reports 176 verified functions with no errors, `make verus-fence-mutation`
+against that same production body — over pre-parsed `LineFeatures`. The
+document-level composition is instantiated from the chain of preserved spans
+that the pass's own buffered-block fold builds, so the driver induction that
+previously left that chain as a caller-supplied hypothesis is discharged.
+`make verus` reports 231 verified functions with no errors; the emission
+contract that relates the emitted run to the source now has consumers in the
+block theorem and two dedicated mutation gates; `make verus-fence-mutation`
 confirms the proof fails for the intended reason when the closing rule is
-weakened, and `tests/fence_regions.rs` replays the argument over every fixture
+weakened; and `tests/fence_regions.rs` replays the argument over every fixture
 in `tests/data/` plus four whole-file documents that reach the unclosed-fence
 path.
 
@@ -1731,12 +1781,23 @@ Each item below, in the order the request gave it, with its current state.
    not proved. The agenda's lengths already correspond to source lines one for
    one — `lemma_step_agenda_length` and `spec_balanced` establish that, and the
    earlier "not a one-line-per-step extension" characterisation is retracted
-   under *Surprises & discoveries* — so what the induction still lacks is the
+   under *Surprises & discoveries* — so what the induction still lacked was the
    per-index content correspondence and a `SpecLine` the emission contract can
    consume, its three delivery flags being emitter facts no specification
-   currently computes. Emitted readings are therefore still related to source
-   readings by the external emission contract plus the corpus sweep, and **this
-   item stays open**.
+   computed.
+
+   **Both halves are now delivered.** `spec_specline` and `spec_agendum_line`
+   construct that `SpecLine` from the agendum the driver chose, which turned
+   the contract from a specification with no caller into one the block theorem
+   consumes (`8a8c4c4`); and `lemma_document_regions_preserved` composes the
+   chain the fold itself builds, through `spec_chain_of`,
+   `lemma_fold_invariant` and `lemma_spans_compose_regions`, with the document
+   tail appended by `lemma_document_tail_composes` (`3f2c2d5`). `make verus`
+   reports 231 verified, 0 errors. The external contracts that remain are the
+   ones no induction can discharge — fence recognition, blockquote parsing, and
+   the rendered-spelling contract — and they are named as such in
+   `docs/verification.md` rather than described as proved. This item is
+   discharged.
 3. `User-Facing Documentation` (warning): document `classify_regions` and
    `Region` in `docs/users-guide.md`. The section landed in the rebase and
    auto-merged, at `docs/users-guide.md:1124` ("Batch fence classification"),
@@ -1769,19 +1830,24 @@ Each item below, in the order the request gave it, with its current state.
 5. The document-level fence-compression preservation proof: extract a
    Verus-compatible compression planner and emitter that `compress_fences`
    actually calls, so block buffering, conflict accumulation, and emission are
-   connected to the proof by refinement rather than only by tests. **Done for
-   the block level; the driver composition remains.** Commit `3846774` landed
-   `src/fences/plan.rs` (the six planner kernels), `verus/plan_spec.rs` (the
-   document theorem, its conflict bridge, the compressed-block induction, and
-   the non-vacuity witnesses), the `verus/lib.rs` wiring, and the
-   `compress_fences` refactor onto the planner. `make verus` reports 108
-   verified, 0 errors. The parked WIP ref `wip/486-plan-kernel` (`8c022dc`) is
-   superseded by that commit and can be deleted. **M6 item 5b, the driver
-   composition, is open**: the emitted readings are related to the source
-   readings by the external emission contract and the corpus sweep rather than
-   by a composition lemma over the pass's buffered-block fold, and the user's
-   specification requires that block buffering, conflict accumulation and
-   emission not be connected to the specification only by tests.
+   connected to the proof by refinement rather than only by tests. **This
+   commit landed the block level; the driver composition followed later.**
+   Commit `3846774` landed `src/fences/plan.rs` (the six planner kernels),
+   `verus/plan_spec.rs` (the document theorem, its conflict bridge, the
+   compressed-block induction, and the non-vacuity witnesses), the
+   `verus/lib.rs` wiring, and the `compress_fences` refactor onto the planner.
+   `make verus` reports 108 verified, 0 errors. The parked WIP ref
+   `wip/486-plan-kernel` (`8c022dc`) is superseded by that commit and can be
+   deleted. **M6 item 5b, the driver composition, has since landed**
+   (`3f2c2d5`, after the emission contract gained consumers in `8a8c4c4`): the
+   emitted readings are related to the source readings by a composition lemma
+   over the pass's buffered-block fold, whose chain `spec_chain_of` collects and
+   `lemma_fold_invariant` preserves at every prefix. Block buffering, conflict
+   accumulation and emission are therefore connected to the specification by
+   refinement as well as by tests. The user's requirement that they not be
+   connected *only* by tests is met; the external contracts that remain are
+   recognition, blockquote parsing and rendered spelling, which no proof of the
+   planner can discharge.
 6. The compression mutation gate, wired into the Makefile and CI. **Done.**
    `make verus-compression-mutation` runs
    `scripts/check-compression-mutation.sh`, which mutates the `compressible`
@@ -1867,13 +1933,15 @@ largest are `verus/fence_spec.rs` and `src/fences/plan.rs`, both at 357 and 366
 respectively, neither touched in this round. Item 8 is discharged on the
 current tip.
 
-Issue #486 stays open until its original acceptance criteria are met. The
-current state proves the block-interior lemma, the document theorem up to the
-driver, and provides corpus-wide executable evidence; the driver composition in
-item 5b is the part the request specifies that remains open. Items 1, 3, 4, and
-8 are confirmed satisfied against the published tip. Item 2's cross-pass
-obligation is discharged by inspection plus the recorded external contracts
-rather than by proof.
+Issue #486's acceptance criteria are now met on the branch tip. The proof
+covers the block-interior lemma and the whole-document theorem, the latter
+composing the chain of preserved spans that the pass's own fold builds rather
+than accepting it as a hypothesis; corpus-wide executable evidence covers what
+the proof cannot, and the five mutation gates refuse the weakened proofs they
+target. Items 1, 2, 3, 4, 5, 5b, and 8 are all discharged; what remains is
+review and CI, not implementation. Item 2's cross-pass obligation is discharged
+by inspection plus the recorded external contracts rather than by proof, which
+is the honest form recorded in the ledger.
 
 ## Revision note
 
@@ -2154,3 +2222,28 @@ rather than by proof.
   The re-flowed developers-guide paragraph is the form `make fmt` restores,
   which was confirmed by applying `mdtablefix` to that one file alone rather
   than through the repo-wide `make fmt` target.
+- 2026-11-14: M6 item 5b closed, and the plan, ledger, and guides brought into
+  agreement with the tip. Three commits did the work. `8a8c4c4` gave the
+  emission contract consumers: the block theorem now takes
+  `spec_emission_reads_back` as its hypothesis and two witnesses inhabit and
+  refuse it. `3f2c2d5` supplied the driver composition —
+  `lemma_document_regions_preserved` builds its chain of preserved spans from
+  the pass's own fold through `spec_chain_of`, `lemma_fold_invariant`, and
+  `lemma_document_tail_composes`, so the caller-supplied chain is gone — and
+  `make verus` reported 231 verified, 0 errors. `65a8eb4` added
+  `make verus-emission-mutation` and `make verus-blank-tag-mutation`, both
+  requiring every failure to be attributed to a postcondition in a named
+  module, which gives the `Normalized` arm and the blank-tag disjunct the
+  negative controls they lacked.
+
+  This round then corrected the documents that still described the open state:
+  `docs/verification.md` (current status, the five fold witnesses, four new
+  ledger rows, an `Executable evidence` section, and a rewritten
+  `Remaining external contracts` lede naming rendered spelling as consumed but
+  not proved), `docs/developers-guide.md` (five mutation gates rather than
+  three), the `tests/fence_regions.rs` module header, and this plan's Progress,
+  M6 item 5, Surprises, decision log, Outcomes, and acceptance paragraph. The
+  honest limit is unchanged and is now stated in all three places: every
+  theorem takes the rendered spelling of the emitted run as a hypothesis, so
+  deleting the blank-tag disjunct breaks the positive witness rather than any
+  major theorem, and both new gates are scoped accordingly.
