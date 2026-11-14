@@ -144,6 +144,10 @@ fn has_odd_backslash_escape(bytes: &[u8], mut index: usize) -> bool {
 }
 
 #[cfg(test)]
+#[path = "code_span_trim_props.rs"]
+mod props;
+
+#[cfg(test)]
 mod tests {
     //! Unit tests for code-span edge-space trimming.
 

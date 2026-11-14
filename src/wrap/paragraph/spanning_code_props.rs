@@ -4,10 +4,23 @@
 //! offsets. These properties generalise the same contract over generated text
 //! and generated offsets, which is where an out-of-range or mid-scalar slice
 //! would otherwise only surface as a panic on an unlucky input.
+//!
+//! Each generator constructs the condition it needs — a mid-scalar offset, an
+//! absent span — instead of filtering a uniform range. A filtered generator
+//! rejects most samples and proptest reports that rejection rate as a failure,
+//! which would make the suite flaky rather than rigorous.
 
-use proptest::prelude::*;
+use proptest::{prelude::*, sample::select};
+use unicode_width::UnicodeWidthStr;
 
-use super::{overlong_span_crossing_boundaries, split_span_at_boundaries};
+use super::{
+    OverlongSpan,
+    ProseEdge,
+    overlong_span_crossing_boundaries,
+    preserve_span_boundaries,
+    reattach_prose,
+    split_span_at_boundaries,
+};
 
 /// Text that mixes ASCII with multibyte scalars, so byte offsets and character
 /// offsets diverge and a mid-scalar boundary is reachable.
@@ -26,9 +39,37 @@ fn mixed_width_text() -> impl Strategy<Value = String> {
     .prop_map(|chars| chars.into_iter().collect())
 }
 
-/// A byte offset that is deliberately *not* constrained to a character
-/// boundary, so both valid and mid-scalar positions are generated.
-fn byte_offset(max: usize) -> impl Strategy<Value = usize> { 0..=max }
+/// Text containing a backtick fence, at least one multibyte scalar, and one
+/// byte offset strictly inside that scalar.
+///
+/// The offset is derived from the constructed string, so every sample is a
+/// genuine mid-scalar position rather than a filter result.
+fn joining_text_with_mid_scalar_offset() -> impl Strategy<Value = (String, usize)> {
+    (mixed_width_text(), mixed_width_text()).prop_map(|(before, after)| {
+        // The leading scalar guarantees a mid-scalar byte exists even when the
+        // generated halves are empty or all-ASCII.
+        let text = format!("{before}é{after}");
+        let multibyte_start = before.len();
+        (text, multibyte_start + 1)
+    })
+}
+
+/// A joined text, a span range that is a valid slice of it, and wrapped lines
+/// that cannot contain that span.
+///
+/// The span is fenced, while the lines are built only from `z` and spaces, so
+/// the two alphabets cannot overlap and the `span_lookup_miss` branch is
+/// reached on every sample.
+fn absent_span_case() -> impl Strategy<Value = (String, usize, usize, Vec<String>)> {
+    proptest::collection::vec(prop_oneof![Just('a'), Just('b'), Just('é')], 1..8).prop_map(
+        |content| {
+            let content: String = content.into_iter().collect();
+            let joined = format!("`{content}`");
+            let lines = vec!["zz zz".to_owned()];
+            (joined, 0, content.len() + 2, lines)
+        },
+    )
+}
 
 /// Rebuild `text` with one separator byte removed at each boundary.
 ///
@@ -56,9 +97,9 @@ proptest! {
     #[test]
     fn overlong_span_crossing_boundaries_never_panics(
         text in mixed_width_text(),
-        boundaries in proptest::collection::vec(byte_offset(32), 0..4),
-        start in byte_offset(32),
-        end in byte_offset(32),
+        boundaries in proptest::collection::vec(0usize..=32, 0..4),
+        start in 0usize..=32,
+        end in 0usize..=32,
         width in 0usize..40,
     ) {
         let _ = overlong_span_crossing_boundaries(&text, &boundaries, start..end, width);
@@ -67,10 +108,7 @@ proptest! {
     /// A mid-scalar or out-of-range boundary must be rejected rather than
     /// silently skipped, so the caller cannot emit half a character.
     #[test]
-    fn split_span_rejects_non_boundary_offsets(
-        text in mixed_width_text(),
-        boundary in byte_offset(32),
-    ) {
+    fn split_span_rejects_non_boundary_offsets(text in mixed_width_text(), boundary in 0usize..=32) {
         let is_valid_offset = text.is_char_boundary(boundary);
         let result = split_span_at_boundaries(&text, 0, text.len(), &[boundary]);
 
@@ -91,7 +129,7 @@ proptest! {
     #[test]
     fn split_span_preserves_span_content_for_valid_boundaries(
         text in mixed_width_text(),
-        raw_boundaries in proptest::collection::vec(byte_offset(32), 0..4),
+        raw_boundaries in proptest::collection::vec(0usize..=32, 0..4),
     ) {
         let mut boundaries: Vec<usize> = raw_boundaries
             .into_iter()
@@ -120,4 +158,164 @@ proptest! {
             text,
         );
     }
+
+    /// Replacing a preserved span must be answered for every range, never
+    /// panic.
+    ///
+    /// `preserve_span_boundaries` searches the wrapped lines and slices them
+    /// around the span, so an unguarded range would surface as a panic rather
+    /// than a declined rewrite.
+    #[test]
+    fn preserve_span_boundaries_never_panics(
+        joined in mixed_width_text(),
+        line_text in mixed_width_text(),
+        start in 0usize..=32,
+        end in 0usize..=32,
+        width in 0usize..24,
+    ) {
+        let mut lines = vec![line_text];
+
+        preserve_span_boundaries(
+            &mut lines,
+            &joined,
+            OverlongSpan { range: start..end, pieces: vec!["replacement".to_owned()] },
+            width,
+        );
+    }
+
+    /// A range whose start splits a multibyte scalar cannot name a span, so the
+    /// wrapped lines must come back untouched.
+    ///
+    /// The offset is derived from the text, which is what makes this reach the
+    /// slicing guard on every sample instead of only on lucky ASCII input.
+    #[test]
+    fn preserve_span_boundaries_keeps_lines_for_mid_scalar_ranges(
+        (joined, start) in joining_text_with_mid_scalar_offset(),
+    ) {
+        let mut lines = vec!["before after".to_owned()];
+        let original = lines.clone();
+
+        preserve_span_boundaries(
+            &mut lines,
+            &joined,
+            OverlongSpan { range: start..joined.len(), pieces: vec!["replacement".to_owned()] },
+            20,
+        );
+
+        prop_assert_eq!(lines, original);
+    }
+
+    /// A valid range whose text appears in no wrapped line names no reachable
+    /// span, so the lines must be left alone.
+    ///
+    /// The `span_lookup_miss` path exists so a span the wrapper split
+    /// differently degrades to ordinary greedy wrapping instead of duplicating
+    /// or dropping prose.
+    #[test]
+    fn preserve_span_boundaries_keeps_lines_when_span_is_absent(
+        (joined, start, end, lines) in absent_span_case(),
+        width in 1usize..24,
+    ) {
+        let mut lines = lines;
+        let original = lines.clone();
+
+        preserve_span_boundaries(
+            &mut lines,
+            &joined,
+            OverlongSpan { range: start..end, pieces: vec!["replacement".to_owned()] },
+            width,
+        );
+
+        prop_assert_eq!(lines, original);
+    }
+
+    /// Reattaching prose must be answered for every edge and width, never
+    /// panic.
+    ///
+    /// `reattach_prose` delegates to the greedy wrapper when the prose does not
+    /// fit, so this also exercises the wrapper on the whitespace-heavy fragments
+    /// that reach it from a real preserved seam.
+    #[test]
+    fn reattach_prose_never_panics(
+        existing in mixed_width_text(),
+        prose in mixed_width_text(),
+        width in 1usize..24,
+        is_leading in any::<bool>(),
+    ) {
+        let mut lines = vec![existing];
+        let edge = if is_leading { ProseEdge::Leading } else { ProseEdge::Trailing };
+
+        reattach_prose(&mut lines, &prose, width, edge);
+    }
+
+    /// Reattaching prose may reflow or move it, but must never lose or invent
+    /// non-whitespace content.
+    ///
+    /// Comparing both sides with whitespace removed ignores the join space, the
+    /// edge trim and the wrapper's own break handling, and states exactly the
+    /// contract: the prose survives the reattachment. The leading edge places
+    /// the prose before the preserved piece and the trailing edge after it.
+    #[test]
+    fn reattach_prose_preserves_non_whitespace_content(
+        existing in prose_fragment(),
+        prose in prose_fragment(),
+        width in 1usize..24,
+        is_leading in any::<bool>(),
+    ) {
+        let mut lines = vec![existing.clone()];
+        let edge = if is_leading { ProseEdge::Leading } else { ProseEdge::Trailing };
+        let expected = match edge {
+            ProseEdge::Leading => format!("{prose}{existing}"),
+            ProseEdge::Trailing => format!("{existing}{prose}"),
+        };
+
+        reattach_prose(&mut lines, &prose, width, edge);
+
+        prop_assert_eq!(
+            without_whitespace(&lines.concat()),
+            without_whitespace(&expected),
+            "reattaching {:?} at width {} must keep every visible character",
+            prose,
+            width,
+        );
+    }
+
+    /// When the prose does fit beside the preserved piece, the join is exact:
+    /// the edge line becomes the concatenation and nothing is reflowed.
+    ///
+    /// `width` is taken from the joined text itself, so the property exercises
+    /// the fitting branch for every generated prefix rather than only for the
+    /// wide widths that make it trivially reachable.
+    #[test]
+    fn reattach_prose_joins_exactly_when_the_result_fits(
+        prefix in prose_fragment(),
+        suffix in prose_fragment(),
+    ) {
+        let width = UnicodeWidthStr::width(format!("{prefix}{suffix}").as_str());
+        let mut lines = vec![prefix.clone()];
+
+        reattach_prose(&mut lines, &suffix, width, ProseEdge::Trailing);
+
+        prop_assert_eq!(lines, vec![format!("{prefix}{suffix}")]);
+    }
+}
+
+/// Prose that both `reattach_prose` and the greedy wrapper treat as content.
+///
+/// A fragment with no visible character is skipped by the helper by design, so
+/// the content properties exclude it at generation time rather than asserting
+/// about a path they never reach.
+fn prose_fragment() -> impl Strategy<Value = String> {
+    (
+        select(vec!['a', 'é']),
+        proptest::collection::vec(prop_oneof![Just('a'), Just('é'), Just(' ')], 0..9),
+    )
+        .prop_map(|(first, body)| std::iter::once(first).chain(body).collect())
+}
+
+/// Drop whitespace so a property can compare visible content only.
+fn without_whitespace(text: &str) -> String {
+    text.chars()
+        .filter(|character| !character.is_whitespace())
+        .collect()
 }
