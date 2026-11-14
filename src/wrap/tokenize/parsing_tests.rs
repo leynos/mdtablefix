@@ -161,7 +161,7 @@ proptest! {
         let expected_len = expected.len();
         let text = format!("{expected} tail");
 
-        let (token, idx) = parse_link_or_image(&text, 0);
+        let (token, idx) = parse_link_or_image(&text, 0, &mut None);
 
         prop_assert_eq!(token, expected);
         prop_assert_eq!(idx, expected_len);

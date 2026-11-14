@@ -65,7 +65,7 @@ fn parse_link_or_image_falls_back_for_invalid_start_offsets(
     // rejects the range and `fallback_single_char` cannot find a scalar at an
     // invalid offset, so `next` is `text.len()`.
     assert_eq!(
-        parse_link_or_image(text, start),
+        parse_link_or_image(text, start, &mut None),
         (String::new(), text.len())
     );
 }
