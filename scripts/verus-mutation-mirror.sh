@@ -19,16 +19,21 @@
 #
 # The second helper covers the gates' other shared need: displaying a
 # deliberately failing run's output without GitHub reading instructions out of
-# it. Both concerns belong to the gates alone.
+# it. The third covers the question the greps cannot answer on their own:
+# whether the run failed where the gate meant it to. All three concerns belong
+# to the gates alone.
 #
 # Re-use policy: source this file from a mutation gate, call
 # `mirror_verus_proof_tree` once after creating an empty proof directory and
-# before writing the mutated copy over it, and route every display of verifier
-# output through `show_mutation_output`. It is not a general-purpose helper and
-# has no callers outside `scripts/check-*-mutation.sh`.
+# before writing the mutated copy over it, route every display of verifier
+# output through `show_mutation_output`, and confirm the failure's shape with
+# `assert_failures_attributed` before grepping for its message. It is not a
+# general-purpose helper and has no callers outside
+# `scripts/check-*-mutation.sh`.
 #
 # Usage: `mirror_verus_proof_tree REPO_ROOT PROOF_DIR`
 #        `show_mutation_output OUTPUT_FILE`
+#        `assert_failures_attributed OUTPUT_FILE EXPECTED_FILE...`
 
 mirror_verus_proof_tree() {
     local repo_root="$1"
@@ -80,4 +85,119 @@ show_mutation_output() {
     echo "::stop-commands::${token}"
     cat "${output_file}"
     echo "::${token}::"
+}
+
+# Confirm a failing verifier run failed where the gate expected it to.
+#
+# Grepping for a gate's own contract answers "did the run report this?" but not
+# "did it report this because of the mutation?". A run that also, or instead,
+# hit an unrelated obligation, a parse error, a precondition, or a runner
+# failure satisfies a bare grep: the run failed, the expected string appeared,
+# and the gate went green while the injected mutation had nothing to do with
+# the failure. A negative control has to fail for its stated reason.
+#
+# So every error in the transcript must be a failed postcondition, and every
+# such error must be located in one of the files the caller names. An error's
+# location is the first `--> file:line:column` after its `error:` header;
+# comparing basenames keeps the caller independent of the gate's `mktemp`
+# directory, whose name changes on every run.
+#
+# Each error must have exactly one such location, and the located errors must
+# account for the whole count. A parser that only prints the locations it finds
+# would let an extra, location-free postcondition failure through: it would be
+# counted as explained, contribute no location, and leave the module check
+# looking complete.
+#
+# Usage: `assert_failures_attributed OUTPUT_FILE EXPECTED_FILE...`
+assert_failures_attributed() {
+    local output_file="$1"
+    shift
+    local total
+    local explained
+    # `error: aborting due to N previous errors` is the compiler's summary of
+    # the Verus errors above it, not one of them, so it must not be counted as
+    # an unexplained failure. An `error[E0425]:` header counts, though: a coded
+    # error is a compile failure, not a verification one, and counting only the
+    # bare form let a transcript pass that carried both the intended
+    # postcondition failure and an unrelated compiler error beside it.
+    read -r total explained < <(awk '
+        /^error(\[[^]]*\])?:/ && !/^error: aborting due to / {
+            total++
+            if (index($0, "error: postcondition not satisfied") == 1) {
+                explained++
+            }
+        }
+        END { print total + 0, explained + 0 }
+    ' "${output_file}")
+    if [ "${total}" -eq 0 ]; then
+        echo "Verifier reported no error at all" >&2
+        return 1
+    fi
+    if [ "${total}" -ne "${explained}" ]; then
+        echo "Verifier failed with an error that was not a failed postcondition" >&2
+        return 1
+    fi
+
+    local expected=" $* "
+    local location
+    local base
+    local located=0
+    # One line per counted error: its location when the error block named
+    # exactly one, `!` when it named none, `**` when it named several. An
+    # error that named an expected module first and an unrelated one second
+    # would otherwise have its second location ignored, so "exactly one" is
+    # the rule rather than "at least one". This pass counts the same headers
+    # the first one does, coded errors included, so the two counts can be
+    # compared.
+    while IFS= read -r location; do
+        located=$((located + 1))
+        case "${location}" in
+            "!")
+                echo "Verifier reported an error with no source location" >&2
+                return 1
+                ;;
+            "**")
+                echo "Verifier reported an error with more than one source location" >&2
+                return 1
+                ;;
+        esac
+        base="${location##*/}"
+        case "${expected}" in
+            *" ${base} "*) ;;
+            *)
+                echo "Verifier failed outside the expected modules: ${base}" >&2
+                return 1
+                ;;
+        esac
+    done < <(awk '
+        # One verdict per error block, emitted at the next diagnostic header
+        # or at the end of the transcript. `note:` and `warning:` end a block
+        # as surely as another error does: their own `-->` lines point at
+        # source too, and counting one as a second location would reject every
+        # transcript that reports a trigger suggestion after a failure.
+        function emit() {
+            if (!open) return
+            if (count == 0) print "!"
+            else if (count > 1) print "**"
+            else print first
+            open = 0
+        }
+        /^(error|warning|note)(\[[^]]*\])?:/ {
+            emit()
+            open = $0 ~ /^error(\[[^]]*\])?:/ && $0 !~ /^error: aborting due to /
+            count = 0
+            next
+        }
+        open && /-->/ {
+            sub(/^[[:space:]]*-->[[:space:]]*/, "")
+            sub(/:[0-9]+:[0-9]+$/, "")
+            if (count == 0) first = $0
+            count++
+        }
+        END { emit() }
+    ' "${output_file}")
+    if [ "${located}" -ne "${total}" ]; then
+        echo "Verifier reported ${total} errors but ${located} source locations" >&2
+        return 1
+    fi
 }

@@ -1,83 +1,65 @@
 //! The fake prover-tools runner the Verus harness drives `make` with.
 //!
 //! The runner is a script this process writes, so it is run through `bash`
-//! rather than executed directly (#586).
+//! rather than executed directly (#586). The script lives in the shared
+//! [`TestDir`] boundary from `tests/common/fs.rs`: writes and reads go through
+//! its directory capability, and an absolute path is derived only for the two
+//! process boundaries that need one — `make`, which receives the runner and
+//! log paths through the environment, and the working directory of the child.
 
 use std::process::Command;
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use cap_std::fs::{Permissions, PermissionsExt};
-use tempfile::TempDir;
+use cap_std::{
+    fs::{Permissions, PermissionsExt},
+    fs_utf8::Dir,
+};
 
-use super::{manifest_dir, open_dir, utf8};
+use super::{manifest_dir, test_fs::TestDir};
 
 /// A fake runner script in its own temporary directory, with its call log.
 pub struct FakeProverTools {
-    _directory: TempDir,
-    pub path: Utf8PathBuf,
-    log_path: Utf8PathBuf,
+    directory: TestDir,
     smoke_mode: &'static str,
+}
+
+/// The fake runner's script, one branch per gate it answers.
+///
+/// Kept out of [`fake_prover_tools`] so that function reads as what it does —
+/// write the script, make it executable, hand back its paths — instead of as
+/// two hundred lines of shell. Each branch answers the proof file the gate
+/// hands it, keyed by the gate's mirror directory, so the harness can inject
+/// exactly the transcript that gate is meant to judge, including the ones it
+/// must refuse.
+const RUNNER_SCRIPT: &str = include_str!("fixtures/fake_prover_tools_runner.sh");
+
+/// The runner's file name, which the script's own log line reports.
+const RUNNER: &str = "prover-tools";
+
+/// The file the runner appends each invocation to.
+const LOG: &str = "prover-tools.log";
+
+impl FakeProverTools {
+    /// The absolute path of the runner, for the child process that runs it.
+    pub fn path(&self) -> Utf8PathBuf { self.directory.path().join(RUNNER) }
+
+    /// The directory capability holding the script and its log.
+    pub fn directory(&self) -> &Dir { self.directory.directory() }
 }
 
 /// Writes a fake runner whose smoke proof behaves as `smoke_mode` says.
 pub fn fake_prover_tools(smoke_mode: &'static str) -> Result<FakeProverTools> {
-    let directory = TempDir::new().context("create fake prover-tools directory")?;
-    let root = utf8(directory.path())?;
-    let handle = open_dir(root)?;
-    let path = root.join("prover-tools");
-    let log_path = root.join("prover-tools.log");
-    let script = r#"#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "$*" >> "${FAKE_PROVER_TOOLS_LOG:?}"
-printf 'VERUS_Z3_PATH=%s\n' "${VERUS_Z3_PATH:-}" >> "${FAKE_PROVER_TOOLS_LOG:?}"
-if [[ "$*" == *".atx-mutation-"* ]]; then
-    case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
-        mutation_accepted) exit 0 ;;
-        mutation_runner_failure)
-            echo "runner unavailable"
-            exit 1
-            ;;
-        mutation_class_rejected)
-            echo "error: postcondition not satisfied"
-            echo "crate::spec_classify(result@, crate::canonical_context()) == LineClass::AtxHeading"
-            ;;
-        mutation_equality_only)
-            echo "error: postcondition not satisfied"
-            echo "result@ == crate::setext_spec::assembled_heading(prefix@, level as int, text@)"
-            ;;
-        mutation_invariant_only)
-            echo "note: spec_classify(result@, ctx) == LineClass::AtxHeading"
-            echo "error: invariant not satisfied at loop entry"
-            ;;
-    esac
-    echo "verification results:: 70 verified, 1 errors"
-    exit 1
-fi
-if [[ "$*" == "verus run --repo-root . --no-install-missing --proof-file verus/smoke.rs" ]]; then
-    case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
-        rejected)
-            echo "Verus proofs failed"
-            exit 1
-            ;;
-        accepted) exit 0 ;;
-        unrelated_failure)
-            echo "runner unavailable"
-            exit 1
-            ;;
-    esac
-fi
-"#;
+    let directory = TestDir::new().context("create fake prover-tools directory")?;
+    let handle = directory.directory();
     handle
-        .write("prover-tools", script)
+        .write(RUNNER, RUNNER_SCRIPT)
         .context("write fake prover-tools runner")?;
     handle
-        .set_permissions("prover-tools", Permissions::from_mode(0o755))
+        .set_permissions(RUNNER, Permissions::from_mode(0o755))
         .context("make fake prover-tools runner executable")?;
     Ok(FakeProverTools {
-        _directory: directory,
-        path,
-        log_path,
+        directory,
         smoke_mode,
     })
 }
@@ -91,7 +73,7 @@ fi
 /// the script instead of executing a file it has just written. The path is
 /// single-quoted, because Make hands the value to a shell.
 fn runner_command(runner: &FakeProverTools) -> String {
-    format!("bash '{}'", runner.path.as_str().replace('\'', r"'\''"))
+    format!("bash '{}'", runner.path().as_str().replace('\'', r"'\''"))
 }
 
 /// Builds a `make` invocation of `target` that uses the fake runner.
@@ -102,18 +84,15 @@ pub fn make_command(target: &str, runner: &FakeProverTools) -> Command {
         .arg(target)
         .current_dir(manifest_dir())
         .env("PROVER_TOOLS", runner_command(runner))
-        .env("FAKE_PROVER_TOOLS_LOG", &runner.log_path)
+        .env("FAKE_PROVER_TOOLS_LOG", runner.path().with_file_name(LOG))
         .env("FAKE_PROVER_TOOLS_SMOKE_MODE", runner.smoke_mode);
     command
 }
 
 /// Reads the arguments the fake runner was called with, one call per line.
 pub fn runner_log(runner: &FakeProverTools) -> Result<String> {
-    let root = runner
-        .path
-        .parent()
-        .context("fake prover-tools path has no parent")?;
-    open_dir(root)?
-        .read_to_string("prover-tools.log")
+    runner
+        .directory()
+        .read_to_string(LOG)
         .context("read fake prover-tools log")
 }

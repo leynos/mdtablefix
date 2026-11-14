@@ -14,7 +14,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
 use serde_yaml::{Mapping, Value};
-use tempfile::TempDir;
+
+#[path = "common/fs.rs"]
+mod test_fs;
+use test_fs::TestDir;
 
 #[path = "support/fake_prover_tools.rs"]
 mod fake_prover_tools;
@@ -24,17 +27,16 @@ use fake_prover_tools::{fake_prover_tools, make_command, runner_log};
 mod verus_mutation_checks;
 
 const VERUS_WORKFLOW: &str = include_str!("../.github/workflows/verus.yml");
+
 const MAKEFILE: &str = include_str!("../Makefile");
+
 const MISSING_SYMBOL_DIAGNOSTIC: &str =
     "verification ledger names missing symbol: missing_verified_symbol";
+
 const PREFIX_ONLY_SYMBOL_DIAGNOSTIC: &str =
     "verification ledger names missing symbol: process_stream";
 
 fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
-
-fn utf8(path: &std::path::Path) -> Result<&Utf8Path> {
-    Utf8Path::from_path(path).context("temporary directory path should be UTF-8")
-}
 
 fn open_dir(dir: &Utf8Path) -> Result<Dir> {
     Dir::open_ambient_dir(dir, ambient_authority()).with_context(|| format!("open directory {dir}"))
@@ -51,10 +53,9 @@ fn fixture_text(name: &str, extension: &str) -> Result<String> {
 fn script_path() -> Utf8PathBuf { manifest_dir().join("scripts/check-verification-ledger.sh") }
 
 #[fixture]
-fn materialised_ledger(#[default("valid")] name: &str) -> Result<TempDir> {
-    let directory = TempDir::new().context("create temporary ledger directory")?;
-    let root = utf8(directory.path())?;
-    let handle = open_dir(root)?;
+fn materialised_ledger(#[default("valid")] name: &str) -> Result<TestDir> {
+    let directory = TestDir::new().context("create temporary ledger directory")?;
+    let handle = directory.directory();
     handle
         .create_dir("docs")
         .context("create temporary documentation directory")?;
@@ -229,6 +230,8 @@ fn workflow_runs_the_proof_and_non_vacuity_targets() -> Result<()> {
     ensure!(commands.contains(&"make verus-mutation"));
     ensure!(commands.contains(&"make verus-fence-mutation"));
     ensure!(commands.contains(&"make verus-compression-mutation"));
+    ensure!(commands.contains(&"make verus-emission-mutation"));
+    ensure!(commands.contains(&"make verus-blank-tag-mutation"));
     ensure!(checkout_does_not_persist_credentials(&workflow)?);
     ensure!(workflow_has_required_pull_request_triggers(&workflow)?);
     ensure!(workflow_has_read_only_contents_permission(&workflow)?);
@@ -252,10 +255,10 @@ fn ledger_check_requires_an_exact_declaration(
     #[case] expected_diagnostic: Option<&str>,
     #[from(materialised_ledger)]
     #[with(fixture_name)]
-    materialised_ledger: Result<TempDir>,
+    materialised_ledger: Result<TestDir>,
 ) -> Result<()> {
     let directory = materialised_ledger?;
-    let output = run_ledger_check(utf8(directory.path())?);
+    let output = run_ledger_check(directory.path());
 
     assert_eq!(
         output.status.code(),
@@ -346,11 +349,8 @@ fn make_verus_selftest_accepts_only_a_rejected_smoke_proof(
 #[test]
 fn verus_harness_issue_586_runner_survives_an_open_write_descriptor() -> Result<()> {
     let runner = fake_prover_tools("rejected")?;
-    let root = runner
-        .path
-        .parent()
-        .context("fake prover-tools path has no parent")?;
-    let _held_open = open_dir(root)?
+    let _held_open = runner
+        .directory()
         .open_with("prover-tools", cap_std::fs::OpenOptions::new().append(true))
         .context("hold the runner open for writing")?;
 

@@ -6,15 +6,31 @@
 //! the lines that do not move and the compressed-block induction for the
 //! delimiter that does.
 //!
+//! The lemma's inputs are the agenda the release wrote and the emission contract
+//! instantiated at every position of the block. It does not take the emitted
+//! readings as free hypotheses: it derives each position's emitter fact from the
+//! agendum the driver chose, via [`spec_agendum_line`] and the consumers in the
+//! `emission` module. That is what gives the contract a real consumer — weakening
+//! one of its arms makes this lemma unprovable rather than leaving the tree
+//! clean.
+//!
 //! Extracted from `verus/plan_spec.rs` at a declaration seam so both files come
 //! in under the 400-line ceiling `AGENTS.md` sets. The lemma was `pub(super)`
 //! before the move and stays so, which is why the parent re-imports it rather
 //! than re-exporting it.
 
-use crate::fence_spec::{spec_closes, spec_compressed, spec_regions_seeded, spec_rewrite_permitted};
+use crate::fence_spec::{
+    spec_closes, spec_compressed, spec_regions_seeded, spec_rewrite_permitted, spec_state_seeded,
+};
 use crate::production_fence::{FenceState, LineFeatures};
-use super::{lemma_agreement_preserves_prefix, spec_masked, spec_same_reading};
-use super::{lemma_compressed_block_regions};
+use crate::production_plan::{Agendum, Release};
+use super::{
+    lemma_agreement_preserves_prefix, lemma_closer_reads_back_as_itself,
+    lemma_compressed_block_regions, lemma_compressed_emission_shape, lemma_delimited_prefix_agreement,
+    lemma_normalized_emission_reads_back, lemma_verbatim_emission_agrees, spec_agendum_line,
+    spec_block_agenda, spec_delimiter_agendum, spec_delimiter_reads_back, spec_emission_reads_back,
+    spec_is_outer_delimiter, spec_masked, spec_same_reading,
+};
 use vstd::prelude::*;
 
 verus! {
@@ -28,118 +44,187 @@ verus! {
 /// the lines between them, a line between blocks is written verbatim and so reads
 /// back as itself, and a block is the only place an emission can change a reading.
 ///
-/// The hypothesis is the one the pass cannot prove about itself. The pass renders
-/// an agendum into bytes and a regular expression reads those bytes back; Verus
-/// cannot reason about a compiled regular expression, so what the emitted bytes
-/// read as is supplied. The `requires` below supplies it directly, at the three
-/// emission shapes a released block can produce: every line written verbatim
-/// reads back as itself, every line written in its source spelling reads back as
-/// itself, and the lines the pass compressed read back as three backticks at
-/// their source depth. Round two on a compressed line is the case worth naming:
-/// the bytes differ from the source line's, and the theorem is that the *region*
-/// does not.
-///
-/// [`spec_emission_reads_back`] states the same three shapes in one predicate,
-/// but it is *not* what this call site consumes: no `SpecLine` is constructed
-/// anywhere in this file, so nothing can discharge that predicate, and the
-/// hypotheses here are the shapes written out rather than an instantiation of
-/// it. The two are kept in step by hand and the discrepancy is the reason the
-/// predicate reads as documentation rather than as an obligation.
+/// The hypothesis the pass cannot prove about itself is supplied as
+/// [`spec_emission_reads_back`] over [`spec_agendum_line`] at every position:
+/// the pass renders an agendum into bytes and a regular expression reads those
+/// bytes back, and Verus cannot reason about a compiled regular expression. The
+/// lemma then *derives* the three emission shapes from it, so the contract is
+/// consumed rather than restated. Round two on a compressed line is the case
+/// worth naming: the bytes differ from the source line's, and the theorem is that
+/// the *region* does not.
 ///
 /// The conclusion names the whole block because the block is where the two
-/// induction principles above live: interior lines are covered by
-/// [`lemma_compressed_prefix`], and the two delimiters by
-/// [`lemma_compressed_block_regions`]. Nothing here restates either.
+/// induction principles above live: interior lines are covered by agreement, and
+/// the delimiters by [`lemma_compressed_block_regions`] or
+/// [`lemma_delimited_prefix_agreement`]. Nothing here restates either.
 pub proof fn lemma_released_block_reads_back(
     seed: Option<FenceState>,
     source: Seq<LineFeatures>,
     emitted: Seq<LineFeatures>,
+    agenda: Seq<Agendum>,
     len: int,
     opener: FenceState,
-    closer: bool,
+    release: Release,
+    eligible: bool,
     compressible: bool,
 )
     requires
         1 <= len,
         source.len() == len,
         emitted.len() == len,
-        // The opener reads back as the compressed or the source spelling according
-        // to the block's one answer, at the opener's own depth.
+        // The agenda is the one the release writes, so every position's spelling
+        // is the driver's decision rather than a caller's claim.
+        agenda == spec_block_agenda(len, release, eligible, compressible),
+        // The opener the kernel opened.
         source[0].marker == Some(opener.marker),
         source[0].marker_len == opener.marker_len,
         source[0].depth == opener.open_depth,
-        emitted[0].depth == opener.open_depth,
-        compressible ==> emitted[0].marker == Some('`') && emitted[0].marker_len == 3,
-        !compressible ==> spec_same_reading(source[0], emitted[0]),
         spec_masked(seed, opener.open_depth).is_none(),
-        // Every position after the opener reads back as the emitter wrote it: the
-        // pass writes a non-delimiter position verbatim and a non-compressible
-        // delimiter in its source spelling, and both are the same reading. The one
-        // non-compressible delimiter this does not cover is a fallback whose `null`
-        // specifier is dropped, since that raises `trailing_blank`; such a document
-        // is excluded by this hypothesis rather than discharged by it, and
-        // `docs/verification.md` records the exclusion and the relation
-        // (`spec_delimiter_reads_back`) that would bring it inside.
+        // The external contract: what the written bytes read back as.
         forall|i: int|
             #![trigger source[i]]
-            0 < i < len - 1 ==> spec_same_reading(source[i], #[trigger] emitted[i]),
-        forall|i: int|
+            0 <= i < len ==> spec_emission_reads_back(
+                agenda[i],
+                spec_agendum_line(source[i], #[trigger] emitted[i], agenda[i]),
+            ),
+        // A matched release means the last line closed the block under the source
+        // reading. The fold reads this off the transition, and it is what turns
+        // the closer's read-back relation into plain agreement.
+        release == Release::Matched ==> spec_closes(opener, source[len - 1]),
+        release == Release::Matched ==> 2 <= len,
+        // The guarded-interior facts compression relies on. A block whose
+        // delimiters are not rewritten does not need them, which is why they are
+        // conditional on `compressible`; requiring them unconditionally would make
+        // the conflict-fallback route's hypotheses unsatisfiable, which is exactly
+        // the defect this conditional removes.
+        compressible && release == Release::Matched ==> forall|i: int|
             #![trigger source[i]]
             0 < i < len - 1 ==> source[i].depth >= opener.open_depth && !spec_closes(
                 opener,
                 source[i],
             ) && spec_rewrite_permitted(opener, source[i]),
-        // The last position is the closer for a matched block and one more
-        // interior line for an unterminated one. A matched closer is the one
-        // position whose emitted reading is *not* its source reading when the block
-        // is compressible, so the bytes it was written with are named here rather
-        // than left to be inferred: the emitter writes it as three backticks at the
-        // source line's own depth, and the closing relation to the compressed opener
-        // follows from that. A non-compressible closer reads back as its source line
-        // and is discharged by the must-follow below, exactly as the interior is.
-        closer && compressible ==> spec_closes(opener, source[len - 1]),
-        closer && compressible ==> 2 <= len,
-        closer && compressible ==> emitted[len - 1].marker == Some('`'),
-        closer && compressible ==> emitted[len - 1].marker_len == 3,
-        closer && compressible ==> emitted[len - 1].depth == source[len - 1].depth,
-        closer && compressible ==> emitted[len - 1].trailing_blank,
-        closer && !compressible ==> spec_same_reading(source[len - 1], emitted[len - 1]),
-        !closer ==> spec_same_reading(source[len - 1], emitted[len - 1]),
-        !closer ==> source[len - 1].depth >= opener.open_depth && !spec_closes(
-            opener,
-            source[len - 1],
-        ) && spec_rewrite_permitted(opener, source[len - 1]),
-    ensures spec_regions_seeded(source, len, seed) == spec_regions_seeded(emitted, len, seed),
+        compressible && release != Release::Matched ==> forall|i: int|
+            #![trigger source[i]]
+            0 < i < len ==> source[i].depth >= opener.open_depth && !spec_closes(
+                opener,
+                source[i],
+            ) && spec_rewrite_permitted(opener, source[i]),
+    ensures
+        spec_regions_seeded(source, len, seed) == spec_regions_seeded(emitted, len, seed),
+        // A completed release leaves the same fence state behind, which is what
+        // lets one span's result be the next span's precondition. The one
+        // exception is a compressed block with no closer, which is the document's
+        // tail and has no following line for a divergent state to reach.
+        (!eligible || !compressible || release == Release::Matched)
+            ==> spec_state_seeded(source, len, seed) == spec_state_seeded(emitted, len, seed),
 {
-    // A non-compressible block is the agreement case throughout: the opener reads
-    // back as itself and so does every later line, so the whole block is covered by
-    // the agreement induction and needs no block reasoning at all.
-    if !compressible {
+    super::planner::lemma_block_agenda_length(len, release, eligible, compressible, len);
+    assert(agenda == spec_block_agenda(len, release, eligible, compressible));
+    assert(agenda.len() == len);
+    // No delimiter is respelled: every position is written byte for byte, so
+    // agreement carries the whole block and the state as well.
+    if !eligible {
         assert(forall|i: int|
             #![trigger source[i]]
             0 <= i < len ==> spec_same_reading(source[i], #[trigger] emitted[i])) by {
             assert forall|i: int|
                 #![trigger source[i]]
                 0 <= i < len implies spec_same_reading(source[i], #[trigger] emitted[i]) by {
-                assert(source[0].marker == Some(opener.marker));
+                super::planner::lemma_block_agenda_index(len, release, false, compressible, i);
+                reveal(spec_is_outer_delimiter);
+                reveal(spec_delimiter_agendum);
+                assert(agenda[i] == Agendum::Verbatim);
+                lemma_verbatim_emission_agrees(source[i], emitted[i]);
             }
         };
         lemma_agreement_preserves_prefix(source, emitted, len, seed);
         return;
     }
+    // The delimiters are respelled in the source marker family and run, so the
+    // opener needs the masked read-back lemma and every other position agreement.
+    // A closer's read-back relation collapses to agreement because it closes.
+    if !compressible {
+        assert(spec_delimiter_reads_back(source[0], emitted[0])) by {
+            super::planner::lemma_block_agenda_index(len, release, true, false, 0);
+            reveal(spec_is_outer_delimiter);
+            reveal(spec_delimiter_agendum);
+            assert(agenda[0] == Agendum::Normalized);
+            lemma_normalized_emission_reads_back(source[0], emitted[0]);
+        }
+        assert(forall|i: int|
+            #![trigger source[i]]
+            1 <= i < len ==> spec_same_reading(source[i], #[trigger] emitted[i])) by {
+            assert forall|i: int|
+                #![trigger source[i]]
+                1 <= i < len implies spec_same_reading(source[i], #[trigger] emitted[i]) by {
+                if i == len - 1 && release == Release::Matched {
+                    super::planner::lemma_block_agenda_index(len, release, true, false, i);
+                    reveal(spec_is_outer_delimiter);
+                    reveal(spec_delimiter_agendum);
+                    assert(agenda[i] == Agendum::Normalized);
+                    lemma_normalized_emission_reads_back(source[i], emitted[i]);
+                    lemma_closer_reads_back_as_itself(opener, source[i], emitted[i]);
+                } else {
+                    super::planner::lemma_block_agenda_index(len, release, true, false, i);
+                    reveal(spec_is_outer_delimiter);
+                    reveal(spec_delimiter_agendum);
+                    assert(agenda[i] == Agendum::Verbatim);
+                    lemma_verbatim_emission_agrees(source[i], emitted[i]);
+                }
+            }
+        };
+        lemma_delimited_prefix_agreement(source, emitted, len, seed);
+        return;
+    }
     // A compressible block's delimiters are what change, and the interior is what
-    // the change must leave alone: the prefix lemma carries the interior and the
-    // whole-block lemma carries the closer, so this is a call to each rather than a
-    // second induction.
+    // the change must leave alone. The contract supplies the written three-backtick
+    // shape at each delimiter; the fold supplies the guarded-interior facts.
     reveal(spec_compressed);
     reveal(spec_closes);
-    if closer {
+    super::planner::lemma_block_agenda_index(len, release, true, true, 0);
+    reveal(spec_is_outer_delimiter);
+    reveal(spec_delimiter_agendum);
+    assert(agenda[0] == Agendum::Compressed);
+    lemma_compressed_emission_shape(source[0], emitted[0]);
+    if release == Release::Matched {
+        assert(forall|i: int|
+            #![trigger source[i]]
+            0 < i < len - 1 ==> spec_same_reading(source[i], #[trigger] emitted[i])) by {
+            assert forall|i: int|
+                #![trigger source[i]]
+                0 < i < len - 1 implies spec_same_reading(source[i], #[trigger] emitted[i]) by {
+                super::planner::lemma_block_agenda_index(len, release, true, true, i);
+                reveal(spec_is_outer_delimiter);
+                reveal(spec_delimiter_agendum);
+                assert(agenda[i] == Agendum::Verbatim);
+                lemma_verbatim_emission_agrees(source[i], emitted[i]);
+            }
+        };
+        super::planner::lemma_block_agenda_index(len, release, true, true, len - 1);
+        reveal(spec_is_outer_delimiter);
+        reveal(spec_delimiter_agendum);
+        assert(agenda[len - 1] == Agendum::Compressed);
+        lemma_compressed_emission_shape(source[len - 1], emitted[len - 1]);
+        assert(source[len - 1].trailing_blank);
         lemma_compressed_block_regions(seed, source, emitted, len, opener, true);
     } else {
-        // An unterminated block has no closer, so its last line is interior: the
-        // two must-follows supply what the prefix lemma wants, and the block lemma
-        // is the unterminated arm of the same call.
-        lemma_compressed_block_regions(seed, source, emitted, len, opener, false);
+        // An unterminated block's last line is interior, and its two runs end in
+        // different states; the prefix lemma carries the regions and claims no
+        // state, which is why the tail needs no following span.
+        assert(forall|i: int|
+            #![trigger source[i]]
+            0 < i < len ==> spec_same_reading(source[i], #[trigger] emitted[i])) by {
+            assert forall|i: int|
+                #![trigger source[i]]
+                0 < i < len implies spec_same_reading(source[i], #[trigger] emitted[i]) by {
+                super::planner::lemma_block_agenda_index(len, release, true, true, i);
+                reveal(spec_is_outer_delimiter);
+                reveal(spec_delimiter_agendum);
+                assert(agenda[i] == Agendum::Verbatim);
+                lemma_verbatim_emission_agrees(source[i], emitted[i]);
+            }
+        };
+        super::compression::lemma_compressed_prefix(seed, source, emitted, len, opener);
     }
 }
 

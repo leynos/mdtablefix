@@ -93,6 +93,15 @@ type PendingLines = Vec<CachedLine>;
 /// entries: [`plan::drive_step`] returns one agendum per line the step accounted
 /// for, so the caller's obligations are to have buffered those lines first and
 /// to append this agenda once.
+///
+/// [`plan::drive_step`]'s length theorem is what bounds the drain: at every
+/// index the agenda is no longer than the block it releases plus the line it
+/// writes, and the pass has buffered exactly those lines, so
+/// `agenda.len() <= lines.len()` always holds. The debug assertion states that
+/// invariant where a violation would show up first, and the `min` keeps the
+/// slice panic-free when debug assertions are compiled out. With the assertion
+/// in force the clamp never shortens the drain, so it cannot hide a mismatch
+/// between the agenda and the buffer.
 fn drain_agenda(lines: &mut PendingLines, agenda: Vec<Agendum>, out: &mut Vec<String>) {
     debug_assert!(
         agenda.len() <= lines.len(),

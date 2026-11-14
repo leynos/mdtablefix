@@ -60,6 +60,99 @@ pub proof fn lemma_agreement_span_is_preserved(
     lemma_agreement_from_segment(source, emitted, start, end, seed);
 }
 
+/// `LEM-SEGMENT-IS-ENDS-AT` — segment agreement is the span predicate.
+///
+/// The span predicate is `closed`, so only the composition's own modules can
+/// unfold it. Consumers elsewhere hold its three components — a region equality and
+/// two state equalities — and need the predicate to hand to the chain. This lemma is
+/// the one-way door between the two spellings.
+pub proof fn lemma_segment_is_ends_at(
+    source: Seq<LineFeatures>,
+    emitted: Seq<LineFeatures>,
+    start: int,
+    end: int,
+    seed: Option<FenceState>,
+)
+    requires
+        emitted.len() == source.len(),
+        0 <= start <= end <= source.len(),
+        spec_state_from(source, start, end, seed) == spec_state_from(emitted, start, end, seed),
+        spec_regions_from(source, start, end, seed) == spec_regions_from(emitted, start, end, seed),
+    ensures ends_at(source, emitted, start, end, seed, spec_state_from(source, start, end, seed)),
+{
+    reveal(ends_at);
+}
+
+/// `LEM-ENDS-AT-COMPONENTS` — read the span predicate back as its three facts.
+///
+/// The converse of [`lemma_segment_is_ends_at`], and the reason a consumer outside
+/// the composition can use a span result at all: the predicate is `closed`, so its
+/// body is invisible there and the three facts have to be handed over explicitly.
+pub proof fn lemma_ends_at_components(
+    source: Seq<LineFeatures>,
+    emitted: Seq<LineFeatures>,
+    start: int,
+    end: int,
+    seed: Option<FenceState>,
+    target: Option<FenceState>,
+)
+    requires ends_at(source, emitted, start, end, seed, target),
+    ensures
+        spec_state_from(source, start, end, seed) == target,
+        spec_state_from(emitted, start, end, seed) == target,
+        spec_regions_from(source, start, end, seed) == spec_regions_from(emitted, start, end, seed),
+{
+    reveal(ends_at);
+}
+
+/// `LEM-ENDS-AT-JOINS` — two adjacent preserved spans are one preserved span.
+///
+/// The driver releases a block and then writes the line that ended it in a single
+/// step, so one fold step can write a chunk that is two spans of different kinds.
+/// The chain records one cut per step, so the composition needs those two coupled
+/// under the predicate it consumes everywhere else. The join is the split law at
+/// the shared cut, read on both runs.
+pub proof fn lemma_ends_at_join(
+    source: Seq<LineFeatures>,
+    emitted: Seq<LineFeatures>,
+    start: int,
+    mid: int,
+    end: int,
+    seed: Option<FenceState>,
+)
+    requires
+        emitted.len() == source.len(),
+        0 <= start <= mid <= end <= source.len(),
+        ends_at(source, emitted, start, mid, seed, spec_state_seeded(source, mid, None)),
+        ends_at(
+            source,
+            emitted,
+            mid,
+            end,
+            spec_state_seeded(source, mid, None),
+            spec_state_seeded(source, end, None),
+        ),
+    ensures ends_at(source, emitted, start, end, seed, spec_state_seeded(source, end, None)),
+{
+    reveal(ends_at);
+    let joint = spec_state_seeded(source, mid, None);
+    let landed = spec_state_seeded(source, end, None);
+    lemma_regions_from_appends(source, start, mid, end, seed);
+    lemma_regions_from_appends(emitted, start, mid, end, seed);
+    // The first span lands where the second span is read from, in both runs.
+    assert(spec_state_from(source, start, mid, seed) == joint);
+    assert(spec_state_from(emitted, start, mid, seed) == joint);
+    assert(spec_state_from(source, mid, end, joint) == landed);
+    assert(spec_state_from(emitted, mid, end, joint) == landed);
+    assert(spec_regions_from(source, start, mid, seed) == spec_regions_from(
+        emitted,
+        start,
+        mid,
+        seed,
+    ));
+    assert(spec_regions_from(source, mid, end, joint) == spec_regions_from(emitted, mid, end, joint));
+}
+
 /// Whether every span below `t` preserves its regions and lands where it should.
 ///
 /// This is the composition's hypothesis as a single term rather than a quantifier.
