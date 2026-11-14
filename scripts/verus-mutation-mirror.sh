@@ -19,16 +19,21 @@
 #
 # The second helper covers the gates' other shared need: displaying a
 # deliberately failing run's output without GitHub reading instructions out of
-# it. Both concerns belong to the gates alone.
+# it. The third covers the question the greps cannot answer on their own:
+# whether the run failed where the gate meant it to. All three concerns belong
+# to the gates alone.
 #
 # Re-use policy: source this file from a mutation gate, call
 # `mirror_verus_proof_tree` once after creating an empty proof directory and
-# before writing the mutated copy over it, and route every display of verifier
-# output through `show_mutation_output`. It is not a general-purpose helper and
-# has no callers outside `scripts/check-*-mutation.sh`.
+# before writing the mutated copy over it, route every display of verifier
+# output through `show_mutation_output`, and confirm the failure's shape with
+# `assert_failures_attributed` before grepping for its message. It is not a
+# general-purpose helper and has no callers outside
+# `scripts/check-*-mutation.sh`.
 #
 # Usage: `mirror_verus_proof_tree REPO_ROOT PROOF_DIR`
 #        `show_mutation_output OUTPUT_FILE`
+#        `assert_failures_attributed OUTPUT_FILE EXPECTED_FILE...`
 
 mirror_verus_proof_tree() {
     local repo_root="$1"
@@ -80,4 +85,69 @@ show_mutation_output() {
     echo "::stop-commands::${token}"
     cat "${output_file}"
     echo "::${token}::"
+}
+
+# Confirm a failing verifier run failed where the gate expected it to.
+#
+# Grepping for a gate's own contract answers "did the run report this?" but not
+# "did it report this because of the mutation?". A run that also, or instead,
+# hit an unrelated obligation, a parse error, a precondition, or a runner
+# failure satisfies a bare grep: the run failed, the expected string appeared,
+# and the gate went green while the injected mutation had nothing to do with
+# the failure. A negative control has to fail for its stated reason.
+#
+# So every error in the transcript must be a failed postcondition, and every
+# such error must be located in one of the files the caller names. An error's
+# location is the first `--> file:line:column` after its `error:` header;
+# comparing basenames keeps the caller independent of the gate's `mktemp`
+# directory, whose name changes on every run.
+#
+# Usage: `assert_failures_attributed OUTPUT_FILE EXPECTED_FILE...`
+assert_failures_attributed() {
+    local output_file="$1"
+    shift
+    local total
+    local explained
+    # `error: aborting due to N previous errors` is the compiler's summary of
+    # the Verus errors above it, not one of them, so it must not be counted as
+    # an unexplained failure.
+    read -r total explained < <(awk '
+        /^error:/ && !/^error: aborting due to / {
+            total++
+            if (index($0, "error: postcondition not satisfied") == 1) {
+                explained++
+            }
+        }
+        END { print total + 0, explained + 0 }
+    ' "${output_file}")
+    if [ "${total}" -eq 0 ]; then
+        echo "Verifier reported no error at all" >&2
+        return 1
+    fi
+    if [ "${total}" -ne "${explained}" ]; then
+        echo "Verifier failed with an error that was not a failed postcondition" >&2
+        return 1
+    fi
+
+    local expected=" $* "
+    local location
+    local base
+    while IFS= read -r location; do
+        base="${location##*/}"
+        case "${expected}" in
+            *" ${base} "*) ;;
+            *)
+                echo "Verifier failed outside the expected modules: ${base}" >&2
+                return 1
+                ;;
+        esac
+    done < <(awk '
+        /^error:/ { pending = 1; next }
+        pending && /-->/ {
+            sub(/^[[:space:]]*-->[[:space:]]*/, "")
+            sub(/:[0-9]+:[0-9]+$/, "")
+            print
+            pending = 0
+        }
+    ' "${output_file}")
 }

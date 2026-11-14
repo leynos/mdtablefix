@@ -17,7 +17,7 @@
 
 use crate::fence_spec::{spec_closes, spec_fence_next, spec_state_seeded};
 use crate::{
-    spec_absorb, spec_absorb_all, spec_block_agenda, spec_block_agenda_seeded,
+    spec_absorb, spec_block_agenda, spec_block_agenda_seeded,
     spec_delimiter_agendum, spec_delimiters_eligible, spec_document_plan, spec_drive,
     spec_drive_step, spec_fenced, spec_finish, spec_is_outer_delimiter, spec_line_facts,
     spec_open_block, spec_plan_step, spec_planner_features, spec_released_agenda, spec_step_agenda,
@@ -99,7 +99,6 @@ proof fn lemma_witness_matched_normalized_plan_is_live()
     reveal(spec_delimiters_eligible);
     reveal(spec_plan_step);
     reveal(spec_absorb);
-    reveal(spec_absorb_all);
     reveal(spec_open_block);
     reveal(spec_step_state);
     reveal(spec_step_pending);

@@ -41,7 +41,7 @@ jobs:
         run: make verus
       - name: Verify the harness rejects false proofs
         run: make verus-selftest
-      # The three negative controls. Each mutates one production module and
+      # The five negative controls. Each mutates one production module and
       # requires the run to fail with that module's own postcondition named, so
       # a proof that still verified would be proved from something other than
       # the property it claims. They reuse the installation above.
@@ -51,3 +51,7 @@ jobs:
         run: make verus-fence-mutation
       - name: Verify the compression mutation is rejected
         run: make verus-compression-mutation
+      - name: Verify the normalized-emission mutation is rejected
+        run: make verus-emission-mutation
+      - name: Verify the blank-tag mutation is rejected
+        run: make verus-blank-tag-mutation

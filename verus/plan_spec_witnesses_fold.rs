@@ -42,7 +42,7 @@ use crate::fence_spec::{spec_closes, spec_fence_next, spec_state_seeded};
 // module here instead would make this file depend on the specification's own
 // module path rather than on the surface the proof entry point exposes.
 use crate::{
-    lemma_document_plan_total, spec_absorb, spec_absorb_all, spec_block_agenda,
+    lemma_document_plan_total, spec_absorb, spec_block_agenda,
     spec_block_agenda_seeded,
     spec_delimiter_agendum, spec_delimiters_eligible, spec_document_plan, spec_drive,
     spec_drive_step, spec_fenced, spec_finish, spec_is_outer_delimiter, spec_line_facts,
