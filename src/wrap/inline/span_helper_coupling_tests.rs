@@ -25,16 +25,15 @@ fn couples_square_bracket_openers_only(
     #[case] reference: &str,
     #[case] expected: bool,
 ) {
+    let tokens = tokens(opener, reference);
     let mut cursor = SpanCursor {
+        tokens: &tokens,
         end: 0,
         width: 0,
         kind: SpanKind::General,
     };
 
-    assert_eq!(
-        try_couple_bracketed_reference(&tokens(opener, reference), &mut cursor),
-        expected
-    );
+    assert_eq!(try_couple_bracketed_reference(&mut cursor), expected);
     if expected {
         assert_eq!(cursor.end, 2);
         assert_eq!(cursor.kind, SpanKind::BracketedRef);
@@ -52,20 +51,18 @@ fn couples_square_bracket_openers_only(
 #[case(&["[", "[", "1]"], true)]
 #[case(&["[", "[", "1]]"], true)]
 fn couples_the_reference_after_a_bracket_run(#[case] token_text: &[&str], #[case] expected: bool) {
-    let mut cursor = SpanCursor {
-        end: 1,
-        width: 0,
-        kind: SpanKind::General,
-    };
     let tokens = token_text
         .iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>();
+    let mut cursor = SpanCursor {
+        tokens: &tokens,
+        end: 1,
+        width: 0,
+        kind: SpanKind::General,
+    };
 
-    assert_eq!(
-        try_couple_bracketed_reference(&tokens, &mut cursor),
-        expected
-    );
+    assert_eq!(try_couple_bracketed_reference(&mut cursor), expected);
     assert_eq!(cursor.end, 3);
     assert_eq!(cursor.kind, SpanKind::BracketedRef);
 }
