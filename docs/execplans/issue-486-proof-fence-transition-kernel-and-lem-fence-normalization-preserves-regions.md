@@ -2326,3 +2326,19 @@ is the honest form recorded in the ledger.
   open through it, and `tests/fence_regions.rs` opens `CARGO_MANIFEST_DIR` once
   and walks, reads, and writes `tests/data` through capabilities, keeping
   absolute paths for the child processes alone. No test changed what it asserts.
+- 2026-11-14 (later): Rebased again, onto `origin/main` at `1fd13de` (#547,
+  guard code-span byte offsets before slicing), which landed after the previous
+  rebase had been pushed and its checks had gone green. The exclusive boundary
+  is `6830a8e`, the target of that replay, so the range is this branch's own
+  thirteen commits; `git merge-base --is-ancestor` confirms the boundary and
+  `git rev-list --merges` is empty. Every commit replayed with no conflicts and
+  `git range-diff` reports all thirteen unchanged; `git diff --check` against
+  the target is clean. `docs/developers-guide.md` is again the only shared file
+  and the hunks are disjoint: main added the paragraph-helper ownership notes
+  and the empty-layout note, this branch the mutation-gate paragraphs.
+
+  `#547` required no adoption. It changes only `src/wrap/paragraph`,
+  `src/wrap/inline`, their unit and property tests, and that guide section; it
+  adds no shared helper, no fixture under `tests/data`, and no change to
+  `tests/common`, `scripts/`, the `Makefile`, or any Verus module, so nothing
+  it introduced is available to or required by the work here.
