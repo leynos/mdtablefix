@@ -4,7 +4,8 @@ Whitaker is a collection of opinionated Dylint lints for Rust. This guide
 explains how to integrate the lints into a project and configure them.
 
 For contributors who want to develop new lints or work on Whitaker itself, see
-the [Developer's Guide](developers-guide.md).
+the
+[Developer's Guide](https://github.com/leynos/whitaker/blob/main/docs/developers-guide.md).
 
 ## Quick Setup
 
@@ -87,10 +88,11 @@ libraries = [
 ]
 ```
 
-Then run the lints:
+Then run the lints through the installed bootstrap, which supplies the Clippy
+snapshot and driver directory that Dylint needs:
 
 ```sh
-cargo dylint --all
+whitaker --all
 ```
 
 ### Version pinning
@@ -465,12 +467,14 @@ ancestry chain.
 
 #[my_framework::test]
 async fn my_test() {
-    helper(); // allowed — ancestor is a recognized test function
-}
-
-fn helper() {
-    let v: Option<u32> = Some(1);
-    let _ = v.expect("value present"); // allowed — called from within test ancestry
+    // Nesting the helper makes the annotated test an ancestor of its
+    // `.expect()` call. A sibling helper has no such ancestry and is still
+    // reported.
+    fn helper() {
+        let v: Option<u32> = Some(1);
+        let _ = v.expect("value present"); // allowed — nested within the test
+    }
+    helper();
 }
 ```
 
@@ -746,5 +750,5 @@ to roadmap item 7.3.2. This release builds and exposes the AST substrate only;
 it does not score clones or emit AST-based SARIF results.
 
 Contributors maintaining the pinned parser should follow the
-[`ra_ap_syntax` re-pinning runbook](developers-guide.md#ra_ap_syntax-re-pinning-runbook)
+[`ra_ap_syntax` re-pinning runbook](https://github.com/leynos/whitaker/blob/main/docs/developers-guide.md#ra_ap_syntax-re-pinning-runbook)
 in the Developer's Guide.
