@@ -8,6 +8,7 @@ use test_macros::traced_test;
 use super::*;
 
 mod cell_parsing;
+mod guarded_access;
 
 fn single_line_character_strategy() -> impl Strategy<Value = char> {
     any::<char>().prop_filter("table cells must remain on one source line", |character| {
