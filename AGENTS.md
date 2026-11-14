@@ -217,10 +217,10 @@ project:
     ```
 
     validating Rust formatting across the entire workspace, and Markdown
-    formatting across every tracked and untracked document, without modifying
-    files. `make fmt` runs `cargo fmt --all`, then `mdtablefix --in-place` with
-    the same file selection and rules, then `markdownlint-cli2 --fix` over
-    `**/*.md`.
+    formatting across every tracked document and every untracked document that
+    Git does not ignore, without modifying files. `make fmt` runs
+    `cargo fmt --all`, then `mdtablefix --in-place` with the same file selection
+    and rules, then `markdownlint-cli2 --fix` over `**/*.md`.
   - `make lint` executes:
 
     ```sh
@@ -250,13 +250,15 @@ project:
     build flags onto any inherited `RUSTFLAGS`. Use `make fmt`
     (`cargo fmt --all`) to apply formatting fixes reported by the formatter
     check.
-- The development build standard (`docs/adrs/0013-rust-build-standard.md`)
-  sets the parallel `rustc` frontend (`-Zthreads=8`) for development, test,
-  lint and typecheck builds, and on Linux the `mold` linker through
-  `-Clink-arg=-fuse-ld=mold`. An assigned `RUSTFLAGS` replaces the Cargo
-  configuration, so each recipe restates the flags. The `-Z` flag needs the
-  pinned nightly in `rust-toolchain.toml`, and Linux builds need `mold`. LLVM
-  is the default codegen backend; Cranelift is opt-in only (concordat adr-0004).
+- The development build standard
+  ([ADR 0013](docs/adrs/0013-rust-build-standard.md)) sets the parallel `rustc`
+  frontend (`-Zthreads=8`) for development, test, lint and typecheck builds,
+  and on Linux the `mold` linker through `-Clink-arg=-fuse-ld=mold`. An assigned
+  `RUSTFLAGS` replaces the Cargo configuration, so each development recipe
+  that assigns `RUSTFLAGS` restates the flags; the release recipe keeps the
+  caller's flags instead. The `-Z` flag needs the pinned nightly in
+  `rust-toolchain.toml`, and Linux builds need `mold`. LLVM is the default
+  codegen backend; Cranelift is opt-in only (concordat adr-0004).
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
@@ -371,9 +373,10 @@ project:
   `mockable::MockEnv` in tests. A narrow closure seam of the same shape is
   acceptable where a trait object would be disproportionate. Production code
   must not reach for `std::env::var`/`var_os` outside that composition root.
-  This repository does not depend on `mockable`; its accepted local form is
-  `ortho_config::MapEnv`, passed into resolution as a value (see
-  `src/config_test_support.rs`).
+  This repository does not depend on `mockable`. ADR 0012 accepts an explicit
+  value argument as the default, with a narrow reader closure or a shared trait
+  where justified; the configuration module takes `ortho_config`'s environment
+  sources, and its tests supply `MapEnv` (see `src/config_test_support.rs`).
 - **Process-wide locks are not an escape hatch.** Serializing environment
   mutation behind a shared `Mutex`, `OnceLock`, or `serial_test` attribute is
   not an accepted fallback. It serializes the suite, defeats property-based
