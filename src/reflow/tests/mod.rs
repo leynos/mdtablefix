@@ -9,6 +9,7 @@ use super::*;
 
 mod cell_parsing;
 mod guarded_access;
+mod reflow_props;
 
 fn single_line_character_strategy() -> impl Strategy<Value = char> {
     any::<char>().prop_filter("table cells must remain on one source line", |character| {

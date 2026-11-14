@@ -135,3 +135,89 @@ fn append_concatenated_rows(logical_rows: &mut Vec<Vec<Cell>>, row: Vec<Cell>, w
         let _separator = cells.next();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Properties for the row-shape predicates the refactor made checked.
+
+    use proptest::prelude::*;
+
+    use super::*;
+
+    /// Builds a cell carrying no leading-empty state.
+    fn plain_cell(payload: &str) -> Cell {
+        Cell {
+            payload: payload.to_owned(),
+            leading_empty: false,
+        }
+    }
+
+    /// Generates cell text spanning delimiter, empty and content shapes.
+    fn cell_text_strategy() -> impl Strategy<Value = String> {
+        prop_oneof![
+            3 => Just(String::new()),
+            3 => Just("---".to_owned()),
+            2 => Just(":--:".to_owned()),
+            6 => "[a-z]{0,4}".prop_map(|text: String| text),
+        ]
+    }
+
+    /// Reimplements `is_concatenated_rows` from the pre-refactor formula.
+    ///
+    /// The guards are restated identically on purpose: the point is to compare
+    /// the checked implementation against the previous index arithmetic over
+    /// shapes that satisfy them, so the two must differ only in how they read.
+    fn reference_is_concatenated_rows(row: &[Cell], width: usize) -> bool {
+        if width == 0 || row.len() <= width || !(row.len() + 1).is_multiple_of(width + 1) {
+            return false;
+        }
+        let row_count = (row.len() + 1) / (width + 1);
+        row_count >= 2
+            && (1..row_count).all(|index| cell_is_semantically_empty(&row[index * (width + 1) - 1]))
+            && (0..row_count).all(|index| {
+                let start = index * (width + 1);
+                row[start..start + width]
+                    .iter()
+                    .any(|cell| !cell_is_semantically_empty(cell))
+            })
+    }
+
+    /// Reimplements `has_embedded_separator_row` from the pre-refactor formula.
+    fn reference_has_embedded_separator_row(row: &[Cell], width: usize) -> bool {
+        if !reference_is_concatenated_rows(row, width) {
+            return false;
+        }
+        let row_count = (row.len() + 1) / (width + 1);
+        (0..row_count).any(|index| {
+            let start = index * (width + 1);
+            row[start..start + width]
+                .iter()
+                .all(|cell| is_delimiter_cell(&cell.payload))
+        })
+    }
+
+    proptest! {
+        /// The checked rewrite agrees with the previous index formula.
+        ///
+        /// `width` and the token count are generated independently, so the
+        /// guards are satisfied by some samples and not others. Where they are
+        /// satisfied, the old indexing was in range and both forms must agree;
+        /// where they are not, both must decline.
+        #[test]
+        fn checked_row_parsing_agrees_with_the_previous_index_formula(
+            width in 0usize..5,
+            tokens in prop::collection::vec(cell_text_strategy(), 0..14),
+        ) {
+            let row = tokens.iter().map(|text| plain_cell(text)).collect::<Vec<_>>();
+
+            prop_assert_eq!(
+                is_concatenated_rows(&row, width),
+                reference_is_concatenated_rows(&row, width)
+            );
+            prop_assert_eq!(
+                has_embedded_separator_row(&row, width),
+                reference_has_embedded_separator_row(&row, width)
+            );
+        }
+    }
+}
