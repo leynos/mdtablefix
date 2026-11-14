@@ -2,12 +2,24 @@
 
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt as _;
-use std::process::ExitStatus;
+use std::{
+    io::{Error as IoError, ErrorKind},
+    process::ExitStatus,
+};
 
 use assert_cmd::Command;
+use camino::Utf8Path;
 use rstest::rstest;
 
-use super::{BaseCase, TransformFlag, has_flag, is_case_id, non_wrap_signature, status_text};
+use super::{
+    BaseCase,
+    TransformFlag,
+    fixture_io::metadata_presence,
+    has_flag,
+    is_case_id,
+    non_wrap_signature,
+    status_text,
+};
 
 #[test]
 fn status_text_renders_a_successful_exit_as_code_zero() {
@@ -93,4 +105,35 @@ fn has_flag_returns_expected_value(#[case] flag: TransformFlag, #[case] expected
         reporting: &[],
     };
     assert_eq!(has_flag(&case, flag), expected);
+}
+
+#[test]
+fn metadata_presence_reports_a_present_fixture() {
+    let path = Utf8Path::new("present.dat");
+    assert!(
+        metadata_presence(path, Ok::<(), IoError>(()))
+            .expect("a successful metadata query reports the fixture as present")
+    );
+}
+
+#[test]
+fn metadata_presence_reports_a_missing_fixture_as_absent() {
+    let path = Utf8Path::new("missing.dat");
+    let present = metadata_presence(path, Err::<(), _>(IoError::from(ErrorKind::NotFound)))
+        .expect("a missing fixture is an answer, not an error");
+    assert!(!present);
+}
+
+#[rstest]
+#[case(ErrorKind::PermissionDenied)]
+#[case(ErrorKind::NotADirectory)]
+fn metadata_presence_propagates_other_metadata_failures(#[case] kind: ErrorKind) {
+    let path = Utf8Path::new("unreadable.dat");
+    let error = metadata_presence(path, Err::<(), _>(IoError::new(kind, "fixture unreadable")))
+        .expect_err("only a missing fixture reports absence");
+    let message = error.to_string();
+    assert!(
+        message.contains("inspect matrix fixture 'unreadable.dat'"),
+        "the error should name the fixture it inspected: {message}"
+    );
 }

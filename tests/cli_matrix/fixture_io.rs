@@ -21,10 +21,27 @@ pub(super) fn manifest_directory() -> Result<Dir> {
 }
 
 /// Returns whether a repository fixture is accessible through its directory capability.
+///
+/// Only a missing fixture reports `Ok(false)`; any other metadata failure
+/// propagates, so an unreadable repository root cannot read as an absent
+/// fixture and silently skip the case it belongs to.
 pub(crate) fn fixture_exists(file_name: &str) -> Result<bool> {
-    Ok(manifest_directory()?
-        .metadata(fixture_path(file_name))
-        .is_ok())
+    let path = fixture_path(file_name);
+    metadata_presence(&path, manifest_directory()?.metadata(&path))
+}
+
+/// Maps a fixture metadata query to presence.
+///
+/// `Ok(false)` selects the caller's "fixture absent" path, so collapsing a
+/// permission or I/O failure into it would drop the case instead of reporting
+/// the problem. Only `NotFound` means absent; everything else keeps its error
+/// and gains the path that produced it.
+pub(super) fn metadata_presence<T>(path: &Utf8Path, result: std::io::Result<T>) -> Result<bool> {
+    match result {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("inspect matrix fixture '{path}'")),
+    }
 }
 
 /// Reads a matrix fixture through the repository directory capability.
