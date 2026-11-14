@@ -9,9 +9,11 @@ connects it to the production function.
 ## Current status
 
 The proofs run under Verus `0.2026.09.06.8dea4a2`, the release pinned in
-`tools/verus/VERSION`; `make verus` reports 176 verified items with no errors.
-Under the previous release, `0.2025.04.19.1b16620`, it reported 178. The two
-that went were the executable constants `COMPRESSED_MARKER` and
+`tools/verus/VERSION`; `make verus` reports 229 verified items with no errors.
+Most of the increase over the base revision's 176 is the fence-normalization
+document theorem, its composition lemmas, and its witnesses. Under the previous
+release, `0.2025.04.19.1b16620`, the base revision reported 178. The two that
+went were the executable constants `COMPRESSED_MARKER` and
 `COMPRESSED_MARKER_LEN`, which the new release cannot erase when they sit
 outside `verus!` syntax; `compressed` now writes the same two literals, and
 `spec_compressed` is unchanged. The new release also requires every verified

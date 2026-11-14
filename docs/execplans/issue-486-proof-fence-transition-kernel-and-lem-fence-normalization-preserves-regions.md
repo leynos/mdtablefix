@@ -377,7 +377,9 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       three induction-step route modules, and the chain-extension pair
       `lemma_chain_preserved_prefix` / `lemma_chain_preserved_push`, which are
       needed because `spec_chain_preserved` peels its last span. Committed as
-      `3f2c2d5`; `make verus` reports 231 verified, 0 errors with no warnings.
+      `3f2c2d5`; `make verus` reported 231 verified, 0 errors with no warnings on
+      the pre-rebase toolchain, and reports 229 on the nightly toolchain after
+      the rebase onto `e40c2ed`, still with no errors.
 - [x] M6 Item 5b (falsification checks) — the two contract halves now have
       negative controls, because a contract whose weakening leaves the tree
       verifying is a comment. `make verus-emission-mutation` replaces the
@@ -1480,13 +1482,13 @@ against that same production body — over pre-parsed `LineFeatures`. The
 document-level composition is instantiated from the chain of preserved spans
 that the pass's own buffered-block fold builds, so the driver induction that
 previously left that chain as a caller-supplied hypothesis is discharged.
-`make verus` reports 231 verified functions with no errors; the emission
-contract that relates the emitted run to the source now has consumers in the
-block theorem and two dedicated mutation gates; `make verus-fence-mutation`
-confirms the proof fails for the intended reason when the closing rule is
-weakened; and `tests/fence_regions.rs` replays the argument over every fixture
-in `tests/data/` plus four whole-file documents that reach the unclosed-fence
-path.
+`make verus` reports 229 verified functions with no errors on the nightly
+toolchain (231 before the rebase); the emission contract that relates the
+emitted run to the source now has consumers in the block theorem and two
+dedicated mutation gates; `make verus-fence-mutation` confirms the proof fails
+for the intended reason when the closing rule is weakened; and
+`tests/fence_regions.rs` replays the argument over every fixture in
+`tests/data/` plus four whole-file documents that reach the unclosed-fence path.
 
 Three lessons are worth keeping.
 
@@ -1793,9 +1795,10 @@ Each item below, in the order the request gave it, with its current state.
    chain the fold itself builds, through `spec_chain_of`,
    `lemma_fold_invariant` and `lemma_spans_compose_regions`, with the document
    tail appended by `lemma_document_tail_composes` (`3f2c2d5`). `make verus`
-   reports 231 verified, 0 errors. The external contracts that remain are the
-   ones no induction can discharge — fence recognition, blockquote parsing, and
-   the rendered-spelling contract — and they are named as such in
+   reports 229 verified, 0 errors on the rebased nightly toolchain (231 before
+   the rebase). The external contracts that remain are the ones no induction
+   can discharge — fence recognition, blockquote parsing, and the
+   rendered-spelling contract — and they are named as such in
    `docs/verification.md` rather than described as proved. This item is
    discharged.
 3. `User-Facing Documentation` (warning): document `classify_regions` and
@@ -2230,11 +2233,11 @@ is the honest form recorded in the ledger.
   `lemma_document_regions_preserved` builds its chain of preserved spans from
   the pass's own fold through `spec_chain_of`, `lemma_fold_invariant`, and
   `lemma_document_tail_composes`, so the caller-supplied chain is gone — and
-  `make verus` reported 231 verified, 0 errors. `65a8eb4` added
-  `make verus-emission-mutation` and `make verus-blank-tag-mutation`, both
-  requiring every failure to be attributed to a postcondition in a named
-  module, which gives the `Normalized` arm and the blank-tag disjunct the
-  negative controls they lacked.
+  `make verus` reported 231 verified, 0 errors before the rebase and 229 after
+  it. `65a8eb4` added `make verus-emission-mutation` and
+  `make verus-blank-tag-mutation`, both requiring every failure to be
+  attributed to a postcondition in a named module, which gives the `Normalized`
+  arm and the blank-tag disjunct the negative controls they lacked.
 
   This round then corrected the documents that still described the open state:
   `docs/verification.md` (current status, the five fold witnesses, four new
