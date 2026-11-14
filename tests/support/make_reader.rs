@@ -77,6 +77,45 @@ pub struct RecipeCommand {
 /// recipe, so reading the first would judge one that never runs.
 ///
 /// A recipe line is tab-indented; the recipe ends at the first line that is
+/// Return the prerequisites named on `target`'s declaration line.
+///
+/// A target may have no recipe of its own and still gate real work through its
+/// prerequisites, which is how `lint` composes `lint-clippy` and
+/// `lint-whitaker` into one public command. [`recipe_commands`] deliberately
+/// does not follow prerequisites, so a caller that needs to know what a
+/// prerequisite-only target composes has to read the declaration.
+///
+/// Returns `None` when the target is not declared. A target declared more than
+/// once also yields `None`: GNU Make runs the later recipe, so no single
+/// declaration can be said to be the one in force.
+///
+/// ```
+/// let makefile = "lint: lint-clippy lint-whitaker\nlint-clippy:\n\tcargo clippy\n";
+/// assert_eq!(
+///     target_prerequisites(makefile, "lint"),
+///     Some(vec!["lint-clippy".to_owned(), "lint-whitaker".to_owned()])
+/// );
+/// assert_eq!(target_prerequisites(makefile, "missing"), None);
+/// ```
+pub fn target_prerequisites(makefile: &str, target: &str) -> Option<Vec<String>> {
+    let prefix = format!("{target}:");
+    let declarations: Vec<&str> = makefile
+        .lines()
+        .filter(|line| line.starts_with(&prefix))
+        .collect();
+    let [declaration] = declarations.as_slice() else {
+        return None;
+    };
+    let rest = declaration[prefix.len()..].trim();
+    // A `##` comment marks the documented target list; it is not a prerequisite.
+    let rest = rest.split("##").next().unwrap_or_default();
+    Some(
+        rest.split_whitespace()
+            .map(str::to_owned)
+            .collect::<Vec<String>>(),
+    )
+}
+
 /// neither tab-indented nor blank. Comment lines are dropped, so a
 /// commented-out command cannot satisfy a coverage requirement.
 ///
