@@ -190,6 +190,10 @@ mod tests {
     #[case::path("open ./a/.../b next", vec!["./a/.../b"])]
     #[case::unicode("é <https://example.com/a...b> 例", vec!["<https://example.com/a...b>"])]
     #[case::windows_path(r"open C:\a\...\b next", vec![r"C:\a\...\b"])]
+    // `is_windows_drive_path` accepts either separator after the colon, so
+    // both arms need a case; the backslash case above leaves the forward-slash
+    // arm unexercised.
+    #[case::windows_forward_slash_path("open C:/a/.../b next", vec!["C:/a/.../b"])]
     #[case::slash_prose("choose and/or... input/output...", Vec::<&str>::new())]
     fn finds_literal_spans(#[case] input: &str, #[case] expected: Vec<&str>) {
         let actual = literal_spans(input)
