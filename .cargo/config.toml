@@ -18,8 +18,8 @@
 # dependencies built without embedded metadata. The pin is later than
 # nightly-2026-07-31, so the native `embed-metadata = false` key applies; a pin
 # earlier than that boundary needs the older `no-embed-metadata = true`.
-# The same table enables the codegen-backend key that selects Cranelift for
-# development builds. Stable Cargo refuses it, so only the pinned nightly may
+# The same table enables the codegen-backend key that allows an opt-in
+# Cranelift selection. Stable Cargo refuses it, so only the pinned nightly may
 # read this file.
 [unstable]
 embed-metadata = false
@@ -28,10 +28,12 @@ codegen-backend = true
 [profile.dev]
 incremental = false
 debug = 0
-# Cranelift trades runtime performance for compile speed, so it applies to the
-# dev profile only. Release builds keep LLVM, and coverage selects LLVM
-# explicitly.
-codegen-backend = "cranelift"
+# Development builds use LLVM, the estate standard.
+# Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+# codegen-backend = "cranelift"
+# One-off opt-in: --config 'profile.dev.codegen-backend="cranelift"'
+# A persistent opt-in also sets SELECTED to true in
+# tests/build_standard_support/cranelift.rs.
 
 [build]
 rustflags = ["-Zthreads=8"]

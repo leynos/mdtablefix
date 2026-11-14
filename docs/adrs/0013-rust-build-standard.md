@@ -34,7 +34,8 @@ artefacts also need a baseline that the fast flags would disturb.
 - Restate the flags in each recipe and step, held by a contract test. This is
   the option taken.
 - Adopt Cranelift for development builds. The repository did not at first and
-  does since 2026-11-13; see the consequences below.
+  did from 2026-11-13 to 2026-11-14 and no longer does; see the consequences
+  below.
 
 ## Decision outcome
 
@@ -57,9 +58,14 @@ the workflows, so a flag lost through a recipe or workflow edit fails there.
   must be GCC 12.1 or newer, or clang.
 - A change to a recipe or workflow step that assigns `RUSTFLAGS` must restate
   the flags, and the contract says which clause fails when it does not.
-- Cranelift is the development default from 2026-11-13; coverage selects LLVM
-  explicitly, and release builds keep LLVM on the pinned nightly because
-  `[profile.dev]` does not reach them.
+- Cranelift was the development default from 2026-11-13 to 2026-11-14. LLVM is
+  the default again and the Cranelift selection is commented out in
+  `.cargo/config.toml`, with review due 14 May 2027. The component, the
+  `[unstable] codegen-backend` key and the opt-in stay. To opt in persistently,
+  uncomment the selection and set `SELECTED` to `true` in
+  `tests/build_standard_support/cranelift.rs`; a one-off `--config` override
+  needs neither. Coverage keeps LLVM, and release builds use LLVM on the pinned
+  nightly.
 
 ## Addendum (2026-11-06)
 

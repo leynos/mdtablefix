@@ -7,8 +7,8 @@ target.
 The project builds on the pinned Rust nightly specified in
 `rust-toolchain.toml`, for development and release alike. It is an application
 and declares no minimum supported Rust version. Release builds use the LLVM
-backend: the Cranelift selection in `.cargo/config.toml` is limited to the
-`dev` profile.
+backend, and so do development builds: the Cranelift selection in
+`.cargo/config.toml` is commented out.
 
 The GitHub Actions workflow `.github/workflows/release.yml` builds and uploads
 binaries for:
