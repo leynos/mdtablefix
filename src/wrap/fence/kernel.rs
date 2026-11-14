@@ -109,14 +109,19 @@ verified_kernel_function! {
 pub fn closes_fence(state: FenceState, line: LineFeatures) -> bool;
 ensures(result => result == crate::spec_closes(state, line));
 {
-    matches!(
-        line.marker,
-        Some(marker)
-            if line.depth == state.open_depth
+    // The four conditions are the definition of the closing rule, so they stay
+    // one conjunction rather than being spread over a guard: `spec_closes` is
+    // written in exactly this shape, and the mutation gate relies on this
+    // comparison being the one the proof turns on.
+    match line.marker {
+        Some(marker) => {
+            line.depth == state.open_depth
                 && marker == state.marker
                 && line.marker_len >= state.marker_len
                 && line.trailing_blank
-    )
+        }
+        None => false,
+    }
 }
 }
 

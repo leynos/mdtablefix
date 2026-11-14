@@ -174,6 +174,33 @@ ensures(result =>
 }
 }
 verified_kernel_function! {
+/// Whether the line continues a paragraph whose prefix it repeats, so its
+/// underline may turn the pair into a Setext heading.
+///
+/// All three conditions are load-bearing. A Setext underline is only an
+/// underline when a paragraph text line immediately precedes it, when the two
+/// lines carry the same structural prefix, and when the underline itself is a
+/// valid `===` or `---` run.
+fn is_setext_follow_up(
+    chars: &[char],
+    body_start: usize,
+    previous: Option<LineClass>,
+    prefix_agrees: bool,
+) -> bool;
+requires(body_start <= chars@.len());
+ensures(result => result == (
+    matches!(previous, Some(LineClass::ParagraphText))
+        && prefix_agrees
+        && crate::spec_setext_underline(chars@, body_start as int)
+));
+{
+    matches!(previous, Some(LineClass::ParagraphText))
+        && prefix_agrees
+        && is_setext_underline(chars, body_start)
+}
+}
+
+verified_kernel_function! {
 /// Applies structural precedence outside fenced regions.
 fn classify_open_text(
     chars: &[char],
@@ -198,10 +225,7 @@ ensures(result =>
     if body_starts_with_pipe(chars, body_start) {
         return classified(LineClass::TableRow, body_start);
     }
-    if matches!(ctx.previous, Some(LineClass::ParagraphText))
-        && ctx.prefix_agrees
-        && is_setext_underline(chars, body_start)
-    {
+    if is_setext_follow_up(chars, body_start, ctx.previous, ctx.prefix_agrees) {
         return classified(LineClass::SetextUnderline, body_start);
     }
     if is_thematic_break(chars, body_start) {
@@ -224,6 +248,24 @@ ensures(result => result.class == class, result.body_start.0 == body_start);
     }
 }
 }
+verified_kernel_function! {
+/// Whether the scanner should consume another blockquote marker at `cursor`.
+///
+/// Two facts decide it together. The marker test asks whether a `>` follows the
+/// indentation measured from `column`; the fuel bound stops a scan on input
+/// crafted to look like an unterminated chain of blockquotes. Keeping them as
+/// one decision lets the scan loop state its stopping rule as a single
+/// condition.
+fn continues_quote_prefix(chars: &[char], cursor: usize, column: usize, fuel: usize) -> bool;
+requires(cursor <= chars@.len(), column < 4);
+ensures(result => result == (
+    fuel > 0 && crate::spec_has_quote_prefix(chars@, cursor as int, column as int)
+));
+{
+    fuel > 0 && has_quote_prefix(chars, cursor, column)
+}
+}
+
 verified_loop_function! {
 /// Locates the structural body and determines whether it is indented code.
 fn line_parts(chars: &[char]) -> (usize, bool);
@@ -241,7 +283,7 @@ before {
     let mut column = outer_width;
     let mut fuel = chars.len() - cursor;
 }
-while (cursor < chars.len() && fuel > 0 && has_quote_prefix(chars, cursor, column)) invariant(
+while (cursor < chars.len() && continues_quote_prefix(chars, cursor, column, fuel)) invariant(
     cursor <= chars@.len(),
     column < 4,
     fuel >= chars@.len() - cursor,
@@ -282,6 +324,25 @@ ensures(result => result == crate::spec_has_quote_prefix(chars@, cursor as int, 
     indent_width < 4 && after_indent < chars.len() && chars[after_indent] == '>'
 }
 }
+verified_kernel_function! {
+/// Whether the indent scan should consume the scalar at `cursor`.
+///
+/// The scan stops at the end of input, once four columns have been measured —
+/// the width that makes a line indented code — or at the first scalar that is
+/// neither a space nor a tab. Stating all three as one rule keeps the loop
+/// condition a single decision.
+fn within_indent_run(chars: &[char], cursor: usize, width: usize) -> bool;
+requires(cursor <= chars@.len());
+ensures(result => result == (
+    cursor < chars@.len()
+        && width < 4
+        && crate::spec_is_markdown_whitespace(chars@[cursor as int])
+));
+{
+    cursor < chars.len() && width < 4 && matches!(chars[cursor], ' ' | '\t')
+}
+}
+
 verified_loop_function! {
 /// Measures indentation columns and the following scalar offset from `start`.
 fn indentation_at(chars: &[char], start: usize, column: usize) -> (usize, usize);
@@ -296,7 +357,7 @@ before {
     let mut width = 0;
     let mut cursor = start;
 }
-while (cursor < chars.len() && width < 4 && matches!(chars[cursor], ' ' | '\t')) invariant(
+while (within_indent_run(chars, cursor, width)) invariant(
     start <= cursor <= chars@.len(),
     column < 4,
     width <= 7,
