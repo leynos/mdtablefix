@@ -552,3 +552,35 @@ fn wrap_preserving_code_handles_leading_and_trailing_link_punctuation() {
         "leading punctuation was orphaned in {lines:?}",
     );
 }
+
+/// A wrap of whitespace-only content can fold away to no lines at all.
+///
+/// `fit_fragment` used to treat only a *single* grouped line as "nothing to
+/// flush yet", so an empty layout reached `flush_boundary_link`, which
+/// subtracted two from a length of zero and panicked. A lone space reaches it
+/// at every width, which makes this the smallest form of the defect.
+#[rstest]
+#[case::lone_space_at_width_one(" ", 1)]
+#[case::lone_space_at_default_width(" ", 80)]
+#[case::two_spaces("  ", 1)]
+fn wrap_preserving_code_handles_whitespace_only_content(#[case] input: &str, #[case] width: usize) {
+    let lines = wrap_preserving_code(input, width);
+
+    assert!(
+        lines.iter().all(|line| line.trim().is_empty()),
+        "whitespace-only input {input:?} must not gain visible content, got {lines:?}",
+    );
+}
+
+/// The same empty-layout path is reached when leading prose is trimmed of its
+/// trailing spaces but keeps a word, so the word must survive intact.
+///
+/// This is the shape `reattach_prose` actually passes at the leading edge, and
+/// it is the case that makes the defect a production path rather than a
+/// whitespace-only curiosity.
+#[test]
+fn wrap_preserving_code_keeps_trimmed_leading_prose() {
+    let lines = wrap_preserving_code(" a", 1);
+
+    assert_eq!(lines, [" a"]);
+}
