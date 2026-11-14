@@ -27,9 +27,7 @@ pub(super) fn parse_link_or_image(
     let start = idx;
 
     if let Some(text_end) = find_footnote_end(text, idx, observer)
-        && !text
-            .get(text_end..)
-            .is_some_and(|rest| rest.starts_with('('))
+        && is_standalone_footnote_label(text, text_end)
     {
         if let (Some(observer), Some(token)) = (observer.as_deref_mut(), text.get(start..text_end))
         {
@@ -64,15 +62,35 @@ pub(super) fn parse_link_or_image(
         return (collect_range(text, start, text.len()), text.len());
     }
 
-    if text
-        .get(text_end..)
-        .is_some_and(|rest| rest.starts_with('['))
-        && let Some(reference_end) = parse_link_text(text, text_end)
-    {
+    if let Some(reference_end) = parse_reference_label_tail(text, text_end) {
         return (collect_range(text, start, reference_end), reference_end);
     }
 
     fallback_single_char(text, start)
+}
+
+/// Reports whether the footnote label ending at `end` is not followed by a
+/// destination.
+///
+/// A `(` after the label means the source wrote a link whose text merely looks
+/// like a footnote, so that pairing belongs to the link path instead.
+fn is_standalone_footnote_label(text: &str, end: usize) -> bool {
+    !text.get(end..).is_some_and(|rest| rest.starts_with('('))
+}
+
+/// Parses a reference label that follows a completed link text at `text_end`.
+///
+/// A reference-style link carries a second label where an inline link would
+/// carry its destination, so this only matches when a `[` begins there and the
+/// label closes.
+fn parse_reference_label_tail(text: &str, text_end: usize) -> Option<usize> {
+    if !text
+        .get(text_end..)
+        .is_some_and(|rest| rest.starts_with('['))
+    {
+        return None;
+    }
+    parse_link_text(text, text_end)
 }
 
 /// Find the closing bracket of a GFM footnote reference from `idx`.
@@ -80,17 +98,39 @@ pub(super) fn parse_link_or_image(
 /// Escaped characters do not terminate the label, and an unterminated label
 /// returns `None` so the tokenizer can fall back to ordinary character input.
 fn find_footnote_end(text: &str, idx: usize, observer: &mut ObserverHandle<'_>) -> Option<usize> {
-    if !text.get(idx..).is_some_and(|rest| rest.starts_with("[^")) {
-        if let Some(observer) = observer.as_deref_mut() {
-            observer.observe(Event::FootnoteEndNotFound {
-                start: idx,
-                reason: "prefix_mismatch",
-            });
-        }
+    if !starts_footnote_reference(text, idx) {
+        report_footnote_end_not_found(observer, idx, "prefix_mismatch");
         return None;
     }
 
-    let mut cursor = idx + "[^".len();
+    let Some(end) = scan_footnote_label_end(text, idx + "[^".len()) else {
+        report_footnote_end_not_found(observer, idx, "unterminated_bracket");
+        return None;
+    };
+    if let (Some(observer), Some(token)) = (observer.as_deref_mut(), text.get(idx..end)) {
+        observer.observe(Event::FootnoteLabelRecognized {
+            start: idx,
+            end,
+            token,
+        });
+    }
+    Some(end)
+}
+
+/// Reports whether a GFM footnote reference opener begins at `idx`.
+///
+/// The marker is the literal `[^` pair; anything else leaves the bracket to the
+/// link, image, or plain-text paths.
+fn starts_footnote_reference(text: &str, idx: usize) -> bool {
+    text.get(idx..).is_some_and(|rest| rest.starts_with("[^"))
+}
+
+/// Scans from `cursor` to the first unescaped `]` and returns its exclusive end.
+///
+/// A backslash consumes the following character so an escaped bracket stays
+/// payload. Running out of input returns `None`, which the caller reports as an
+/// unterminated label.
+fn scan_footnote_label_end(text: &str, mut cursor: usize) -> Option<usize> {
     while cursor < text.len() {
         let ch = text.get(cursor..)?.chars().next()?;
         cursor += ch.len_utf8();
@@ -103,25 +143,23 @@ fn find_footnote_end(text: &str, idx: usize, observer: &mut ObserverHandle<'_>) 
         }
 
         if ch == ']' {
-            if let (Some(observer), Some(token)) = (observer.as_deref_mut(), text.get(idx..cursor))
-            {
-                observer.observe(Event::FootnoteLabelRecognized {
-                    start: idx,
-                    end: cursor,
-                    token,
-                });
-            }
             return Some(cursor);
         }
     }
-
-    if let Some(observer) = observer.as_deref_mut() {
-        observer.observe(Event::FootnoteEndNotFound {
-            start: idx,
-            reason: "unterminated_bracket",
-        });
-    }
     None
+}
+
+/// Reports that no footnote label was found, naming the reason it failed.
+///
+/// The event is diagnostic only; it never influences parsing.
+fn report_footnote_end_not_found(
+    observer: &mut ObserverHandle<'_>,
+    start: usize,
+    reason: &'static str,
+) {
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::FootnoteEndNotFound { start, reason });
+    }
 }
 
 /// Find the first unescaped closing bracket of a link or image label.

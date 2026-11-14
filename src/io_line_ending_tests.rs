@@ -26,6 +26,20 @@ fn rewritten_bytes(input: &str, rewrite_fn: fn(&Path) -> std::io::Result<()>) ->
     fs::read(&file).expect("read rewritten fixture")
 }
 
+/// Reports whether one diagnostic line carries every field the rewrite
+/// boundary is expected to emit.
+///
+/// Split from the assertion so the test reads as "the line found must be the
+/// expected report" rather than as a five-clause guard whose failure message
+/// has to name each field.
+fn reports_expected_ending_fields(line: &str) -> bool {
+    line.contains(r#"operation="rewrite""#)
+        && line.contains("reported.md")
+        && line.contains("crlf_count=3")
+        && line.contains("lone_lf_count=0")
+        && line.contains(r#"selected_ending="\r\n""#)
+}
+
 #[rstest]
 #[case::no_line_endings("alpha", LineEnding::Lf)]
 #[case::line_feeds_only("alpha\nbeta\n", LineEnding::Lf)]
@@ -211,15 +225,7 @@ fn rewrite_reports_the_selected_ending() {
             .iter()
             .find(|line| line.contains("selected the majority line ending"));
         match reported {
-            Some(line)
-                if line.contains(r#"operation="rewrite""#)
-                    && line.contains("reported.md")
-                    && line.contains("crlf_count=3")
-                    && line.contains("lone_lf_count=0")
-                    && line.contains(r#"selected_ending="\r\n""#) =>
-            {
-                Ok(())
-            }
+            Some(line) if reports_expected_ending_fields(line) => Ok(()),
             _ => Err(format!("unexpected line-ending report: {lines:?}")),
         }
     });

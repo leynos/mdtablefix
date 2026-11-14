@@ -41,16 +41,21 @@ fn node_text(handle: &Handle) -> String {
     out.trim_start().to_owned()
 }
 
+/// Tag names whose subtrees never contribute text to a table cell.
+///
+/// These are the metadata and executable elements a Markdown renderer must not
+/// surface as prose: their contents are styling, script, fallbacks, or document
+/// head material rather than cell text.
+const IGNORED_TAG_NAMES: &[&str] = &["script", "style", "noscript", "template", "head"];
+
 /// Reports whether a subtree is metadata or executable content excluded from cell text.
+///
+/// The comparison is ASCII case-insensitive because HTML tag names are written
+/// in any case and mean the same element.
 fn is_ignored_tag(tag: &str) -> bool {
-    matches!(
-        tag,
-        t if t.eq_ignore_ascii_case("script")
-            || t.eq_ignore_ascii_case("style")
-            || t.eq_ignore_ascii_case("noscript")
-            || t.eq_ignore_ascii_case("template")
-            || t.eq_ignore_ascii_case("head")
-    )
+    IGNORED_TAG_NAMES
+        .iter()
+        .any(|name| tag.eq_ignore_ascii_case(name))
 }
 
 /// Recursively appends text nodes from `handle` to `out`, tracking whether the

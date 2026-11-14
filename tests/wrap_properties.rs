@@ -19,6 +19,11 @@ use mdtablefix::{process::WRAP_COLS, wrap::wrap_text};
 use proptest::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
+#[path = "support/wrap_output_predicates.rs"]
+mod wrap_output_predicates;
+
+use wrap_output_predicates::{is_checklist_marker, is_space_padded_code_span};
+
 fn has_md038_code_span(rendered: &str) -> bool {
     let mut remaining = rendered;
     while let Some(open_index) = remaining.find('`') {
@@ -26,8 +31,7 @@ fn has_md038_code_span(rendered: &str) -> bool {
         let Some(close_index) = after_open.find('`') else {
             break;
         };
-        let code = &after_open[..close_index];
-        if !code.is_empty() && (code.starts_with(' ') || code.ends_with(' ')) {
+        if is_space_padded_code_span(&after_open[..close_index]) {
             return true;
         }
         remaining = &after_open[close_index + 1..];
@@ -52,7 +56,7 @@ fn footnote_label_strategy() -> impl Strategy<Value = String> {
 fn checklist_marker_count(lines: &[String]) -> usize {
     lines
         .iter()
-        .filter(|line| line.starts_with("- [ ] ") || line.starts_with("- [x] "))
+        .filter(|line| is_checklist_marker(line))
         .count()
 }
 

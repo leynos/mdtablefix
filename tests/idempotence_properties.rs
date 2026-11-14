@@ -114,6 +114,16 @@ fn code_emphasis_table_strategy() -> impl Strategy<Value = String> {
         })
 }
 
+/// Reports whether `first_line` begins the defect class B shape: an overlong
+/// line that opens an inline code span in a link-prefixed construct, followed
+/// by at least one continuation line.
+///
+/// The three conditions are one shape rather than three independent tests, so
+/// they are named together instead of widening the loop's guard.
+fn is_overlong_prefixed_span_block(first_line: &str, has_continuation: bool) -> bool {
+    first_line.contains("(`") && has_continuation && first_line.len() > 80
+}
+
 proptest! {
     #![proptest_config(proptest_config())]
 
@@ -277,7 +287,8 @@ fn generated_corpus_reaches_both_defect_classes() {
         let Some(first_line) = block_lines.next() else {
             continue;
         };
-        if !first_line.contains("(`") || block_lines.next().is_none() || first_line.len() <= 80 {
+        let has_continuation = block_lines.next().is_some();
+        if !is_overlong_prefixed_span_block(first_line, has_continuation) {
             continue;
         }
 

@@ -14,6 +14,7 @@ use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 
 use super::{
+    coupling_report::{emit_footnote_reference_coupling, emit_whitespace_footnote_coupling},
     predicates::{
         is_inline_code_token,
         is_opening_punct,
@@ -52,15 +53,15 @@ fn is_code_token(token: &str) -> bool {
 
 /// A coupling decision about the token at `end`, ready to be reported.
 #[derive(Clone, Copy)]
-struct CouplingReport<'a> {
+pub(super) struct CouplingReport<'a> {
     /// The token stream the decision was made over.
-    tokens: &'a [String],
+    pub(super) tokens: &'a [String],
     /// The index of the token the decision concerns.
-    end: usize,
+    pub(super) end: usize,
     /// The classification of the span so far.
-    kind: SpanKind,
+    pub(super) kind: SpanKind,
     /// Whether the token was coupled into the span.
-    coupled: bool,
+    pub(super) coupled: bool,
 }
 
 /// Returns the span kind an opening punctuation token couples to, if any.
@@ -203,87 +204,17 @@ pub(in crate::wrap) fn determine_token_span(tokens: &[String], start: usize) -> 
     determine_token_span_observed(tokens, start, &mut None)
 }
 
-/// Reports whether whitespace before a colon-suffixed footnote reference was
-/// coupled into the current span.
-///
-/// Nothing is reported unless the next token really is a footnote reference, so
-/// the event describes a grouping decision rather than every whitespace run.
-/// The probe passes `&mut None`: it only selects whether to report, and
-/// forwarding the observer would emit a `FootnoteRefChecked` event for it.
-fn emit_whitespace_footnote_coupling(
-    report: CouplingReport<'_>,
-    observer: &mut ObserverHandle<'_>,
-) {
-    // Nothing will consume the event, so skip the probe entirely rather than
-    // paying for it and discarding the result.
-    let Some(observer) = observer.as_deref_mut() else {
-        return;
-    };
-    let Some(token) = report
-        .tokens
-        .get(report.end + 1)
-        .filter(|token| looks_like_footnote_ref(token, &mut None))
-    else {
-        return;
-    };
-    observer.observe(Event::WhitespaceFootnoteCoupling {
-        kind: report.kind,
-        token,
-        has_following_colon: report
-            .tokens
-            .get(report.end + 2)
-            .is_some_and(|following| following == ":"),
-        coupled: report.coupled,
-    });
-}
-
-/// Reports whether an adjacent footnote reference was coupled into the current
-/// span, and the context that decided it.
-fn emit_footnote_reference_coupling(report: CouplingReport<'_>, observer: &mut ObserverHandle<'_>) {
-    // Nothing will consume the event, so skip the probe and the coupling
-    // context rather than computing them and discarding the result.
-    let Some(observer) = observer.as_deref_mut() else {
-        return;
-    };
-    let Some(token) = report
-        .tokens
-        .get(report.end)
-        .filter(|token| looks_like_footnote_ref(token, &mut None))
-    else {
-        return;
-    };
-    let follows_space_before_colon = report
-        .end
-        .checked_sub(1)
-        .and_then(|previous| report.tokens.get(previous))
-        .is_some_and(|previous| previous.chars().all(char::is_whitespace))
-        && report
-            .tokens
-            .get(report.end + 1)
-            .is_some_and(|following| following == ":");
-    observer.observe(Event::FootnoteReferenceCoupling {
-        kind: report.kind,
-        token,
-        follows_space_before_colon,
-        coupled: report.coupled,
-    });
-}
-
 /// Couples a whitespace run to the span when the following token requires it.
 ///
 /// Returns `false` when the run ends the span, which stops grouping.
-fn couple_whitespace(
-    tokens: &[String],
-    cursor: &mut SpanCursor,
-    observer: &mut ObserverHandle<'_>,
-) -> bool {
-    let next_token = tokens.get(cursor.end + 1);
-    let following_token = tokens.get(cursor.end + 2);
+fn couple_whitespace(cursor: &mut SpanCursor<'_>, observer: &mut ObserverHandle<'_>) -> bool {
+    let next_token = cursor.tokens.get(cursor.end + 1);
+    let following_token = cursor.tokens.get(cursor.end + 2);
     let should_couple =
         should_couple_whitespace(cursor.kind, next_token, following_token, observer);
     emit_whitespace_footnote_coupling(
         CouplingReport {
-            tokens,
+            tokens: cursor.tokens,
             end: cursor.end,
             kind: cursor.kind,
             coupled: should_couple,
@@ -293,7 +224,7 @@ fn couple_whitespace(
     if !should_couple {
         return false;
     }
-    cursor.width += UnicodeWidthStr::width(tokens[cursor.end].as_str());
+    cursor.width += UnicodeWidthStr::width(cursor.tokens[cursor.end].as_str());
     cursor.end += 1;
     true
 }
@@ -301,14 +232,14 @@ fn couple_whitespace(
 /// Absorbs a trailing punctuation token when the span is atomic.
 ///
 /// Returns `false` when the span is plain prose, which stops grouping.
-fn absorb_trailing_punctuation(tokens: &[String], cursor: &mut SpanCursor) -> bool {
+fn absorb_trailing_punctuation(cursor: &mut SpanCursor<'_>) -> bool {
     if !matches!(
         cursor.kind,
         SpanKind::Code | SpanKind::Link | SpanKind::FootnoteRef
     ) {
         return false;
     }
-    cursor.width += UnicodeWidthStr::width(tokens[cursor.end].as_str());
+    cursor.width += UnicodeWidthStr::width(cursor.tokens[cursor.end].as_str());
     cursor.end += 1;
     true
 }
@@ -316,19 +247,15 @@ fn absorb_trailing_punctuation(tokens: &[String], cursor: &mut SpanCursor) -> bo
 /// Couples an adjacent link, bracket reference, or footnote marker.
 ///
 /// Returns `false` when the token starts a new span instead.
-fn couple_adjacent_atomic(
-    tokens: &[String],
-    cursor: &mut SpanCursor,
-    observer: &mut ObserverHandle<'_>,
-) -> bool {
-    if try_couple_inline_link_after_opener(tokens, cursor) {
+fn couple_adjacent_atomic(cursor: &mut SpanCursor<'_>, observer: &mut ObserverHandle<'_>) -> bool {
+    if try_couple_inline_link_after_opener(cursor) {
         return true;
     }
 
     // A bare bracket reference couples to its opener for the same reason
     // footnote markers do: the opener can follow an atomic span directly, and
     // leaving `[` in the preceding span would strand it at a line end.
-    if try_couple_bracketed_reference(tokens, cursor) {
+    if try_couple_bracketed_reference(cursor) {
         return true;
     }
 
@@ -337,12 +264,12 @@ fn couple_adjacent_atomic(
     // already attached to the preceding atomic span. The report describes the
     // decision, so it is built before the coupling moves the cursor.
     let report = CouplingReport {
-        tokens,
+        tokens: cursor.tokens,
         end: cursor.end,
         kind: cursor.kind,
         coupled: false,
     };
-    let coupled = try_couple_footnote_reference(tokens, cursor, observer);
+    let coupled = try_couple_footnote_reference(cursor, observer);
     emit_footnote_reference_coupling(CouplingReport { coupled, ..report }, observer);
     coupled
 }
@@ -350,14 +277,14 @@ fn couple_adjacent_atomic(
 /// Absorbs a chained link or code token of the same kind as the span.
 ///
 /// Returns `false` when the token does not continue the span.
-fn absorb_chained_atomic(tokens: &[String], cursor: &mut SpanCursor) -> bool {
-    let token = &tokens[cursor.end];
+fn absorb_chained_atomic(cursor: &mut SpanCursor<'_>) -> bool {
+    let token = &cursor.tokens[cursor.end];
     if cursor.kind == SpanKind::Link && looks_like_link(token) {
-        absorb_token_and_trailing_punctuation(tokens, cursor);
+        absorb_token_and_trailing_punctuation(cursor);
         return true;
     }
     if cursor.kind == SpanKind::Code && is_code_token(token) {
-        absorb_token_and_trailing_punctuation(tokens, cursor);
+        absorb_token_and_trailing_punctuation(cursor);
         return true;
     }
     false
@@ -367,22 +294,18 @@ fn absorb_chained_atomic(tokens: &[String], cursor: &mut SpanCursor) -> bool {
 ///
 /// Returns `false` when the span cannot grow further, which ends the grouping
 /// loop.
-fn extend_span(
-    tokens: &[String],
-    cursor: &mut SpanCursor,
-    observer: &mut ObserverHandle<'_>,
-) -> bool {
-    let token = &tokens[cursor.end];
+fn extend_span(cursor: &mut SpanCursor<'_>, observer: &mut ObserverHandle<'_>) -> bool {
+    let token = &cursor.tokens[cursor.end];
     if is_whitespace_token(token) {
-        return couple_whitespace(tokens, cursor, observer);
+        return couple_whitespace(cursor, observer);
     }
     if is_trailing_punctuation_token(token) {
-        return absorb_trailing_punctuation(tokens, cursor);
+        return absorb_trailing_punctuation(cursor);
     }
-    if couple_adjacent_atomic(tokens, cursor, observer) {
+    if couple_adjacent_atomic(cursor, observer) {
         return true;
     }
-    absorb_chained_atomic(tokens, cursor)
+    absorb_chained_atomic(cursor)
 }
 
 /// Finds the next logical token group starting at `start`, reporting the
@@ -416,7 +339,12 @@ pub(in crate::wrap::inline) fn determine_token_span_observed(
     }
 
     let (end, width, kind) = initial_token_span(tokens, start, observer);
-    let mut cursor = SpanCursor { end, width, kind };
-    while cursor.end < tokens.len() && extend_span(tokens, &mut cursor, observer) {}
+    let mut cursor = SpanCursor {
+        tokens,
+        end,
+        width,
+        kind,
+    };
+    while cursor.end < tokens.len() && extend_span(&mut cursor, observer) {}
     (cursor.end, cursor.width)
 }

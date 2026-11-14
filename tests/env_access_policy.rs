@@ -240,17 +240,29 @@ fn every_package_denies_the_policy_lints() -> Result<()> {
     Ok(())
 }
 
-/// Scenario: the `lint` target's recipe is read and its Make variables expanded.
-/// Invariant: every Clippy command it runs denies warnings across all targets
-/// and features, and between them they cover both packages, so neither a
-/// weakened flag set nor a dropped package can pass the gate. Text elsewhere in
-/// the Makefile, including a commented-out command, does not count.
+/// Scenario: `lint`'s prerequisites are read, then the recipe of the
+/// `lint-clippy` target it composes is read and its Make variables expanded.
+/// Invariant: `lint` still depends on `lint-clippy`, and every Clippy command
+/// that target runs denies warnings across all targets and features, and
+/// between them they cover both packages, so neither a dropped prerequisite nor
+/// a weakened flag set nor a dropped package can pass the gate. Text elsewhere
+/// in the Makefile, including a commented-out command, does not count.
 #[test]
 fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
+    // `lint` has no recipe of its own; it composes `lint-clippy` and
+    // `lint-whitaker`. The Clippy commands therefore live in `lint-clippy`, and
+    // the composition below is asserted so the public gate cannot be narrowed
+    // to one half without failing here.
+    let prerequisites = target_prerequisites(MAKEFILE, "lint")
+        .context("the lint target should be declared once")?;
+    ensure!(
+        prerequisites.iter().any(|name| name == "lint-clippy"),
+        "the lint target must depend on lint-clippy, found {prerequisites:?}"
+    );
     // The recipe is read as written so the executable and the argument order can
     // be judged, then expanded so the flags can be. A command that only mentions
     // Clippy, such as one prefixed with `echo`, is filtered out here.
-    let commands: Vec<String> = recipe_commands(MAKEFILE, "lint")?
+    let commands: Vec<String> = recipe_commands(MAKEFILE, "lint-clippy")?
         .iter()
         .filter(|command| is_cargo_clippy_invocation(MAKEFILE, &command.text))
         .map(|command| expand_make_variables(MAKEFILE, &command.text))
@@ -278,8 +290,8 @@ fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
     Ok(())
 }
 
-/// Scenario: the `lint` recipe is judged for whether a failing Clippy command
-/// could be reported as success.
+/// Scenario: the `lint-clippy` recipe that `lint` composes is judged for
+/// whether a failing Clippy command could be reported as success.
 /// Invariant: nothing between each Clippy command and Make swallows its exit
 /// status, and the recipe as a whole is not put in one shell without `-e`, so a
 /// failure in either invocation still fails the target.
@@ -314,7 +326,7 @@ fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
             "its own `|| exit 1`"
         )
     );
-    for command in recipe_commands(MAKEFILE, "lint")? {
+    for command in recipe_commands(MAKEFILE, "lint-clippy")? {
         if !is_cargo_clippy_invocation(MAKEFILE, &command.text) {
             continue;
         }
@@ -330,3 +342,48 @@ fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
 // directory, `tests/`.
 #[path = "env_access_policy/shell_flags.rs"]
 mod shell_flags;
+
+/// Return the prerequisites named on `target`'s declaration line.
+///
+/// A target may have no recipe of its own and still gate real work through its
+/// prerequisites, which is how `lint` composes `lint-clippy` and
+/// `lint-whitaker` into one public command. [`recipe_commands`] deliberately
+/// does not follow prerequisites, so a caller that needs to know what a
+/// prerequisite-only target composes has to read the declaration.
+///
+/// This lives here rather than in `tests/support/make_reader.rs` because it is
+/// the only reader no other contract crate needs. That module's own rule is
+/// that it carries no reader a consumer does not use, since the alternative is
+/// a dead-code suppression in a repository whose lint policy exists to keep
+/// those out.
+///
+/// Returns `None` when the target is not declared. A target declared more than
+/// once also yields `None`: GNU Make runs the later recipe, so no single
+/// declaration can be said to be the one in force.
+///
+/// ```text
+/// let makefile = "lint: lint-clippy lint-whitaker\nlint-clippy:\n\tcargo clippy\n";
+/// assert_eq!(
+///     target_prerequisites(makefile, "lint"),
+///     Some(vec!["lint-clippy".to_owned(), "lint-whitaker".to_owned()])
+/// );
+/// assert_eq!(target_prerequisites(makefile, "missing"), None);
+/// ```
+fn target_prerequisites(makefile: &str, target: &str) -> Option<Vec<String>> {
+    let prefix = format!("{target}:");
+    let declarations: Vec<&str> = makefile
+        .lines()
+        .filter(|line| line.starts_with(&prefix))
+        .collect();
+    let [declaration] = declarations.as_slice() else {
+        return None;
+    };
+    let rest = declaration[prefix.len()..].trim();
+    // A `##` comment marks the documented target list; it is not a prerequisite.
+    let rest = rest.split("##").next().unwrap_or_default();
+    Some(
+        rest.split_whitespace()
+            .map(str::to_owned)
+            .collect::<Vec<String>>(),
+    )
+}

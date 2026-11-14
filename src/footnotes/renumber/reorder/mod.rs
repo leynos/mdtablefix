@@ -55,13 +55,19 @@ fn build_def_lookup(
 /// definition even when they contain whitespace.
 fn leading_segment_start(lines: &[String], consumed: usize, position: usize) -> usize {
     let mut leading_start = position;
-    while leading_start > consumed
-        && lines[leading_start - 1].trim().is_empty()
-        && !is_definition_continuation(&lines[leading_start - 1])
-    {
+    while leading_start > consumed && is_travelling_blank_row(&lines[leading_start - 1]) {
         leading_start -= 1;
     }
     leading_start
+}
+
+/// Reports whether a row is blank spacing that belongs to the next segment.
+///
+/// A blank row before a definition is spacing that should travel with it, but an
+/// indented continuation row is part of the preceding definition even when it
+/// contains only whitespace, so it must not be absorbed.
+fn is_travelling_blank_row(line: &str) -> bool {
+    line.trim().is_empty() && !is_definition_continuation(line)
 }
 
 /// Builds a definition header together with its prefix and continuation rows.

@@ -67,6 +67,13 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v24.2.0
         with:
           globs: '**/*.md'
+      - name: Install Whitaker
+        uses: leynos/shared-actions/.github/actions/install-whitaker@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        with:
+          # [profile.dev] selects the cranelift codegen backend, so the Dylint
+          # driver must be built with the same component or it cannot compile
+          # the lint libraries. See tests/build_standard_support/cranelift.rs.
+          cranelift: 'true'
       - name: Lint
         run: make lint
       - name: Fetch dependencies

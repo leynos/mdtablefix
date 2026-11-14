@@ -71,6 +71,53 @@ pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> boo
     false
 }
 
+/// One line together with the capture match taken over it.
+///
+/// The two are inseparable: every capture is a byte range *within* `text`, so
+/// a match paired with any other line would name a plausible but wrong slice.
+/// Keeping them in one value makes that pairing impossible to get wrong.
+struct MatchedLine<'a> {
+    /// The line the pattern matched.
+    text: &'a str,
+    /// The groups the pattern captured over `text`.
+    caps: &'a Captures<'a>,
+}
+
+impl<'a> MatchedLine<'a> {
+    /// Pairs a matched line with its captures.
+    fn new(text: &'a str, caps: &'a Captures<'a>) -> Self { Self { text, caps } }
+
+    /// Reads the separator between the item number and the item text.
+    ///
+    /// The separator is taken from the original bytes rather than rebuilt, so
+    /// list formatting and continuation alignment stay stable. Returns `None`
+    /// when the slice is not a valid boundary or a mandatory group is absent.
+    fn separator_after_number(&self) -> Option<&'a str> {
+        let num_match = self.caps.name("num")?;
+        let rest_match = self.caps.name("rest")?;
+        self.text.get(num_match.end() + 1..rest_match.start())
+    }
+
+    /// The block's indentation, as captured.
+    fn indent(&self) -> Option<&'a str> { Some(self.caps.name("indent")?.as_str()) }
+
+    /// The item's own text, as captured.
+    fn rest(&self) -> Option<&'a str> { Some(self.caps.name("rest")?.as_str()) }
+}
+
+/// Rewrites one matched list item as a footnote definition header.
+///
+/// Returns `None` when a capture the pattern makes mandatory is absent; both
+/// groups are non-optional in `FOOTNOTE_LINE_RE`, so that cannot arise from a
+/// successful match, and the caller leaves the matched text unchanged rather
+/// than inventing a replacement.
+fn rewrite_footnote_line(matched: &MatchedLine<'_>, number: usize) -> Option<String> {
+    let indent = matched.indent()?;
+    let whitespace = matched.separator_after_number()?;
+    let rest = matched.rest()?;
+    Some(format!("{indent}[^{number}]:{whitespace}{rest}"))
+}
+
 /// Rewrites an ordered-list item as a footnote definition header.
 ///
 /// `number` is the number the fold assigns rather than the item's own, because
@@ -86,17 +133,9 @@ pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> boo
 fn replace_footnote_line(line: &str, number: usize) -> String {
     FOOTNOTE_LINE_RE
         .replace(line, |caps: &Captures| {
-            let num_match = caps
-                .name("num")
-                .expect("footnote line capture missing number");
-            let rest_match = caps
-                .name("rest")
-                .expect("footnote line capture missing rest");
-            let whitespace = &line[num_match.end() + 1..rest_match.start()];
-            format!(
-                "{}[^{number}]:{}{}",
-                &caps["indent"], whitespace, &caps["rest"]
-            )
+            let matched = caps.get(0).map_or("", |whole| whole.as_str());
+            let matched_line = MatchedLine::new(line, caps);
+            rewrite_footnote_line(&matched_line, number).unwrap_or_else(|| matched.to_string())
         })
         .to_string()
 }

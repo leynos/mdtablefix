@@ -120,6 +120,16 @@ fn handle_text_token<'a>(
     *pending = trail;
 }
 
+/// Reports whether `next` is a bare marker run matching the pending opener.
+///
+/// A closing run must equal the opener exactly and carry no body of its own:
+/// `mid` and `trail` are empty, so the token is nothing but the marks that close
+/// the pair already open.
+fn closes_pending_marker(pending: &str, next: &str) -> bool {
+    let (lead, mid, trail) = split_marks(next);
+    pending == lead && mid.is_empty() && trail.is_empty()
+}
+
 /// Folds a code token into a pending marker pair when the following token closes that pair.
 fn try_fold_matching_emphasis<'a>(
     tokens: &mut Peekable<IntoIter<Token<'a>>>,
@@ -131,8 +141,8 @@ fn try_fold_matching_emphasis<'a>(
     let Some(Token::Text(next)) = tokens.peek() else {
         return false;
     };
-    let (lead, mid, trail) = split_marks(next);
-    if *pending == lead && mid.is_empty() && trail.is_empty() {
+    if closes_pending_marker(pending, next) {
+        let (lead, ..) = split_marks(next);
         out.push_str(pending);
         push_code_with_suffix(raw, code, out);
         out.push_str(lead);

@@ -14,6 +14,7 @@ mod fragment;
 mod month_names;
 mod normalize;
 
+mod coupling_report;
 #[cfg(test)]
 mod observer_props;
 mod postprocess;

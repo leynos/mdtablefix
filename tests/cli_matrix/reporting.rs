@@ -104,8 +104,9 @@ pub(crate) fn check_counts(case: &PhysicalCase, result: &RunResult) -> ReportCou
         "{}: one file is one report line: {stdout:?}",
         case.snapshot_name(),
     );
-    let (path, counts) = parse_report_line(line)
-        .unwrap_or_else(|| panic!("{}: {line:?} is not a report line", case.snapshot_name()));
+    let Some((path, counts)) = parse_report_line(line) else {
+        panic!("{}: {line:?} is not a report line", case.snapshot_name());
+    };
     assert_eq!(
         path,
         STAGED_FILE,
@@ -139,12 +140,13 @@ pub(crate) fn diff_counts(case: &PhysicalCase, result: &RunResult) -> ReportCoun
 /// unparseable rather than merely terse, and fails here.
 fn diff_body<'a>(case: &PhysicalCase, stdout: &'a str) -> &'a str {
     let header = format!("--- {STAGED_FILE}\n+++ {STAGED_FILE}\n");
-    stdout.strip_prefix(&header).unwrap_or_else(|| {
+    let Some(body) = stdout.strip_prefix(&header) else {
         panic!(
             "{}: a diff must open with {header:?}: {stdout:?}",
             case.snapshot_name(),
-        )
-    })
+        );
+    };
+    body
 }
 
 /// How many lines of a diff body carry `marker`.
@@ -225,20 +227,24 @@ fn apply(name: &str, body: &str, original: &str) -> String {
 
 /// The first line of a hunk's original side, from `@@ -<start>[,<n>] +… @@`.
 fn hunk_start(name: &str, header: &str) -> usize {
-    header
+    let parsed = header
         .split(' ')
         .nth(1)
         .and_then(|range| range.strip_prefix('-'))
         .and_then(|range| range.split(',').next())
-        .and_then(|start| start.parse().ok())
-        .unwrap_or_else(|| panic!("{name}: {header:?} is not a hunk header"))
+        .and_then(|start| start.parse().ok());
+    let Some(start) = parsed else {
+        panic!("{name}: {header:?} is not a hunk header");
+    };
+    start
 }
 
 /// The next line of the document a diff was made from.
 fn next_line<'a>(name: &str, source: &mut impl Iterator<Item = &'a str>) -> &'a str {
-    source
-        .next()
-        .unwrap_or_else(|| panic!("{name}: the diff marks more lines than the file has"))
+    let Some(line) = source.next() else {
+        panic!("{name}: the diff marks more lines than the file has");
+    };
+    line
 }
 
 /// Appends one line to `document`, newline included.

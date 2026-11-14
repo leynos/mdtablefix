@@ -283,10 +283,7 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
     // stray pipe-prefixed line, such as a shell pipeline continuation inside a
     // code block. Formatting it would fabricate a trailing pipe, so treat it as
     // structurally insufficient and return the input unchanged.
-    if sep_cells.is_none()
-        && output_rows.len() == 1
-        && output_rows.first().is_some_and(|row| row.len() == 1)
-    {
+    if is_lone_single_cell(&output_rows, sep_cells.is_some()) {
         debug!(
             reason = "lone_single_cell",
             row_count = output_rows.len(),
@@ -300,6 +297,18 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
         sep_cells,
         max_cols,
     })
+}
+
+/// Reports whether the candidate is a single one-cell row with no delimiter.
+///
+/// Such a candidate is a stray pipe-prefixed line, not a table: a shell pipeline
+/// continuation inside a code block is the common case. Formatting it would
+/// fabricate a trailing pipe, so the caller leaves the source unchanged.
+fn is_lone_single_cell(output_rows: &[Vec<String>], has_separator: bool) -> bool {
+    if has_separator || output_rows.len() != 1 {
+        return false;
+    }
+    output_rows.first().is_some_and(|row| row.len() == 1)
 }
 
 /// Calculates column widths and formats the final table output.

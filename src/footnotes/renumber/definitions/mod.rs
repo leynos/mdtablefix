@@ -194,7 +194,7 @@ pub(super) fn numeric_candidate_from_line(line: &str, index: usize) -> Option<Nu
     let rest = rest_match.as_str().to_string();
     let sep_start = num_match.end().saturating_add(1);
     let rest_start = rest_match.start();
-    if sep_start > rest_start || sep_start > line.len() || rest_start > line.len() {
+    if !capture_boundaries_are_ordered(sep_start, rest_start, line.len()) {
         return None;
     }
     let whitespace = line[sep_start..rest_start].to_string();
@@ -205,6 +205,16 @@ pub(super) fn numeric_candidate_from_line(line: &str, index: usize) -> Option<Nu
         whitespace,
         rest,
     })
+}
+
+/// Reports whether the number and rest captures bound a slice inside `line`.
+///
+/// The slice between them is the separator whitespace, so it must start no
+/// later than the rest capture and both offsets must stay within the line. A
+/// failed check means this match cannot be read as a footnote definition, not
+/// that the document is invalid.
+fn capture_boundaries_are_ordered(sep_start: usize, rest_start: usize, line_len: usize) -> bool {
+    sep_start <= rest_start && sep_start <= line_len && rest_start <= line_len
 }
 
 /// Collect eligible definitions and numeric candidates outside fenced blocks.

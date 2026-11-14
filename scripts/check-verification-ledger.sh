@@ -125,6 +125,20 @@ function mask_rust_non_code() {
                 continue
             }
             if (substr($0, position, 1) == "\047") {
+                # A lifetime is a quote followed by an identifier character and
+                # NO second quote. A character literal opens the same way but
+                # closes on the very next character. Both spellings occur, so
+                # neither may be assumed: reading a lifetime as a literal
+                # unbalances the quote, and because that state persists across
+                # lines it then hides every declaration to the end of the file.
+                # Reading a literal as a lifetime would expose literal payload
+                # as if it were code.
+                rest = substr($0, position + 1)
+                if (substr(rest, 1, 1) ~ /[[:alpha:]_]/ && substr(rest, 2, 1) != "\047") {
+                    code = code "\047"
+                    position++
+                    continue
+                }
                 in_character = 1
                 position++
                 continue

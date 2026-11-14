@@ -213,27 +213,51 @@ impl LinkTitleWindow {
             Self::Closed => None,
             Self::AwaitingStandaloneTitle => {
                 *self = Self::Closed;
-                if line.trim().is_empty() || matcher.is_standalone_title_line(line) {
-                    return Some(LinkTitleWindowOutcome::EmitVerbatim);
-                }
-                Some(LinkTitleWindowOutcome::Reprocess)
+                Some(title_line_outcome(
+                    line,
+                    matcher.is_standalone_title_line(line),
+                ))
             }
-            Self::AwaitingUrlContinuation => {
-                if matcher.is_url_continuation_line(line) {
-                    if matcher.url_continuation_has_inline_title(line) {
-                        *self = Self::Closed;
-                    } else {
-                        *self = Self::AwaitingStandaloneTitle;
-                    }
-                    return Some(LinkTitleWindowOutcome::EmitVerbatim);
-                }
-                *self = Self::Closed;
-                if line.trim().is_empty() {
-                    return Some(LinkTitleWindowOutcome::EmitVerbatim);
-                }
-                Some(LinkTitleWindowOutcome::Reprocess)
-            }
+            Self::AwaitingUrlContinuation => Some(self.observe_url_continuation(line, matcher)),
         }
+    }
+
+    /// Consumes a line while awaiting the destination's continuation.
+    ///
+    /// A continuation line is emitted verbatim. Whether the window survives it
+    /// depends on the line carrying its own title: with one the definition is
+    /// complete, so the window closes; without one a title may still follow, so
+    /// the window advances to [`Self::AwaitingStandaloneTitle`]. A line that
+    /// does not continue the destination closes the window, and is emitted
+    /// verbatim when blank or reprocessed otherwise.
+    fn observe_url_continuation(
+        &mut self,
+        line: &str,
+        matcher: LinkReferenceMatcher,
+    ) -> LinkTitleWindowOutcome {
+        if matcher.is_url_continuation_line(line) {
+            *self = if matcher.url_continuation_has_inline_title(line) {
+                Self::Closed
+            } else {
+                Self::AwaitingStandaloneTitle
+            };
+            return LinkTitleWindowOutcome::EmitVerbatim;
+        }
+        *self = Self::Closed;
+        title_line_outcome(line, false)
+    }
+}
+
+/// Decides what to do with a line that cannot continue a definition.
+///
+/// A blank line preserves the source verbatim, and so does a standalone title
+/// when one was expected; anything else is reprocessed as ordinary wrapping
+/// input.
+fn title_line_outcome(line: &str, is_standalone_title: bool) -> LinkTitleWindowOutcome {
+    if line.trim().is_empty() || is_standalone_title {
+        LinkTitleWindowOutcome::EmitVerbatim
+    } else {
+        LinkTitleWindowOutcome::Reprocess
     }
 }
 
