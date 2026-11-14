@@ -84,7 +84,10 @@ fn is_standalone_footnote_label(text: &str, end: usize) -> bool {
 /// carry its destination, so this only matches when a `[` begins there and the
 /// label closes.
 fn parse_reference_label_tail(text: &str, text_end: usize) -> Option<usize> {
-    if !text.get(text_end..).is_some_and(|rest| rest.starts_with('[')) {
+    if !text
+        .get(text_end..)
+        .is_some_and(|rest| rest.starts_with('['))
+    {
         return None;
     }
     parse_link_text(text, text_end)
