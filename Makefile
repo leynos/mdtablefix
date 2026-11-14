@@ -50,7 +50,7 @@ test-workflow-contracts: ## Check the CV-005 CodeScene workflow contracts
 # RUSTFLAGS replaces every `rustflags` table in .cargo/config.toml, so each
 # recipe that sets it composes these onto any inherited value (CI's
 # setup-rust exports one), except coverage, which stays on LLVM and the
-# platform linker.
+# platform linker, and lint-whitaker, which assigns only `-D warnings`.
 BUILD_HOST_OS := $(shell uname -s)
 STANDARD_RUSTFLAGS := -Zthreads=8$(if $(filter Linux,$(BUILD_HOST_OS)), -Clink-arg=-fuse-ld=mold)
 
@@ -85,16 +85,16 @@ lint-clippy: check-static-regexes check-verification-ledger ## Run Clippy with w
 # The Dylint driver compiles the lint libraries with its own cargo, so it must
 # not inherit the cargo-level overrides that name a codegen backend or a target
 # for *this* build: those break the driver's compile. `RUSTFLAGS` is the
-# exception. It carries the standard development flags, the build standard
-# requires every development target to restate it while keeping the caller's
-# own, and the driver accepts it. So it is assigned rather than cleared.
+# exception. Whitaker runs under the toolchain its installer manages, so it
+# takes none of the development standard: the literal `RUSTFLAGS` below
+# displaces the `rustflags` tables and inherits nothing from the caller.
 WHITAKER_CLEAN_ENV = env -u CARGO_ENCODED_RUSTFLAGS \
 	-u CARGO_PROFILE_DEV_CODEGEN_BACKEND -u CARGO_BUILD_TARGET \
 	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER \
 	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS -u CFLAGS -u LDFLAGS
 
 lint-whitaker: ## Run the Whitaker Dylint suite with clean driver inputs and warnings denied
-	$(WHITAKER_CLEAN_ENV) RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)" DYLINT_RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --workspace --all-targets --all-features
+	$(WHITAKER_CLEAN_ENV) RUSTFLAGS="-D warnings" DYLINT_RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --workspace --all-targets --all-features
 
 
 typecheck: ## Type-check all targets and features

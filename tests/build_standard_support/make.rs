@@ -133,6 +133,10 @@ pub fn commands_with_text(stdout: &str) -> Result<Vec<Command>, String> {
         .map(|command| {
             let assignment = match assigned_rustflags(&command)? {
                 Assignment::Unassigned if compiles(&command) => Assignment::Bare(command.clone()),
+                // Whitaker runs under the toolchain its installer manages, so it takes none of the
+                // development standard. Its literal `RUSTFLAGS="-D warnings"` is the isolation
+                // boundary the build-defaults rule (BD-008) asks for, not a missing assignment.
+                Assignment::Flags(..) if is_isolated_whitaker(&command) => Assignment::Unassigned,
                 other => other,
             };
             Ok(Command {
@@ -141,6 +145,59 @@ pub fn commands_with_text(stdout: &str) -> Result<Vec<Command>, String> {
             })
         })
         .collect()
+}
+
+/// Returns whether a command runs the `whitaker` executable under exactly one `RUSTFLAGS`
+/// assignment, the literal `RUSTFLAGS="-D warnings"`. Quoted spans stay whole because a quoted
+/// value may hold spaces.
+fn is_isolated_whitaker(command: &str) -> bool {
+    let words = ShellLine(command).words();
+    let rustflags: Vec<&&str> = words
+        .iter()
+        .filter(|word| word.starts_with("RUSTFLAGS="))
+        .collect();
+    rustflags == [&"RUSTFLAGS=\"-D warnings\""] && executable(&words) == Some("whitaker")
+}
+
+/// Returns the executable a command runs: the first word that is not `env`, an `env` `-u NAME`
+/// option, or a leading `NAME=value` assignment, reduced to its final path segment.
+fn executable<'a>(words: &[&'a str]) -> Option<&'a str> {
+    let mut unset_name_next = false;
+    for word in words {
+        if unset_name_next {
+            unset_name_next = false;
+        } else if *word == "-u" {
+            unset_name_next = true;
+        } else if *word != "env" && !word.contains('=') {
+            return word.rsplit('/').next();
+        }
+    }
+    None
+}
+
+/// A shell command line, read word by word with each double-quoted span kept whole.
+struct ShellLine<'a>(&'a str);
+
+impl<'a> ShellLine<'a> {
+    /// Returns the words of the line, split on whitespace outside double quotes.
+    fn words(&self) -> Vec<&'a str> {
+        let mut words = Vec::new();
+        let mut start = None;
+        let mut quoted = false;
+        for (index, c) in self.0.char_indices() {
+            quoted ^= c == '"';
+            match (c.is_whitespace() && !quoted, start) {
+                (true, Some(begin)) => {
+                    words.extend(self.0.get(begin..index));
+                    start = None;
+                }
+                (false, None) => start = Some(index),
+                _ => {}
+            }
+        }
+        words.extend(start.and_then(|begin| self.0.get(begin..)));
+        words
+    }
 }
 
 /// A Makefile target name, typed so a runner takes a target and not just any text.
@@ -260,3 +317,31 @@ pub fn held_out_problems_for(
 
 /// Returns the number of held-out targets the repository defines.
 pub const fn held_out_target_count() -> usize { HELD_OUT_TARGETS.len() }
+
+#[cfg(test)]
+mod isolated_whitaker_tests {
+    //! Positive and negative cases for the isolated Whitaker exemption.
+
+    use super::is_isolated_whitaker;
+
+    #[test]
+    fn the_whitaker_executable_under_a_literal_boundary_is_isolated() {
+        for command in [
+            "env -u CFLAGS RUSTFLAGS=\"-D warnings\" whitaker --all",
+            "RUSTFLAGS=\"-D warnings\" /home/u/.local/bin/whitaker --all",
+        ] {
+            assert!(is_isolated_whitaker(command), "{command}");
+        }
+    }
+
+    #[test]
+    fn other_commands_are_not_isolated() {
+        for command in [
+            "RUSTFLAGS=\"-D warnings\" cargo build --bin whitaker",
+            "env -u CFLAGS RUSTFLAGS=\"-D warnings -Zthreads=8\" whitaker --all",
+            "env -u CFLAGS whitaker --all",
+        ] {
+            assert!(!is_isolated_whitaker(command), "{command}");
+        }
+    }
+}

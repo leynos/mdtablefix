@@ -233,7 +233,8 @@ project:
     all features enabled and denies all warnings. The Whitaker Dylint suite runs
     through its `whitaker` wrapper, which unsets the Cargo codegen-backend,
     target and linker overrides that would break the Dylint driver's own compile
-    and keeps the composed `RUSTFLAGS`. Install Whitaker with
+    and assigns the literal `RUSTFLAGS="-D warnings"`, so Whitaker takes none
+    of the development standard. Install Whitaker with
     `whitaker-installer`; never call `cargo dylint` directly. CI installs it
     through the shared `install-whitaker` action.
   - `make test` executes:
@@ -256,9 +257,10 @@ project:
   and on Linux the `mold` linker through `-Clink-arg=-fuse-ld=mold`. An assigned
   `RUSTFLAGS` replaces the Cargo configuration, so each development recipe
   that assigns `RUSTFLAGS` restates the flags; the release recipe keeps the
-  caller's flags instead. The `-Z` flag needs the pinned nightly in
-  `rust-toolchain.toml`, and Linux builds need `mold`. LLVM is the default
-  codegen backend; Cranelift is opt-in only (concordat adr-0004).
+  caller's flags instead, and `make lint-whitaker` assigns only `-D warnings`.
+  The `-Z` flag needs the pinned nightly in `rust-toolchain.toml`, and Linux
+  builds need `mold`. LLVM is the default codegen backend; Cranelift is opt-in
+  only (concordat adr-0004).
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
