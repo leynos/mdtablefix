@@ -174,7 +174,6 @@ fn push_newline_if_needed<I>(
     }
 }
 
-#[must_use]
 /// Tokenizes inline Markdown `source` into an ordered list of [`Token`] values.
 ///
 /// The `source` parameter is the inline Markdown text to tokenize. The return
@@ -199,6 +198,7 @@ fn push_newline_if_needed<I>(
 ///     ]
 /// );
 /// ```
+#[must_use]
 pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     if source.is_empty() {
         return Vec::new();
