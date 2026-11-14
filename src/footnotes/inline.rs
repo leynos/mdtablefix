@@ -85,31 +85,50 @@ fn build_footnote(parts: InlineFootnote<'_>) -> String {
     )
 }
 
+/// Rewrites one `number:` match as a definition header plus its trailing text.
+///
+/// `matched` is the whole match, supplied by the caller so this helper never
+/// re-fetches it. Returns `None` when the match lacks a capture the pattern
+/// makes mandatory; every capture read here is a non-optional group of
+/// `COLON_FN_RE`, so that cannot arise from a successful match and the caller
+/// leaves the matched text unchanged rather than inventing a replacement.
+fn rewrite_colon_footnote(
+    caps: &Captures<'_>,
+    matched: &str,
+    match_start: usize,
+) -> Option<String> {
+    let num_match = caps.name("num")?;
+    let style_start = caps
+        .name("style")
+        .map_or(num_match.start() - match_start, |m| m.start() - match_start);
+    let pre = &caps["pre"];
+    let style = &caps["style"];
+    let colons = &caps["colons"];
+    let boundary = &caps["boundary"];
+    let captured_gap = matched.get(pre.len()..style_start)?;
+    let gap = if pre.is_empty() {
+        captured_gap
+    } else if pre.chars().last().is_some_and(char::is_alphanumeric) {
+        ""
+    } else {
+        captured_gap
+    };
+    Some(format!(
+        "{pre}{gap}{style}[^{num}]:{colons}{boundary}",
+        num = num_match.as_str()
+    ))
+}
+
 /// Convert inline numeric references into Markdown footnote syntax.
 pub(super) fn convert_inline(text: &str) -> String {
     let out = INLINE_FN_RE.replace_all(text, |caps: &Captures| build_footnote(capture_parts(caps)));
     COLON_FN_RE
         .replace_all(&out, |caps: &Captures| {
-            let pre = &caps["pre"];
-            let style = &caps["style"];
-            let num = &caps["num"];
-            let colons = &caps["colons"];
-            let boundary = &caps["boundary"];
-            let mat = caps.get(0).expect("regex matched without capture");
-            let match_str = mat.as_str();
-            let num_match = caps.name("num").expect("regex matched without num capture");
-            let style_start = caps
-                .name("style")
-                .map_or(num_match.start() - mat.start(), |m| m.start() - mat.start());
-            let captured_gap = &match_str[pre.len()..style_start];
-            let gap = if pre.is_empty() {
-                captured_gap
-            } else if pre.chars().last().is_some_and(char::is_alphanumeric) {
-                ""
-            } else {
-                captured_gap
-            };
-            format!("{pre}{gap}{style}[^{num}]:{colons}{boundary}")
+            let whole = caps.get(0);
+            let matched = whole.map_or("", |mat| mat.as_str());
+            let match_start = whole.map_or(0, |mat| mat.start());
+            rewrite_colon_footnote(caps, matched, match_start)
+                .unwrap_or_else(|| matched.to_string())
         })
         .into_owned()
 }

@@ -71,6 +71,28 @@ pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> boo
     false
 }
 
+/// Rewrites one matched list item as a footnote definition header.
+///
+/// `line` is the source the captures came from, so the separator between the
+/// number and the item text is read from the original bytes rather than
+/// rebuilt, keeping list formatting and continuation alignment stable.
+/// Returns `None` when a capture the pattern makes mandatory is absent; both
+/// groups are non-optional in `FOOTNOTE_LINE_RE`, so that cannot arise from a
+/// successful match, and the caller leaves the matched text unchanged rather
+/// than inventing a replacement.
+fn rewrite_footnote_line(line: &str, number: usize, caps: &Captures<'_>) -> Option<String> {
+    let indent = caps.name("indent")?;
+    let num_match = caps.name("num")?;
+    let rest_match = caps.name("rest")?;
+    let whitespace = line.get(num_match.end() + 1..rest_match.start())?;
+    Some(format!(
+        "{}[^{number}]:{}{}",
+        indent.as_str(),
+        whitespace,
+        rest_match.as_str()
+    ))
+}
+
 /// Rewrites an ordered-list item as a footnote definition header.
 ///
 /// `number` is the number the fold assigns rather than the item's own, because
@@ -86,17 +108,8 @@ pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> boo
 fn replace_footnote_line(line: &str, number: usize) -> String {
     FOOTNOTE_LINE_RE
         .replace(line, |caps: &Captures| {
-            let num_match = caps
-                .name("num")
-                .expect("footnote line capture missing number");
-            let rest_match = caps
-                .name("rest")
-                .expect("footnote line capture missing rest");
-            let whitespace = &line[num_match.end() + 1..rest_match.start()];
-            format!(
-                "{}[^{number}]:{}{}",
-                &caps["indent"], whitespace, &caps["rest"]
-            )
+            let matched = caps.get(0).map_or("", |whole| whole.as_str());
+            rewrite_footnote_line(line, number, caps).unwrap_or_else(|| matched.to_string())
         })
         .to_string()
 }
