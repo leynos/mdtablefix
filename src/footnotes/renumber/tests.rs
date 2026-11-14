@@ -8,7 +8,7 @@ use rstest::rstest;
 
 use super::{numeric_candidate_from_line, renumber_labels, reorder_footnotes};
 
-fn strings(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_string()).collect() }
+fn strings(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_owned()).collect() }
 
 /// Runs both halves of the scan the way the pipeline does.
 ///
@@ -160,10 +160,10 @@ mod proptest_tests {
             // Use a footnote number that cannot collide with any generated value
             // (we only generate 1..=20) so any rewrite of this line would be
             // obviously wrong.
-            let fenced_reference = "inside [^999] fence".to_string();
-            input.push("```".to_string());
+            let fenced_reference = "inside [^999] fence".to_owned();
+            input.push("```".to_owned());
             input.push(fenced_reference.clone());
-            input.push("```".to_string());
+            input.push("```".to_owned());
             input.push(String::new());
             let definitions_start = input.len();
             for &n in &unique {
@@ -185,9 +185,9 @@ mod proptest_tests {
 
             // 2. Fenced block is untouched, including its embedded `[^999]` ref.
             let fence_idx = numbers.len() + 1;
-            prop_assert_eq!(input[fence_idx].clone(), "```".to_string());
+            prop_assert_eq!(input[fence_idx].clone(), "```".to_owned());
             prop_assert_eq!(input[fence_idx + 1].clone(), fenced_reference);
-            prop_assert_eq!(input[fence_idx + 2].clone(), "```".to_string());
+            prop_assert_eq!(input[fence_idx + 2].clone(), "```".to_owned());
 
             // 3. Definitions are consecutively numbered 1..=unique.len() with no gaps.
             let header_re = Regex::new(r"^\[\^(\d+)\]:").expect("header regex compiles");

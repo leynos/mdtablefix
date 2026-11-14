@@ -430,7 +430,7 @@ the real binary under `--wrap` and asserted byte-identical, the
 `bracket_reference_seam_strategy` property in
 `tests/idempotence_properties.rs`, and the wrap cases in
 `src/wrap/tests/inline_wrapping.rs`, `tests/wrap_unit/stream.rs`,
-`tests/wrap/lists.rs` and `tests/wrap/cli.rs`.
+`tests/wrap/lists/mod.rs` and `tests/wrap/cli/mod.rs`.
 
 The limitation that remains is the one ADR 0006 records: a short alphabetic
 label such as `[a]` is still ordinary prose the wrapper may break at, so a

@@ -24,13 +24,13 @@ helper directly.
 
 ### Canonical frontmatter boundary
 
-[`process_with_frontmatter`](../src/process.rs) is the single authoritative
+[`process_with_frontmatter`](../src/process/mod.rs) is the single authoritative
 boundary for splitting and rejoining leading YAML frontmatter. It never passes
 the frontmatter prefix to `body_fn`, and it prepends that prefix verbatim to
 the closure's output.
 
 Callers must not split, transform, or restore frontmatter outside this
-boundary. Both [`process_stream_opts`](../src/process.rs) in the library and
+boundary. Both [`process_stream_opts`](../src/process/mod.rs) in the library and
 `process_lines` in the package binary route through it. All body transforms
 must run inside the closure. The library-owned `renumber_lists` pass runs inside
 `process_stream_inner`, controlled by `Options::renumber`; `format_breaks` is
@@ -365,11 +365,12 @@ analysis they call.
   by `rewrite_with` with an `operation` of `"rewrite"` or `"rewrite_no_wrap"`
   and always with the file's path; and, because the binary is a separate crate
   and cannot reach that private helper,
-  `driver::report_line_endings(counts, operation, path)` in `src/driver.rs`,
-  called by `driver::analyse` with `"file"` and the display path — the path the
-  user wrote, not the bare name the capability reads by — and by `format_stdin`
-  with `"stdin"` and `None`, which the report renders as `<stdin>`. The message
-  shape is identical across boundaries, so one filter finds them all.
+  `driver::report_line_endings(counts, operation, path)` in
+  `src/driver/mod.rs`, called by `driver::analyse` with `"file"` and the
+  display path — the path the user wrote, not the bare name the capability
+  reads by — and by `format_stdin` with `"stdin"` and `None`, which the report
+  renders as `<stdin>`. The message shape is identical across boundaries, so
+  one filter finds them all.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.
@@ -380,13 +381,13 @@ analysis they call.
   side-effecting.
 
 Detection runs on the raw document at each input boundary: `rewrite_with` in
-`src/io/replace.rs`, `driver::analyse` in `src/driver.rs`, and `format_stdin` in
-`src/driver/run.rs`, each reporting through its own `report_line_endings` with
-the same message shape. The internal pipeline stays LF-only — `str::lines`
-strips each line's terminator before a transform sees it — and only the
-serializer re-applies the detected style. Standard input keeps its historical
-contract of printing one terminator even when it produces no lines, which
-`tests/parallel.rs` pins.
+`src/io/replace.rs`, `driver::analyse` in `src/driver/mod.rs`, and
+`format_stdin` in `src/driver/run.rs`, each reporting through its own
+`report_line_endings` with the same message shape. The internal pipeline stays
+LF-only — `str::lines` strips each line's terminator before a transform sees it
+— and only the serializer re-applies the detected style. Standard input keeps
+its historical contract of printing one terminator even when it produces no
+lines, which `tests/parallel.rs` pins.
 
 The mode selects behaviour rather than a formatting variant: every mode shares
 the one closure `formatting_closure` builds, and `driver::analyse` chooses what
@@ -400,12 +401,12 @@ filesystem access themselves.
 - `replace_file(directory, path, contents) -> std::io::Result<()>` performs the
   shared atomic replacement. It declines a symlinked target, creates a
   `create_new` temporary file in the same directory, writes, flushes and syncs
-  the contents, then calls `swap_into_place` in `src/io/swap.rs`, which applies
-  the target's permissions to the temporary file before the rename and clears a
-  Windows destination's read-only attribute first, because that attribute
-  blocks the rename. It attempts to remove the temporary file when a later step
-  fails. Both entry points call the one implementation, and the CLI and
-  `rewrite`/`rewrite_no_wrap` reach it through `replace_file_if_unchanged`.
+  the contents, then calls `swap_into_place` in `src/io/swap/mod.rs`, which
+  applies the target's permissions to the temporary file before the rename and
+  clears a Windows destination's read-only attribute first, because that
+  attribute blocks the rename. It attempts to remove the temporary file when a
+  later step fails. Both entry points call the one implementation, and the CLI
+  and `rewrite`/`rewrite_no_wrap` reach it through `replace_file_if_unchanged`.
 - `replace_file_if_unchanged(directory, path, expected, contents) -> std::io::Result<bool>`
   writes exactly as `replace_file` does, except that it reads the target back
   and compares it against `expected` twice: once after the temporary file is
@@ -430,10 +431,10 @@ filesystem access themselves.
   fails is logged at `debug` level and increments
   `mdtablefix_io_temporary_cleanup_failures_total`, and is not returned, so the
   caller still sees the original replacement failure; the `#[cfg(test)]`
-  re-export in `src/io.rs` lets `src/io_metrics_failure_tests.rs` drive it
+  re-export in `src/io/mod.rs` lets `src/io_metrics_failure_tests.rs` drive it
   directly.
 
-`src/reflow.rs`:
+`src/reflow/mod.rs`:
 
 - `Cell`: Carries a parsed cell payload and leading-empty state until the parse
   stage completes.
@@ -460,12 +461,12 @@ filesystem access themselves.
 - `infer_expected_width`: Derives the logical column count from the first row
   and complete legacy concatenations, including embedded separator rows.
 
-`src/table.rs`:
+`src/table/mod.rs`:
 
 - `format_separator_cells`: Expands separator cells to the target widths while
   preserving Markdown alignment markers.
 
-`src/process/buffer.rs`:
+`src/process/buffer/mod.rs`:
 
 - `TableSubstitutions`: Carries only the `ellipsis` and `code_emphasis` flags
   that must be applied before table reflow. The process module passes this
@@ -491,7 +492,7 @@ filesystem access themselves.
   not log raw Markdown lines; use bounded fields such as line lengths and
   buffer counts.
 
-`src/footnotes/renumber/definitions.rs`:
+`src/footnotes/renumber/definitions/mod.rs`:
 
 - `collect_definition_updates`: Scans lines for footnote definitions and
   promotable numeric-list candidates, assigns sequential numbers, and rewrites
@@ -502,7 +503,7 @@ filesystem access themselves.
   end. The sibling `reorder` module shares this boundary primitive so scanning
   and reordering compute definition boundaries identically.
 
-`src/footnotes/renumber/reorder.rs`:
+`src/footnotes/renumber/reorder/mod.rs`:
 
 - `reorder_definition_block`: Reorders the final footnote-definition block
   according to the numbering plan built by the sibling `definitions` module. It
@@ -537,9 +538,9 @@ refactoring audit covering issues `#357`–`#367` in PR `#368`.
 
 ### Read-only by type
 
-`ReadOnlyDir` in `src/driver.rs` is a newtype over `cap_std::fs_utf8::Dir`. It
-exposes only `new` and `read`, so the reporting modes receive a capability that
-cannot write: read-only access is a property of the type rather than of a
+`ReadOnlyDir` in `src/driver/mod.rs` is a newtype over `cap_std::fs_utf8::Dir`.
+It exposes only `new` and `read`, so the reporting modes receive a capability
+that cannot write: read-only access is a property of the type rather than of a
 convention or of a test double that declines to write.
 
 Re-use policy:
@@ -556,7 +557,7 @@ Re-use policy:
 
 ### One formatter, built once
 
-`Formatter` in `src/driver.rs` is:
+`Formatter` in `src/driver/mod.rs` is:
 
 ```rust
 pub type Formatter = dyn Fn(&SourceDocument<'_>) -> String + Sync;
@@ -605,9 +606,9 @@ reasoning as `AX-4`.
 
 ## The binary's private driver
 
-`src/driver.rs` is declared `mod driver;` in `src/main.rs`, so it is not part
-of the published library. The library's formatting entry points return values,
-not `Result`s, and its public filesystem entry points (`rewrite`,
+`src/driver/mod.rs` is declared `mod driver;` in `src/main.rs`, so it is not
+part of the published library. The library's formatting entry points return
+values, not `Result`s, and its public filesystem entry points (`rewrite`,
 `rewrite_no_wrap`, `replace_file`, and `replace_file_if_unchanged`) return
 `std::io::Result`, so they are fallible and independent of the CLI's filesystem
 policy and exit-status handling. The CLI's directory capabilities, and its
@@ -660,10 +661,10 @@ post-parse check that the four git-only flags arrive with `--git`.
 `src/git_inputs.rs` is the composition root: it turns the command line into a
 selection question and the answer back into the paths `run_files` receives, and
 it is the one module that knows the whole selection tree at once.
-`src/select.rs` and its submodules state and answer that question.
+`src/select/mod.rs` and its submodules state and answer that question.
 
 ```plaintext
-src/select.rs               the tree root: module list and dependency rule
+src/select/mod.rs               the tree root: module list and dependency rule
 src/select/policy.rs        select_files, FileIdentity, PathKind, PathProbe, ProbeFailure
 src/select/extensions.rs    --md-exts parsing and matching
 src/select/fs_probe.rs      AmbientPathProbe, the working-tree adapter
@@ -726,7 +727,8 @@ selected for the branch.
 
 ## Fence normalization module
 
-`src/fences.rs` exposes the preprocessing helpers used by the `--fences` option.
+`src/fences/mod.rs` exposes the preprocessing helpers used by the `--fences`
+option.
 
 - `compress_fences(lines: &[String]) -> Vec<String>` performs
   `FenceTracker`-driven conditional rewriting. For each matched fenced block,
@@ -813,9 +815,9 @@ depth-aware tracking.
    should prefer that classifier over adding a third route.
 
 2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
-   `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
-   `wrap_with_prefix` computes the available content width once from the
-   Unicode display width of the first-line prefix, then feeds the paragraph
+   `src/wrap/paragraph/mod.rs` is the single entry point for prefix-aware
+   wrapping. `wrap_with_prefix` computes the available content width once from
+   the Unicode display width of the first-line prefix, then feeds the paragraph
    text into `wrap_preserving_code`. `ParagraphState` owns the ordinary
    paragraph segments, their shared indentation, any remembered continuation
    indentation, and an optional deferred `PendingPrefix`.
@@ -894,16 +896,17 @@ depth-aware tracking.
    footnote markers. Span grouping helpers in `src/wrap/inline/span_helpers.rs`
    extend grouped spans over trailing punctuation, couple adjacent footnote
    references, and merge chained inline code or link tokens.
-   `determine_token_span_observed` forward-couples opening punctuation tokens
-   (`(`, `[`, and CJK openers) and hyphen-prefix tokens to the next inline code
-   span or Markdown link so wrapping never leaves a lone opener or prefix at
-   the end of a line. `try_couple_inline_link_after_opener` applies the same
-   rule to parenthesized inline citation links such as `([1](url))`, grouping
-   the opener and link as one `SpanKind::Link` so adjacent citations like
-   `([1](url))([2](url2))` do not split at the boundary.
-   `looks_like_bracketed_reference` recognizes the tokenizer's split closing
-   half `1]` as well as the merged `[1]`; only ASCII digits qualify, so the
-   predicate stays disjoint from `looks_like_link` and
+   `determine_token_span_observed` starts from `initial_token_span`, which
+   forward-couples opening punctuation tokens (`(`, `[`, and CJK openers) to
+   the next inline code span or Markdown link so wrapping never leaves a lone
+   opener at the end of a line, and couples any unspaced token to a following
+   inline code span so a later join cannot turn the break into a space.
+   `try_couple_inline_link_after_opener` applies the same rule to parenthesized
+   inline citation links such as `([1](url))`, grouping the opener and link as
+   one `SpanKind::Link` so adjacent citations like `([1](url))([2](url2))` do
+   not split at the boundary. `looks_like_bracketed_reference` recognizes the
+   tokenizer's split closing half `1]` as well as the merged `[1]`; only ASCII
+   digits qualify, so the predicate stays disjoint from `looks_like_link` and
    `looks_like_footnote_ref`. `try_couple_bracketed_reference` couples an
    opening bracket to its reference and absorbs trailing punctuation.
    `SpanKind::BracketedRef` and `FragmentKind::BracketedRef` keep the merged
@@ -1053,13 +1056,13 @@ Table: Key types and functions.
 | `determine_token_span`, `determine_token_span_observed`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/wrap/inline/span_grouping.rs`    |
 | `merge_whitespace_only_lines`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`      |
 | `rebalance_atomic_tails`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/postprocess.rs`      |
-| `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`               |
-| `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`               |
+| `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph/mod.rs`           |
+| `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/wrap/paragraph/mod.rs`           |
 | `PendingPrefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/wrap/paragraph/pending.rs`       |
 | `ContinuationMode`, `TailReflow`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/paragraph/pending.rs`       |
 | `conforming_source_lines_for_overlong_span` — Retains conforming authored boundaries only inside a cross-line code span that would be overlong when joined.                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/paragraph/spanning_code.rs` |
-| `emit_pending_with_verbatim_continuation` — Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/paragraph.rs`               |
-| `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/paragraph.rs`               |
+| `emit_pending_with_verbatim_continuation` — Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/paragraph/mod.rs`           |
+| `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/paragraph/mod.rs`           |
 | `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/paragraph/pending.rs`       |
 | `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/continuation.rs`            |
 | `join_pending_continuation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`            |
@@ -1118,17 +1121,14 @@ coupled to its opening bracket.
   `scan_code_suffix_end` in `src/wrap/tokenize/scanning.rs`; the combined
   token is recognized as atomic by `has_inline_code_structure` in
   `src/wrap/inline/fragment.rs`, so wrapping treats the full string as one
-  unit. Leading-hyphen compounds — a token that ends with a hyphen and contains
-  at least one alphabetic character (for example `pre-`, `LLM-`, `(API-`) — are
-  coupled forward to the next inline code span during span grouping by the
-  `ends_with_hyphen_prefix` predicate in `src/wrap/inline/predicates.rs`,
-  applied in `determine_token_span_observed` in
-  `src/wrap/inline/span_grouping.rs`. The coupling mirrors the existing
-  opening-punctuation pattern, so compounds such as `` pre-`LLMPort` `` and
-  `` (API-`Foo`) `` remain atomic during wrapping. Internal hyphen chains (e.g.
-  `state-of-the-art-`) are accepted by design; bare dash runs such as `-` or
-  `---` are rejected. Unicode alphabetic characters (e.g. `pré-`, `字-`) are
-  intentionally supported.
+  unit. A non-whitespace token immediately before an inline code span is
+  grouped forward by the `couple_unspaced_before_code` helper applied from
+  `initial_token_span` in `src/wrap/inline/span_grouping.rs`. This makes
+  unspaced runs such as `` **bold**`code` ``, `` pre-`LLMPort` ``, and
+  `` (API-`Foo`) `` atomic, because emitting a line break inside one would
+  introduce a space when the next pass rejoins the paragraph. Whitespace
+  remains a break opportunity, so separately spaced inline code spans may still
+  wrap independently.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur. A source hard break ends its wrapped segment, so it is
   always on the segment's final line, the only line `render_line` keeps
@@ -1149,7 +1149,7 @@ coupled to its opening bracket.
   the available width, `ParagraphWriter` defers it through `PendingPrefix` so
   the continuation and lazy continuation lines below it are folded into the
   same wrapped output. `wraps_to_tail` and `continuation_folds_tail` in
-  `src/wrap/paragraph.rs` decide whether folding is safe: a tail that would
+  `src/wrap/paragraph/mod.rs` decide whether folding is safe: a tail that would
   re-parse as a different block stays separate, which covers a tail indented by
   four or more columns (indented code), a tail that repeats its blockquote
   marker, and a footnote definition tail. Emitting a bare tail instead would
@@ -1679,9 +1679,9 @@ Re-use policy for this helper:
 
 ## Fences module
 
-The `fences` module in [src/fences.rs](../src/fences.rs) is responsible for
-normalizing fenced code blocks before later Markdown transforms run. It exposes
-two public functions that are called in sequence:
+The `fences` module in [src/fences/mod.rs](../src/fences/mod.rs) is responsible
+for normalizing fenced code blocks before later Markdown transforms run. It
+exposes two public functions that are called in sequence:
 
 - `compress_fences(&[String]) -> Vec<String>` conditionally compresses fence
   delimiters of three or more backticks or tildes to exactly three backticks
@@ -2463,7 +2463,7 @@ for a compact transition table. Record graph size, event mapping, lifecycle and
 error semantics, observability, generated-code legibility, and dependency
 adoption risk in an ADR update before adding a crate.
 
-### 1.2. Wrapping continuation state (`src/wrap/paragraph.rs`)
+### 1.2. Wrapping continuation state (`src/wrap/paragraph/mod.rs`)
 
 `ParagraphState` owns buffered prose, shared indentation, remembered
 continuation indentation, and an optional `PendingPrefix`. `PendingPrefix`
@@ -2495,7 +2495,7 @@ DOM conversion uses `collect_tables` and `collect_rows` as semantic entry
 points. Both delegate traversal to the canonical `collect_matching` walker, so
 pre-order traversal, handle cloning, and child borrowing remain consistent.
 
-### 1.4. `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
+### 1.4. `DefinitionScanState` (`src/footnotes/renumber/definitions/mod.rs`)
 
 `DefinitionScanState` accumulates the footnote-definition rewrite plan during a
 single scan over the input. It borrows the shared `(original → new)` mapping
@@ -2708,7 +2708,7 @@ wired back in with `#[path]`:
 mod tests;
 ```
 
-`src/headings.rs`, `src/io.rs`, and `src/main.rs` use this shape, as do the
+`src/headings.rs`, `src/io/mod.rs`, and `src/main.rs` use this shape, as do the
 tracing-snapshot modules listed under
 [Tracing-event snapshot tests](#tracing-event-snapshot-tests). The moved tests
 keep their original paths (`io::tests::…`), and `super` still resolves to the
@@ -2832,6 +2832,13 @@ and `make lint`
 three run before a commit. `make markdownlint` covers the documentation changes
 that none of the Rust gates see.
 
+`rustix = "1.1.4"` is a development-only dependency that enables its `process`
+feature. The Unix permission-test helpers in `src/io_tests.rs`,
+`src/main_tests.rs` and `tests/in_place_atomic/failure.rs` use
+`rustix::process::geteuid().is_root()` to recognize an effective root user:
+permission-denial assertions would be vacuous under root, and the safe API
+keeps their UID checks out of `unsafe` code.
+
 #### `make mutants`
 
 `make mutants` runs mutation testing over the selection tree with
@@ -2901,32 +2908,55 @@ file stays bounded without a wall-clock cut-off.
 
 ### 2.9. Deterministic failure seams
 
-The replacement tests drive two `#[cfg(test)]`-only, per-thread seams defined in
-`src/io/swap.rs`:
+The replacement tests drive three `#[cfg(test)]`-only, per-thread seams. They
+are defined in `src/io/swap/seams.rs`, which `src/io/swap/mod.rs` declares and
+re-exports under `#[cfg(test)]`:
 
 - `rename_failure_seam` fails the rename half of the swap.
 - `cleanup_failure_seam` fails the removal of the temporary file a failed
   replacement left behind.
+- `competing_writer_seam` runs a write to the target inside the swap, in the
+  window between the two comparisons of it, so a test can land a writer there
+  rather than race the scheduler for it.
 
-Each seam is a `thread_local!` flag with an `arm()` that sets it and returns an
-RAII guard, and a `take()` that consumes the arming and reports whether this
-call must fail. Dropping the guard disarms the seam, so a failing assertion
-cannot leave the failure armed for whatever runs next on that thread; because
-`take()` clears the flag, arming fails exactly one call.
+The rename and cleanup seams are each a `thread_local!` flag with an `arm()`
+that sets it and returns an RAII guard, and a `take()` that consumes the arming
+and reports whether this call must fail. `competing_writer_seam` is armed with
+the write it is to perform instead: `arm()` takes that write as a closure, and
+`run(directory, path)` calls it with the directory capability and the target
+the swap is working with, so the write captures no path or handle of its own.
+All three are per-thread, and all three disarm when the value `arm()` returns
+is dropped, so a failing assertion cannot leave a failure armed for whatever
+runs next on that thread. The arming is one-shot as well, so each seam fires
+for exactly one call.
 
-They exist because the failures they stand in for cannot be forced
-deterministically on every platform. A rename a test can make fail for real
-fails before the destination is prepared, so the rollback in `swap_into_place`
-would otherwise be unreachable. A permission bit that denies the removal is
-ignored by a run as root, and an occupied temporary name is simply retried
-past: candidate names are a pure function of the target, the process id and the
-attempt, so `create_temporary_file` advances to the next one.
+The rename and cleanup seams exist because the failures they stand in for
+cannot be forced deterministically on every platform. A rename a test can make
+fail for real fails before the destination is prepared, so the rollback in
+`swap_into_place` would otherwise be unreachable. A permission bit that denies
+the removal is ignored by a run as root, and an occupied temporary name is
+simply retried past: candidate names are a pure function of the target, the
+process id and the attempt, so `create_temporary_file` advances to the next one.
 
-The seams are re-exported under `#[cfg(test)]` in `src/io.rs`.
-`src/io_metrics_failure_tests.rs` arms both and drives `rewrite`, so the
-replacement boundary itself, not just the helper, is exercised and the cleanup
-counter is asserted. `src/io_tests.rs` uses the rename seam to assert the
-destination is restored after a failed swap.
+`competing_writer_seam` stands in for the opposite case: a write that must be
+declined rather than forced to fail. No supported platform's rename compares
+contents, which is why the swap compares the target itself a second time,
+immediately before the rename; without that comparison a writer arriving after
+the first one would be renamed over rather than declined. A test can reach that
+window only by racing the scheduler; the seam runs the armed write in it, so
+the landing is deterministic. The case that arms it asserts what a decline
+promises: the replacement reports that it wrote nothing, the arriving writer's
+text is what the target holds, and no temporary file is left beside it. Its
+fuller rationale is in `docs/execplans/git-option.md`.
+
+The seams are re-exported under `#[cfg(test)]` in `src/io/mod.rs`.
+`src/io_metrics_failure_tests.rs` arms both the rename seam and the cleanup
+seam and drives `rewrite`, so the replacement boundary itself, not just the
+helper, is exercised and the cleanup counter is asserted. `src/io_tests.rs`
+uses the rename seam to assert the destination is restored after a failed swap,
+and `src/io_conditional_tests.rs` arms the cleanup seam against a declined
+replacement and the competing-writer seam against a write that lands inside the
+swap.
 
 ## 3. Breaks module – Cow allocation strategy
 

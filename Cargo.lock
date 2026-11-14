@@ -1312,6 +1312,7 @@ dependencies = [
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
+ "rustix",
  "serde",
  "serde_yaml",
  "similar 3.2.1",

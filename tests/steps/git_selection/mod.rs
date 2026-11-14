@@ -19,7 +19,7 @@ use rstest_bdd_macros::{given, then, when};
 // The path is stated because this module is itself loaded through a `#[path]`
 // attribute, which leaves Rust looking for a child module beside this file
 // rather than in a directory named after it.
-#[path = "git_selection/fixture.rs"]
+#[path = "fixture.rs"]
 mod fixture;
 
 // Re-exported because the scenario bindings name the state type, and they live

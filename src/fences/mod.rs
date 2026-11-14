@@ -20,7 +20,7 @@ mod compress;
 pub(crate) mod plan;
 
 #[cfg(test)]
-#[path = "fences_properties.rs"]
+#[path = "../fences_properties.rs"]
 mod properties;
 
 use attachment::attach_to_next_fence;

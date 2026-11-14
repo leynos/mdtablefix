@@ -20,6 +20,15 @@ mod item_stack;
 use item_stack::{ItemStack, Placement};
 
 /// Number of underscores in the canonical replacement for a thematic break.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::THEMATIC_BREAK_LEN;
+///
+/// let canonical_break = "_".repeat(THEMATIC_BREAK_LEN);
+/// assert_eq!(canonical_break.len(), 70);
+/// ```
 pub const THEMATIC_BREAK_LEN: usize = 70;
 
 /// Shared replacement line so every thematic break can be returned without allocation.

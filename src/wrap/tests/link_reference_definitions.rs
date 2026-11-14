@@ -6,7 +6,7 @@ use crate::wrap::wrap_text;
 
 #[test]
 fn wrap_text_preserves_inline_link_reference_title() {
-    let input = vec!["[example]: https://example.com \"Example site\"".to_string()];
+    let input = vec!["[example]: https://example.com \"Example site\"".to_owned()];
     assert_eq!(wrap_text(&input, 80), input);
 }
 
@@ -16,8 +16,8 @@ fn wrap_text_preserves_inline_link_reference_title() {
 #[case("(Ansible documentation)")]
 fn wrap_text_preserves_link_reference_title_on_next_line(#[case] title_line: &str) {
     let input = vec![
-        "[ansible]: <https://docs.ansible.com/>".to_string(),
-        title_line.to_string(),
+        "[ansible]: <https://docs.ansible.com/>".to_owned(),
+        title_line.to_owned(),
     ];
     assert_eq!(wrap_text(&input, 80), input);
 }
@@ -29,9 +29,9 @@ fn wrap_text_reflows_paragraph_after_link_reference_title() {
         "lines when processed with a narrow wrap width."
     );
     let input = vec![
-        "[ansible]: <https://docs.ansible.com/>".to_string(),
-        "  \"Ansible documentation\"".to_string(),
-        paragraph.to_string(),
+        "[ansible]: <https://docs.ansible.com/>".to_owned(),
+        "  \"Ansible documentation\"".to_owned(),
+        paragraph.to_owned(),
     ];
     let wrapped = wrap_text(&input, 40);
 
@@ -44,7 +44,7 @@ fn wrap_text_reflows_paragraph_after_link_reference_title() {
 fn wrap_text_treats_title_after_blank_line_as_prose() {
     let candidate_title = format!("  \"{}\"", "word ".repeat(20));
     let input = vec![
-        "[ansible]: <https://docs.ansible.com/>".to_string(),
+        "[ansible]: <https://docs.ansible.com/>".to_owned(),
         String::new(),
         candidate_title,
     ];
@@ -58,10 +58,10 @@ fn wrap_text_treats_title_after_blank_line_as_prose() {
 #[test]
 fn wrap_text_clears_awaiting_link_title_at_fence_opener() {
     let input = vec![
-        "[foo]: https://example.com".to_string(),
-        "```python".to_string(),
-        "code".to_string(),
-        "```".to_string(),
+        "[foo]: https://example.com".to_owned(),
+        "```python".to_owned(),
+        "code".to_owned(),
+        "```".to_owned(),
     ];
     assert_eq!(wrap_text(&input, 80), input);
 }
@@ -73,8 +73,8 @@ fn wrap_text_reflows_prose_after_bare_link_reference_definition() {
         "reflow when wrapped at a narrow width."
     );
     let input = vec![
-        "[foo]: https://example.com".to_string(),
-        paragraph.to_string(),
+        "[foo]: https://example.com".to_owned(),
+        paragraph.to_owned(),
     ];
     let wrapped = wrap_text(&input, 20);
 
@@ -91,7 +91,7 @@ fn wrap_text_reflows_indented_list_after_label_only_reference() {
         " - a very long list item follows a label-only reference and ",
         "must still be handled by the list wrapping path."
     );
-    let input = vec!["[foo]:".to_string(), item.to_string()];
+    let input = vec!["[foo]:".to_owned(), item.to_owned()];
     let wrapped = wrap_text(&input, 36);
 
     assert_eq!(wrapped[0], input[0]);
@@ -104,10 +104,10 @@ fn wrap_text_reflows_indented_list_after_label_only_reference() {
 #[test]
 fn wrap_text_does_not_apply_awaiting_link_title_inside_fence() {
     let input = vec![
-        "```".to_string(),
-        "[foo]: https://example.com".to_string(),
-        "\"A title\"".to_string(),
-        "```".to_string(),
+        "```".to_owned(),
+        "[foo]: https://example.com".to_owned(),
+        "\"A title\"".to_owned(),
+        "```".to_owned(),
     ];
     assert_eq!(wrap_text(&input, 80), input);
 }

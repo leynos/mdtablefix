@@ -5,9 +5,11 @@
 //! trailing-punctuation grouping after code and link tokens, multi-token
 //! coupling for footnote references and adjacent links, splitting before
 //! embedded inline links, and the parenthesized inline citation coupling added
-//! in issue #325. The suite includes positive grouping cases, negative cases
-//! that prevent over-coupling at non-opener positions, and escaped-sequence
-//! preservation.
+//! in issue #325. An unspaced token before an inline code span is coupled to it
+//! whatever its spelling, so the table pins emphasis, hyphenated, parenthesized,
+//! accented and CJK runs alike. The suite includes positive grouping cases,
+//! negative cases that prevent over-coupling at non-opener positions, and
+//! escaped-sequence preservation.
 
 use rstest::rstest;
 
@@ -40,6 +42,15 @@ use super::super::{inline::determine_token_span, tokenize::segment_inline};
 #[case("word([link](url))", "word([link](url))")]
 #[case("word([1](url))([2](url2))", "word([1](url))([2](url2))")]
 #[case("[[link](url)]", "[[link](url)]")]
+#[case("**bold**`code`", "**bold**`code`")]
+#[case("pre-`LLMPort`", "pre-`LLMPort`")]
+#[case("(API-`Foo`)", "(API-`Foo`)")]
+#[case("pré-`code`", "pré-`code`")]
+#[case("字-`code`", "字-`code`")]
+#[case("plain`code`", "plain`code`")]
+// A dash run is a break only as a whole line; inside a paragraph it is an
+// ordinary unspaced token, so it binds like any other under the class rule.
+#[case("---`code`", "---`code`")]
 fn determine_token_span_groups_related_tokens(#[case] input: &str, #[case] expected_group: &str) {
     let tokens = segment_inline(input);
     let (end, width) = determine_token_span(&tokens, 0);
@@ -80,6 +91,15 @@ fn determine_token_span_does_not_overcouple_citation_tokens(
     assert_eq!(width, unicode_width::UnicodeWidthStr::width(expected_group));
 }
 
+#[test]
+fn determine_token_span_keeps_space_before_code_as_a_break() {
+    let tokens = segment_inline("word `code`");
+    let (end, width) = determine_token_span(&tokens, 1);
+
+    assert_eq!(tokens[1..end], [" "]);
+    assert_eq!(width, 1);
+}
+
 #[rstest]
 #[case("word[link](url)", &["word", "[link](url)"])]
 #[case("word[link][reference]", &["word", "[link][reference]"])]
@@ -104,5 +124,5 @@ fn segment_inline_splits_before_embedded_links(#[case] input: &str, #[case] expe
 #[case(r"\([link](url))")]
 #[case(r"word\([link](url))")]
 fn segment_inline_preserves_escaped_link_literals(#[case] input: &str) {
-    assert_eq!(segment_inline(input), vec![input.to_string()]);
+    assert_eq!(segment_inline(input), vec![input.to_owned()]);
 }

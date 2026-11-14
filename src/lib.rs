@@ -21,6 +21,17 @@
 /// The pattern is compiled on first access. If it is invalid, initialization
 /// panics with the supplied message and the regex error. The expansion names
 /// `regex::Regex`, so the calling crate must depend on `regex` directly.
+///
+/// # Examples
+///
+/// ```
+/// use std::sync::LazyLock;
+///
+/// static WORD: LazyLock<regex::Regex> =
+///     mdtablefix::lazy_regex!(r"[[:alpha:]]+", "word pattern should compile");
+///
+/// assert!(WORD.is_match("table"));
+/// ```
 #[macro_export]
 macro_rules! lazy_regex {
     ($re:expr, $msg:expr $(,)?) => {
@@ -69,6 +80,24 @@ pub mod wrap;
 /// ];
 /// let markdown = html_table_to_markdown(&html);
 /// assert!(markdown.iter().any(|line| line.contains('A')));
+/// ```
+///
+/// # Migration example
+///
+/// ```
+/// use mdtablefix::convert_html_tables;
+///
+/// let html = vec![
+///     "<table>".to_string(),
+///     "<tr><th>Header</th></tr>".to_string(),
+///     "<tr><td>Cell</td></tr>".to_string(),
+///     "</table>".to_string(),
+/// ];
+/// let markdown = convert_html_tables(&html);
+///
+/// assert_eq!(markdown.first().map(String::as_str), Some("| Header |"));
+/// assert_eq!(markdown.last().map(String::as_str), Some("| Cell   |"));
+/// assert!(markdown.iter().any(|line| line.starts_with("| ---")));
 /// ```
 #[deprecated(
     since = "0.1.0",
