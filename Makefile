@@ -142,10 +142,10 @@ verus-fence-mutation: check-prover-tools ## Confirm a wrong production fence clo
 verus-compression-mutation: check-prover-tools ## Confirm a wrong fence-compression emission decision is rejected
 	VERUS_RUN='$(VERUS_RUN)' scripts/check-compression-mutation.sh .
 
-verus-emission-mutation: verus-install ## Confirm a weakened normalized-emission clause is rejected
+verus-emission-mutation: check-prover-tools ## Confirm a weakened normalized-emission clause is rejected
 	VERUS_RUN='$(VERUS_RUN)' scripts/check-emission-mutation.sh .
 
-verus-blank-tag-mutation: verus-install ## Confirm dropping the blank-tag read-back is rejected
+verus-blank-tag-mutation: check-prover-tools ## Confirm dropping the blank-tag read-back is rejected
 	VERUS_RUN='$(VERUS_RUN)' scripts/check-blank-tag-mutation.sh .
 
 markdownlint: ## Lint Markdown files
