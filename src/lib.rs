@@ -22,6 +22,13 @@
 /// panics with the supplied message and the regex error. The expansion names
 /// `regex::Regex`, so the calling crate must depend on `regex` directly.
 ///
+/// This macro is the crate's single deliberate panic boundary for regular
+/// expressions. Every call site passes a string literal, so an invalid pattern
+/// is a programming error caught the first time the static is touched, not a
+/// runtime condition a caller could handle. Routing the failure through an
+/// explicit `match` states that intent at the one place it can occur, rather
+/// than spreading a fallible initializer through every use of every static.
+///
 /// # Examples
 ///
 /// ```
@@ -35,7 +42,10 @@
 #[macro_export]
 macro_rules! lazy_regex {
     ($re:expr, $msg:expr $(,)?) => {
-        std::sync::LazyLock::new(|| regex::Regex::new($re).expect($msg))
+        std::sync::LazyLock::new(|| match regex::Regex::new($re) {
+            Ok(compiled) => compiled,
+            Err(err) => panic!("{}: {err}", $msg),
+        })
     };
 }
 
