@@ -2388,7 +2388,8 @@ builds can exceed 180 s.
 The estate standard is LLVM, so LLVM is the default backend here. The Cranelift
 selection in `.cargo/config.toml` is commented out; the
 `[unstable] codegen-backend` key and the `rustc-codegen-cranelift-preview`
-component stay for an opt-in. See the
+component stay for an opt-in; a persistent opt-in also needs `SELECTED` set to
+`true` in `tests/build_standard_support/cranelift.rs`. See the
 [concordat decision record](https://github.com/leynos/concordat/blob/main/docs/adrs/adr-0004-cranelift-is-not-part-of-the-rust-build-standard.md),
 with review due 14 May 2027. An inherited `CARGO_PROFILE_*_CODEGEN_BACKEND`
 variable can still select Cranelift, and Cranelift does not run destructors
