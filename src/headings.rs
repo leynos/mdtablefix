@@ -59,13 +59,14 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
     while idx < lines.len() {
         let line = &lines[idx];
 
+        let candidate = SetextCandidate::new(
+            line,
+            lines.get(idx + 1).map(String::as_str),
+            link_matcher,
+            None,
+        );
         if setext_text_lines[idx]
-            && let Some(emitted) = detect_verified_setext_heading(
-                line,
-                lines.get(idx + 1).map(String::as_str),
-                link_matcher,
-                None,
-            )
+            && let Some(emitted) = candidate.detect_verified_heading()
         {
             out.push(emitted);
             idx += 2;
@@ -105,7 +106,8 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
         };
 
         let next_line = lines.get(idx + 1).map(String::as_str);
-        if is_setext_text_line(fence, line, next_line, link_matcher, continuation_indent) {
+        let candidate = SetextCandidate::new(line, next_line, link_matcher, continuation_indent);
+        if is_setext_text_line(fence, candidate) {
             setext_text_lines[idx] = true;
             lists.reset();
             idx += 2;
@@ -124,38 +126,69 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
 /// line is literal, so list continuation state must not be updated from it.
 fn is_fence_line(fence: FenceObservation) -> bool { fence.is_fence_marker || fence.is_in_fence }
 
+/// A candidate Setext heading, with everything its detection needs.
+///
+/// The text, the line beneath it, the link matcher, and the list continuation
+/// indent travel together through every probe below; a heading is only ever
+/// decided from all four. Bundling them also keeps the probes from being
+/// handed a text line and a matcher that came from different scans.
+#[derive(Clone, Copy)]
+struct SetextCandidate<'a> {
+    /// The prospective heading text.
+    line: &'a str,
+    /// The line beneath it, which may be the underline.
+    underline: Option<&'a str>,
+    /// The matcher consulted for reference-link text.
+    link_matcher: LinkReferenceMatcher,
+    /// Indentation of an enclosing list item, when there is one.
+    continuation_indent: Option<usize>,
+}
+
+impl<'a> SetextCandidate<'a> {
+    /// Pairs a text line with the line beneath it and the surrounding context.
+    fn new(
+        line: &'a str,
+        underline: Option<&'a str>,
+        link_matcher: LinkReferenceMatcher,
+        continuation_indent: Option<usize>,
+    ) -> Self {
+        Self {
+            line,
+            underline,
+            link_matcher,
+            continuation_indent,
+        }
+    }
+
+    /// Constructs the replacement heading and independently checks its ATX class.
+    ///
+    /// For example, `Title` followed by `===` returns `Some("# Title")`.
+    /// The sequence kernel proves construction; this guard checks the emitted
+    /// line, so a kernel that drifted from the emitted form would still be
+    /// caught here rather than producing a heading the classifier rejects.
+    fn detect_verified_heading(self) -> Option<String> {
+        let underline = self.underline?;
+        let heading = detect_setext_heading(
+            self.line,
+            Some(underline),
+            self.link_matcher,
+            self.continuation_indent,
+        )?;
+        let emitted = convert_setext(&heading, self.line, underline)?;
+        is_atx_heading_line(&emitted, &ClassifyCtx::default()).then_some(emitted)
+    }
+}
+
 /// Reports whether `line` is the text half of a valid Setext heading pair.
 ///
 /// Prose outside fences is tested against the same structural predicate as
 /// [`convert_setext_headings`]; a fenced line is literal content and can never
 /// form a heading.
-fn is_setext_text_line(
-    fence: FenceObservation,
-    line: &str,
-    next_line: Option<&str>,
-    link_matcher: LinkReferenceMatcher,
-    continuation_indent: Option<usize>,
-) -> bool {
+fn is_setext_text_line(fence: FenceObservation, candidate: SetextCandidate<'_>) -> bool {
     if is_fence_line(fence) {
         return false;
     }
-    detect_verified_setext_heading(line, next_line, link_matcher, continuation_indent).is_some()
-}
-
-/// Constructs a Setext replacement and independently checks its runtime ATX class.
-///
-/// For example, `Title` followed by `===` returns `Some("# Title")`.
-/// The sequence kernel proves construction; this guard checks the emitted line.
-fn detect_verified_setext_heading(
-    line: &str,
-    underline: Option<&str>,
-    link_matcher: LinkReferenceMatcher,
-    continuation_indent: Option<usize>,
-) -> Option<String> {
-    let underline = underline?;
-    let heading = detect_setext_heading(line, Some(underline), link_matcher, continuation_indent)?;
-    let emitted = convert_setext(&heading, line, underline)?;
-    is_atx_heading_line(&emitted, &ClassifyCtx::default()).then_some(emitted)
+    candidate.detect_verified_heading().is_some()
 }
 
 /// Marks both lines of every valid Setext heading: its text and its underline.

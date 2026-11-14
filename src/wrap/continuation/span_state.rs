@@ -17,29 +17,61 @@ use super::super::{
     tokenize::{parse_open_code_span, position_after_close, scan_continuation_span_state},
 };
 
-/// Locates the byte offset of a newly opened code span inside `continuation`.
+/// One continuation chunk, and where it begins in the pending buffer.
 ///
-/// When `existing_fence` is non-zero, the helper first advances past the
-/// matching close of the pre-existing span before searching for the new
-/// opener. This prevents `parse_open_code_span` from pairing the closer of
-/// the existing span with the opener of the new span, which would otherwise
-/// hide the close/reopen boundary.
+/// The two travel together everywhere below: a byte offset into a pending
+/// buffer means nothing without the text it indexes, and every helper here
+/// needs both. Bundling them keeps a later caller from pairing the offset of
+/// one chunk with the text of another, which would misplace a split boundary.
+#[derive(Clone, Copy)]
+struct ContinuationChunk<'a> {
+    /// The appended chunk's text.
+    text: &'a str,
+    /// This chunk's start offset within the surrounding pending buffer.
+    offset: usize,
+}
+
+impl<'a> ContinuationChunk<'a> {
+    /// Pairs a chunk's text with its offset in the pending buffer.
+    fn new(text: &'a str, offset: usize) -> Self { Self { text, offset } }
+
+    /// Converts an offset within this chunk to an absolute pending-buffer offset.
+    ///
+    /// Returns `None` on overflow rather than wrapping, because a wrapped
+    /// offset would name a plausible but wrong slice of the buffer.
+    fn absolute(self, within: usize) -> Option<usize> { self.offset.checked_add(within) }
+}
+
+/// The fence the pending buffer holds, and the fence a chunk opens in its place.
 ///
-/// Returns the absolute byte offset of the new opener (relative to the
-/// surrounding pending buffer, derived from `continuation_offset`) and the
-/// fence length of the new opener.
-fn split_reopen_span(
-    continuation: &str,
-    continuation_offset: usize,
-    existing_fence: usize,
-) -> Option<(usize, usize)> {
-    let search_offset = if existing_fence > 0 {
-        position_after_close(continuation, 0, existing_fence)?
+/// A zero `raw` means the buffer held no open span, which every scan below
+/// reads as "nothing to pair this opener against".
+#[derive(Clone, Copy)]
+struct OpenSpan {
+    /// Backtick-run length already held by the pending buffer.
+    raw: usize,
+    /// Backtick-run length the chunk's new opener introduces.
+    new: usize,
+}
+
+/// Locates the byte offset of a newly opened code span inside the chunk.
+///
+/// When the held fence is non-zero, the helper first advances past the matching
+/// close of the pre-existing span before searching for the new opener. This
+/// prevents `parse_open_code_span` from pairing the closer of the existing span
+/// with the opener of the new span, which would otherwise hide the
+/// close/reopen boundary.
+///
+/// Returns the absolute byte offset of the new opener, relative to the
+/// surrounding pending buffer, and the fence length of the new opener.
+fn split_reopen_span(chunk: ContinuationChunk<'_>, held: usize) -> Option<(usize, usize)> {
+    let search_offset = if held > 0 {
+        position_after_close(chunk.text, 0, held)?
     } else {
         0
     };
 
-    let remainder = &continuation[search_offset..];
+    let remainder = &chunk.text[search_offset..];
     let (open_len, open_tail) = parse_open_code_span(remainder)?;
     if open_tail.is_empty() {
         return None;
@@ -47,8 +79,8 @@ fn split_reopen_span(
 
     let open_run_end = remainder.len().checked_sub(open_tail.len() + open_len)?;
     let in_continuation = search_offset.checked_add(open_run_end)?;
-    continuation_offset
-        .checked_add(in_continuation)
+    chunk
+        .absolute(in_continuation)
         .map(|split_at| (split_at, open_len))
 }
 
@@ -80,19 +112,21 @@ pub(super) fn update_span_state(
     continuation_offset: usize,
     pending: &mut PendingPrefix,
 ) -> SpanStateUpdate {
+    let chunk = ContinuationChunk::new(continuation, continuation_offset);
     let raw_fence = pending.open_fence_len.unwrap_or(0);
     match scan_continuation_span_state(continuation, raw_fence) {
         Some(new_fence) if new_fence > 0 => {
             record_open_span(
-                continuation,
-                continuation_offset,
-                raw_fence,
-                new_fence,
+                chunk,
+                OpenSpan {
+                    raw: raw_fence,
+                    new: new_fence,
+                },
                 pending,
             );
             SpanStateUpdate::StillOpen
         }
-        _ => resolve_closed_span(continuation, continuation_offset, raw_fence, pending),
+        _ => resolve_closed_span(chunk, raw_fence, pending),
     }
 }
 
@@ -101,23 +135,17 @@ pub(super) fn update_span_state(
 /// A chunk that closes the buffered span and opens another in the same chunk
 /// must be emitted verbatim: the two spans are separate source units, and
 /// reflowing across the boundary would join text that the source kept apart.
-fn record_open_span(
-    continuation: &str,
-    continuation_offset: usize,
-    raw_fence: usize,
-    new_fence: usize,
-    pending: &mut PendingPrefix,
-) {
-    if split_reopen_span(continuation, continuation_offset, raw_fence).is_some() {
+fn record_open_span(chunk: ContinuationChunk<'_>, span: OpenSpan, pending: &mut PendingPrefix) {
+    if split_reopen_span(chunk, span.raw).is_some() {
         trace!(
             continuation_mode = ?ContinuationMode::VerbatimFlush,
-            raw_fence,
-            new_fence_len = new_fence,
+            raw_fence = span.raw,
+            new_fence_len = span.new,
             "selected verbatim continuation mode for split reopen"
         );
         pending.continuation_mode = ContinuationMode::VerbatimFlush;
     }
-    pending.open_fence_len = Some(new_fence);
+    pending.open_fence_len = Some(span.new);
 }
 
 /// Resolves the buffer once the chunk leaves no open span behind.
@@ -126,18 +154,15 @@ fn record_open_span(
 /// is ready to flush, in verbatim mode when payload follows the closer and in
 /// normalize mode otherwise.
 fn resolve_closed_span(
-    continuation: &str,
-    continuation_offset: usize,
+    chunk: ContinuationChunk<'_>,
     raw_fence: usize,
     pending: &mut PendingPrefix,
 ) -> SpanStateUpdate {
     pending.open_fence_len = None;
-    if let Some((split_at, new_len)) =
-        split_reopen_span(continuation, continuation_offset, raw_fence)
-    {
+    if let Some((split_at, new_len)) = split_reopen_span(chunk, raw_fence) {
         return SpanStateUpdate::ClosedAndReopened { split_at, new_len };
     }
-    let continuation_mode = flush_mode_for(continuation, raw_fence);
+    let continuation_mode = flush_mode_for(chunk.text, raw_fence);
     trace!(
         ?continuation_mode,
         raw_fence, "selected continuation mode before flushing pending prefix"

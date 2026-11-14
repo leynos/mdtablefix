@@ -170,46 +170,73 @@ fn classify_fragment(text: &str) -> FragmentKind {
     if is_whitespace_token(text) {
         return FragmentKind::Whitespace;
     }
-    let trimmed = text.trim_end_matches(is_trailing_punct);
-    let without_opening = trimmed.trim_start_matches(is_opening_punct);
+    let spellings = FragmentSpellings::of(text);
     if contains_link_with_trailing_punctuation(text) {
         FragmentKind::Link
-    } else if is_any_code_shape(text, trimmed, without_opening) {
+    } else if spellings.is_any_code_shape() {
         FragmentKind::InlineCode
-    } else if is_any_footnote_shape(text, trimmed) {
+    } else if spellings.is_any_footnote_shape() {
         FragmentKind::FootnoteRef
-    } else if is_any_bracketed_reference(text, trimmed) {
+    } else if spellings.is_any_bracketed_reference() {
         FragmentKind::BracketedRef
     } else {
         FragmentKind::Plain
     }
 }
 
-/// Reports whether any of the fragment's spellings is an inline code span.
+/// The three spellings of one rendered fragment that classification probes.
 ///
-/// A span may carry trailing punctuation, opening punctuation, or an
-/// inflectional suffix after its closing fence, so each spelling is tested
-/// rather than only the original text.
-fn is_any_code_shape(text: &str, trimmed: &str, without_opening: &str) -> bool {
-    is_inline_code_token(text)
-        || is_inline_code_token(trimmed)
-        || is_inline_code_token(without_opening)
-        || has_inline_code_structure(text)
+/// A wrapped token keeps its trailing sentence punctuation, its opening
+/// bracket or quote, and sometimes an inflectional suffix after a closing
+/// fence. Every probe below therefore tests the same three strings, and each
+/// probe must test the same ones: deriving them once, here, is what keeps the
+/// code, footnote, and bracketed-reference probes from drifting apart.
+struct FragmentSpellings<'a> {
+    /// The fragment exactly as rendered.
+    text: &'a str,
+    /// `text` with trailing punctuation removed.
+    trimmed: &'a str,
+    /// `trimmed` with leading opening punctuation removed.
+    without_opening: &'a str,
 }
 
-/// Reports whether the fragment is a footnote reference in any spelling.
-///
-/// The `word.[^label]` suffix shape is included because the wrapper keeps that
-/// punctuation attached to the marker.
-fn is_any_footnote_shape(text: &str, trimmed: &str) -> bool {
-    looks_like_footnote_ref(text, &mut None)
-        || looks_like_footnote_ref(trimmed, &mut None)
-        || ends_with_footnote_ref(text, &mut None)
-}
+impl<'a> FragmentSpellings<'a> {
+    /// Derives the three spellings from the rendered fragment.
+    fn of(text: &'a str) -> Self {
+        let trimmed = text.trim_end_matches(is_trailing_punct);
+        Self {
+            text,
+            trimmed,
+            without_opening: trimmed.trim_start_matches(is_opening_punct),
+        }
+    }
 
-/// Reports whether the fragment is a bare bracketed reference in any spelling.
-fn is_any_bracketed_reference(text: &str, trimmed: &str) -> bool {
-    looks_like_bracketed_reference(text) || looks_like_bracketed_reference(trimmed)
+    /// Reports whether any spelling is an inline code span.
+    ///
+    /// A span may carry trailing punctuation, opening punctuation, or an
+    /// inflectional suffix after its closing fence, so each spelling is tested
+    /// rather than only the original text.
+    fn is_any_code_shape(&self) -> bool {
+        is_inline_code_token(self.text)
+            || is_inline_code_token(self.trimmed)
+            || is_inline_code_token(self.without_opening)
+            || has_inline_code_structure(self.text)
+    }
+
+    /// Reports whether the fragment is a footnote reference in any spelling.
+    ///
+    /// The `word.[^label]` suffix shape is included because the wrapper keeps
+    /// that punctuation attached to the marker.
+    fn is_any_footnote_shape(&self) -> bool {
+        looks_like_footnote_ref(self.text, &mut None)
+            || looks_like_footnote_ref(self.trimmed, &mut None)
+            || ends_with_footnote_ref(self.text, &mut None)
+    }
+
+    /// Reports whether the fragment is a bare bracketed reference in any spelling.
+    fn is_any_bracketed_reference(&self) -> bool {
+        looks_like_bracketed_reference(self.text) || looks_like_bracketed_reference(self.trimmed)
+    }
 }
 #[cfg(test)]
 #[path = "fragment_tests.rs"]
