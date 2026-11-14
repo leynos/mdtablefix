@@ -2360,3 +2360,11 @@ is the honest form recorded in the ledger.
   in 9m46s. The failure is in the footnote-continuation wrap path, the family
   of #504/#505/#507, not in the fence kernel this branch touches; fixing it is
   outside #486 and is left recorded here rather than absorbed into this change.
+- 2026-11-14 (final): Main advanced once more while the checks above ran, to
+  `26c094d` (#548, guard protected ellipsis span access). Replayed the fifteen
+  commits onto it over the boundary `1fd13de`; `range-diff` reports all fifteen
+  unchanged and `HEAD..origin/main` is empty. `#548` changes only
+  `src/ellipsis/protected.rs`, which this branch never touches, so there was no
+  conflict and nothing to adopt. The two rebase records are kept as separate
+  entries rather than rewritten into one, because each names the head it was
+  audited against.
