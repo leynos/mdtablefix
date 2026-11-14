@@ -1,10 +1,11 @@
 //! Mutation-gate attribution checks with the existing scoped fake runner.
 //!
 //! A negative control is only evidence if it fails for its stated reason, so
-//! each gate is exercised in five shapes: the intended rejection, a run that
-//! verifies, a runner that never reaches the verifier, a failure attributed to
-//! an unrelated module, and a failure that is not a failed postcondition at
-//! all. Only the first may pass.
+//! the contract gates are exercised in six shapes: the intended rejection, a
+//! run that verifies, a runner that never reaches the verifier, a failure
+//! attributed to an unrelated module, a failure that is not a failed
+//! postcondition at all, and a postcondition failure with no source location.
+//! Only the first may pass.
 
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
@@ -126,6 +127,12 @@ fn mutation_gate_requires_output_classification_failure(
     Some("Verifier failed with an error that was not a failed postcondition"),
     None
 )]
+#[case::unlocated_postcondition(
+    "emission_unlocated_failure",
+    false,
+    Some("Verifier reported an error with no source location"),
+    None
+)]
 fn emission_mutation_gate_requires_an_attributed_rejection(
     #[case] mode: &'static str,
     #[case] should_succeed: bool,
@@ -172,6 +179,12 @@ fn emission_mutation_gate_requires_an_attributed_rejection(
     "blank_tag_precondition_failure",
     false,
     Some("Verifier failed with an error that was not a failed postcondition"),
+    None
+)]
+#[case::unlocated_postcondition(
+    "blank_tag_unlocated_failure",
+    false,
+    Some("Verifier reported an error with no source location"),
     None
 )]
 fn blank_tag_mutation_gate_requires_an_attributed_rejection(

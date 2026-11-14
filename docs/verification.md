@@ -346,8 +346,10 @@ They are evidence, not proof, and none should be cited as a theorem.
   `scripts/verus-mutation-mirror.sh`: every reported error must be a failed
   postcondition located in a named module, and the summary line must show the
   verifier ran to completion. An unrelated obligation, a parse error, or a
-  runner failure therefore cannot pass as a detection. Both gates are exercised
-  in five shapes by `tests/support/verus_mutation_checks.rs`, where only the
+  runner failure therefore cannot pass as a detection. Each error must also
+  carry exactly one source location, so a location-free postcondition failure
+  cannot leave the module check looking complete. Both gates are exercised in
+  six shapes by `tests/support/verus_mutation_checks.rs`, where only the
   intended rejection may succeed.
 
 ## Remaining external contracts
@@ -424,12 +426,18 @@ unexamined assumption.
   ^(\s*)(`{3,}|~{3,})([^\r\n]*)$
   ```
 
-  while the kernel's `trailing_blank` is deliberately ASCII-only. The second
-  never decides literal-ness: it supplies delimiter spelling and attachment
-  eligibility, and its result is gated through the planner and
-  `compression_changes_region`. No reachable case was found where it alone
-  changes which lines are literal, but the asymmetry deserves a targeted test
-  before the claim is relied on.
+  while the `trailing_blank` flag it derives (`src/wrap/fence.rs:115`) is
+  deliberately ASCII-only. That flag is load-bearing rather than decorative:
+  the kernel's single closing rule requires it
+  (`src/wrap/fence/kernel.rs:109`), so a same-marker line carrying an info
+  string is literal content and not a closer. The recognizer therefore does not
+  decide literal-ness by itself — it supplies delimiter spelling, depth, and
+  `trailing_blank`, and `closes_fence` consumes them — but its features do
+  reach that decision, which is why the two grammars have to agree about which
+  lines they accept as delimiters at all. No reachable case was found where the
+  disagreement changes which lines are literal, and the planner gates what it
+  attaches through `compression_changes_region`, but the asymmetry deserves a
+  targeted test before the claim is relied on.
 
 The ledger check invoked by `make lint` rejects a claim whose executable
 function name does not occur in `src/`.

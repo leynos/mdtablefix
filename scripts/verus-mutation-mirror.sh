@@ -102,6 +102,12 @@ show_mutation_output() {
 # comparing basenames keeps the caller independent of the gate's `mktemp`
 # directory, whose name changes on every run.
 #
+# Each error must have exactly one such location, and the located errors must
+# account for the whole count. A parser that only prints the locations it finds
+# would let an extra, location-free postcondition failure through: it would be
+# counted as explained, contribute no location, and leave the module check
+# looking complete.
+#
 # Usage: `assert_failures_attributed OUTPUT_FILE EXPECTED_FILE...`
 assert_failures_attributed() {
     local output_file="$1"
@@ -132,7 +138,15 @@ assert_failures_attributed() {
     local expected=" $* "
     local location
     local base
+    local located=0
+    # One line per counted error: its location, or `!` when the next `error:`
+    # header — or the end of the transcript — arrived before any location did.
     while IFS= read -r location; do
+        located=$((located + 1))
+        if [ "${location}" = "!" ]; then
+            echo "Verifier reported an error with no source location" >&2
+            return 1
+        fi
         base="${location##*/}"
         case "${expected}" in
             *" ${base} "*) ;;
@@ -142,12 +156,21 @@ assert_failures_attributed() {
                 ;;
         esac
     done < <(awk '
-        /^error:/ { pending = 1; next }
+        /^error:/ && !/^error: aborting due to / {
+            if (pending) print "!"
+            pending = 1
+            next
+        }
         pending && /-->/ {
             sub(/^[[:space:]]*-->[[:space:]]*/, "")
             sub(/:[0-9]+:[0-9]+$/, "")
             print
             pending = 0
         }
+        END { if (pending) print "!" }
     ' "${output_file}")
+    if [ "${located}" -ne "${total}" ]; then
+        echo "Verifier reported ${total} errors but ${located} source locations" >&2
+        return 1
+    fi
 }
