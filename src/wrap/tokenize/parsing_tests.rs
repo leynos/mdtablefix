@@ -168,6 +168,27 @@ fn parse_link_url_returns_none_for_invalid_start_offsets(#[case] text: &str, #[c
     assert_eq!(parse_link_url(text, start), None);
 }
 
+#[rstest]
+#[case::valid_bang("![alt](url)", 0, '!', true)]
+#[case::bang_without_bracket("! not", 0, '!', false)]
+#[case::not_a_bang("x[alt](url)", 0, 'x', false)]
+// Offset 1 is inside the two-byte `å`, so it is not a character boundary. The
+// unchecked form advanced to byte 2, which is exactly the `[`, and returned
+// true for a position that cannot occur in real tokenization.
+#[case::mid_character("å[", 1, '!', false)]
+#[case::past_end("å[", "å[".len() + 1, '!', false)]
+// `usize::MAX` panicked on the unchecked addition in debug and wrapped to 0 in
+// release, where the wrapped index was then probed as if it were valid.
+#[case::max_offset("![alt](url)", usize::MAX, '!', false)]
+fn looks_like_image_start_rejects_invalid_offsets(
+    #[case] text: &str,
+    #[case] idx: usize,
+    #[case] ch: char,
+    #[case] expected: bool,
+) {
+    assert_eq!(looks_like_image_start(text, idx, ch), expected);
+}
+
 proptest! {
     #[test]
     fn parse_link_or_image_preserves_footnote_references_with_escaped_brackets(
@@ -360,5 +381,23 @@ mod tracing_tests {
         assert!(logs_contain("reason="));
         assert!(logs_contain("unterminated_bracket"));
     }
+}
+
+#[rstest]
+#[case::mid_character("åx", 1)]
+#[case::past_end("abc", 4)]
+#[case::max_offset("abc", usize::MAX)]
+fn parse_link_or_image_falls_back_for_invalid_start_offsets(
+    #[case] text: &str,
+    #[case] start: usize,
+) {
+    // The helper returns a (token, next_index) pair rather than an Option, so
+    // its fallback is the empty token and the end of the text: `collect_range`
+    // rejects the range and `fallback_single_char` cannot find a scalar at an
+    // invalid offset, so `next` is `text.len()`.
+    assert_eq!(
+        parse_link_or_image(text, start),
+        (String::new(), text.len())
+    );
 }
 // weave: run 'weave explain src/wrap/tokenize/parsing_tests.rs' for per-hunk detail, 'weave check' to verify your resolution

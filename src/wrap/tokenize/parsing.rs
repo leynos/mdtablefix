@@ -188,17 +188,30 @@ fn fallback_single_char(text: &str, start: usize) -> (String, usize) {
 
 /// Determine whether the character at `idx` begins a Markdown image literal.
 ///
+/// Returns `false` for an offset that is not a character boundary. Without that
+/// rejection an interior offset can land, by accident, on a byte that happens
+/// to sit just past the multibyte scalar before the `[`, and the caller would
+/// then treat a malformed position as a valid image start.
+///
+/// `checked_add` is required rather than `idx + ch.len_utf8()`: the unchecked
+/// addition panics in debug and wraps to `0` in release when `idx` is near
+/// `usize::MAX`, and the wrapped index would then be probed as if valid.
+///
 /// # Examples
 ///
 /// ```rust,ignore
 /// assert!(looks_like_image_start("![alt](url)", 0, '!'));
 /// assert!(!looks_like_image_start("! not", 0, '!'));
+/// // Offset 1 is inside the two-byte `å`, so it is not a boundary.
+/// assert!(!looks_like_image_start("å[", 1, '!'));
 /// ```
 pub(super) fn looks_like_image_start(text: &str, idx: usize, ch: char) -> bool {
-    if ch != '!' {
+    if ch != '!' || !text.is_char_boundary(idx) {
         return false;
     }
-    let after_bang = idx + ch.len_utf8();
+    let Some(after_bang) = idx.checked_add(ch.len_utf8()) else {
+        return false;
+    };
     text.get(after_bang..)
         .is_some_and(|rest| rest.starts_with('['))
 }

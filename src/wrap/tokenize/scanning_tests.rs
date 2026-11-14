@@ -41,6 +41,52 @@ fn collect_range_cases(
     assert_eq!(collect_range(text, start, end), expected);
 }
 
+// `idx` is the position of the byte being classified; the run of backslashes is
+// counted backwards from `idx`. So each case below points at the byte after the
+// run, which is where the caller asks the question.
+#[rstest]
+#[case::escaped_by_one(br"\[", 1, true)]
+#[case::escaped_by_three(br"\\\[", 3, true)]
+#[case::escaped_by_four(br"\\\\[", 4, false)]
+#[case::no_preceding_backslash(b"x[", 1, false)]
+#[case::at_start(b"[", 0, false)]
+// `idx == len` is a valid position, not a reject: the run is counted back from
+// the end of the slice, so these two pin that the final byte is classified
+// rather than skipped. The answers differ between them, so neither is vacuous.
+#[case::at_end_counts_trailing_run(b"ab\\", 3, true)]
+#[case::at_end_even_trailing_run(b"ab\\\\", 4, false)]
+// Past the end the loop never runs, the count stays zero, and the answer is
+// `false` rather than a panic or a wrapped read.
+#[case::past_end(b"abc", 99, false)]
+#[case::max_offset(b"abc", usize::MAX, false)]
+fn has_odd_backslash_escape_bytes_cases(
+    #[case] bytes: &[u8],
+    #[case] idx: usize,
+    #[case] expected: bool,
+) {
+    assert_eq!(has_odd_backslash_escape_bytes(bytes, idx), expected);
+}
+
+// `idx` is the index of the `[`, so the previous byte is the `!` being tested.
+#[rstest]
+#[case::escaped_bang(br"\![", 2, true)]
+#[case::unescaped_bang(b"![", 1, false)]
+#[case::not_a_bang(b"?[", 1, false)]
+#[case::no_preceding_byte(b"[", 0, false)]
+// `idx == len` is the valid end boundary; the byte before it is the `!` being
+// tested, so an escape still reaches it. One case true, one false.
+#[case::at_end_escaped_bang(b"\\!", 2, true)]
+#[case::at_end_unescaped_bang(b"x!", 2, false)]
+#[case::past_end(b"abc", 99, false)]
+#[case::max_offset(b"abc", usize::MAX, false)]
+fn bracket_follows_escaped_bang_cases(
+    #[case] bytes: &[u8],
+    #[case] idx: usize,
+    #[case] expected: bool,
+) {
+    assert_eq!(bracket_follows_escaped_bang(bytes, idx), expected);
+}
+
 #[rstest]
 #[case("`VarGuard`s alive", "`VarGuard`".len(), "`VarGuard`s".len())]
 #[case("`class`'s field", "`class`".len(), "`class`'s".len())]
@@ -165,13 +211,58 @@ proptest! {
         prop_assert_eq!(collect_range(&text, start, end), expected);
     }
 
+    /// A reversed range is rejected, not silently reordered.
+    ///
+    /// This is deliberately a separate property from
+    /// `collect_range_matches_character_subsequence`, which orders its two
+    /// slots before use and therefore can never generate `start > end`. Keeping
+    /// the ordering there and the reversal here means each property makes one
+    /// claim, and the reversed case is actually exercised.
+    #[test]
+    fn collect_range_returns_empty_for_reversed_ranges(
+        chars in prop::collection::vec(any::<char>(), 1..32),
+        start_seed in 0usize..32,
+        end_seed in 0usize..32,
+    ) {
+        let text = chars.iter().copied().collect::<String>();
+        let boundaries = text
+            .char_indices()
+            .map(|(offset, _)| offset)
+            .chain(std::iter::once(text.len()))
+            .collect::<Vec<_>>();
+        let first_slot = start_seed.min(chars.len());
+        let second_slot = end_seed.min(chars.len());
+        // Order in the opposite direction: `start` is the larger slot.
+        let reversed_start_slot = first_slot.max(second_slot);
+        let reversed_end_slot = first_slot.min(second_slot);
+        let start = boundaries
+            .get(reversed_start_slot)
+            .copied()
+            .expect("character start slot should have a byte boundary");
+        let end = boundaries
+            .get(reversed_end_slot)
+            .copied()
+            .expect("character end slot should have a byte boundary");
+        prop_assume!(start > end);
+
+        prop_assert_eq!(collect_range(&text, start, end), "");
+    }
+
     /// Invalid offsets inside a multibyte scalar use each helper's fallback.
+    ///
+    /// `scalar` is generated rather than fixed, so the interior offset is not
+    /// always `1`: a three- or four-byte scalar puts it at 2 or 3, which is
+    /// what catches a helper that merely happens to reject byte 1.
     #[test]
     fn invalid_multibyte_offset_uses_helper_specific_fallbacks(
+        scalar in prop_oneof![
+            Just('å'), Just('é'), Just('€'), Just('界'), Just('😀'), any::<char>(),
+        ],
         tail in prop::collection::vec(any::<char>(), 0..32),
     ) {
-        let text = format!("å{}", tail.into_iter().collect::<String>());
-        let inside_scalar = 'å'.len_utf8() - 1; // Offset 1 is inside this scalar.
+        prop_assume!(scalar.len_utf8() > 1);
+        let text = format!("{scalar}{}", tail.into_iter().collect::<String>());
+        let inside_scalar = scalar.len_utf8() - 1;
 
         prop_assert_eq!(scan_while(&text, inside_scalar, char::is_alphabetic), inside_scalar);
         prop_assert_eq!(scan_code_suffix_end(&text, inside_scalar), inside_scalar);
@@ -180,6 +271,10 @@ proptest! {
 
     /// `position_after_close` must always terminate (no infinite loop) and must
     /// never return an offset beyond `text.len()`.
+    ///
+    /// `search_start` is deliberately passed **unclamped**. An earlier version
+    /// clamped it to `text.len()` before the call, which meant the past-end
+    /// offsets this property is meant to cover were never actually reachable.
     #[test]
     fn position_after_close_always_terminates_within_bounds(
         text in prop::collection::vec(
@@ -187,10 +282,9 @@ proptest! {
             0..=200,
         )
             .prop_map(|chars| chars.into_iter().collect::<String>()),
-        search_start in 0usize..=800usize,
+        search_start in 0usize..=(1usize << 20),
         fence_len in 1usize..=4usize,
     ) {
-        let search_start = search_start.min(text.len());
         let result = position_after_close(&text, search_start, fence_len);
         if let Some(end) = result {
             prop_assert!(
@@ -198,20 +292,49 @@ proptest! {
                 "returned offset {end} exceeds text length {}",
                 text.len()
             );
+            // A match can never precede the search start, but a start past the
+            // end can never produce a match at all, so this still has to hold.
             prop_assert!(
-                end >= search_start,
+                end >= search_start.min(text.len()),
                 "returned offset {end} precedes search_start {search_start}"
             );
         }
     }
 
-    /// A fence-length of zero must always return `None`.
+    /// An invalid search start must return `None`, never panic.
+    ///
+    /// Covers an offset inside a multibyte scalar and offsets past the end,
+    /// including `usize::MAX`, all passed without clamping.
+    ///
+    /// The interior offset is derived from a genuine multibyte scalar placed
+    /// before the fence. An ASCII byte has no interior offset — `len_utf8() - 1`
+    /// is `0`, which is the valid start of the text — so deriving it from a
+    /// backtick would silently assert nothing.
+    #[test]
+    fn position_after_close_rejects_invalid_search_offsets(
+        scalar in prop_oneof![Just('å'), Just('é'), Just('€'), Just('界'), any::<char>()],
+        tail in prop::collection::vec(any::<char>(), 0..24),
+        overshoot in 1usize..=4096usize,
+        fence_len in 1usize..=4usize,
+    ) {
+        prop_assume!(scalar.len_utf8() > 1);
+        let text = format!("{scalar}{}", tail.into_iter().collect::<String>());
+        let inside_scalar = scalar.len_utf8() - 1;
+
+        prop_assert_eq!(position_after_close(&text, inside_scalar, fence_len), None);
+        prop_assert_eq!(
+            position_after_close(&text, text.len() + overshoot, fence_len),
+            None
+        );
+        prop_assert_eq!(position_after_close(&text, usize::MAX, fence_len), None);
+    }
+
+    /// A fence-length of zero must always return `None`, for any search start.
     #[test]
     fn position_after_close_zero_fence_len_returns_none(
         text in "[ -~]{0,100}",
-        search_start in 0usize..=100usize,
+        search_start in 0usize..=(1usize << 20),
     ) {
-        let search_start = search_start.min(text.len());
         prop_assert_eq!(position_after_close(&text, search_start, 0), None);
     }
 
@@ -227,10 +350,11 @@ proptest! {
             0..=200,
         )
             .prop_map(|chars| chars.into_iter().collect::<String>()),
-        search_start in 0usize..=800usize,
+        search_start in 0usize..=(1usize << 20),
         fence_len in 1usize..=4usize,
     ) {
-        let search_start = search_start.min(text.len());
+        // Passed unclamped so past-end starts are exercised here too; a start
+        // beyond the text simply yields no match and the body is skipped.
         if let Some(end) = position_after_close(&text, search_start, fence_len) {
             let bytes = text.as_bytes();
             prop_assert!(end <= text.len());
