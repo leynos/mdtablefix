@@ -78,6 +78,19 @@ verification results:: 229 verified, 2 errors
 OUT
             exit 1
             ;;
+        emission_coded_error)
+            cat <<'OUT'
+error: postcondition not satisfied
+  --> verus/.emission-mutation-fake/plan_spec_emission.rs:71:13
+
+error[E0425]: cannot find value `spec_delimiter_reads_back` in this scope
+  --> verus/.emission-mutation-fake/plan_spec_emission.rs:74:9
+error: aborting due to 2 previous errors
+
+verification results:: 228 verified, 2 errors
+OUT
+            exit 1
+            ;;
     esac
 fi
 if [[ "$*" == *".blank-tag-mutation-"* ]]; then
@@ -127,6 +140,19 @@ error: postcondition not satisfied
 error: postcondition not satisfied
 
 verification results:: 229 verified, 2 errors
+OUT
+            exit 1
+            ;;
+        blank_tag_coded_error)
+            cat <<'OUT'
+error: postcondition not satisfied
+  --> verus/.blank-tag-mutation-fake/plan_spec_witnesses.rs:293:9
+
+error[E0425]: cannot find value `spec_delimiter_reads_back` in this scope
+  --> verus/.blank-tag-mutation-fake/plan_spec_witnesses.rs:296:9
+error: aborting due to 2 previous errors
+
+verification results:: 228 verified, 2 errors
 OUT
             exit 1
             ;;

@@ -116,9 +116,12 @@ assert_failures_attributed() {
     local explained
     # `error: aborting due to N previous errors` is the compiler's summary of
     # the Verus errors above it, not one of them, so it must not be counted as
-    # an unexplained failure.
+    # an unexplained failure. An `error[E0425]:` header counts, though: a coded
+    # error is a compile failure, not a verification one, and counting only the
+    # bare form let a transcript pass that carried both the intended
+    # postcondition failure and an unrelated compiler error beside it.
     read -r total explained < <(awk '
-        /^error:/ && !/^error: aborting due to / {
+        /^error(\[[^]]*\])?:/ && !/^error: aborting due to / {
             total++
             if (index($0, "error: postcondition not satisfied") == 1) {
                 explained++
@@ -141,6 +144,8 @@ assert_failures_attributed() {
     local located=0
     # One line per counted error: its location, or `!` when the next `error:`
     # header — or the end of the transcript — arrived before any location did.
+    # This pass counts the same headers the first one does, coded errors
+    # included, so the two counts can be compared.
     while IFS= read -r location; do
         located=$((located + 1))
         if [ "${location}" = "!" ]; then
@@ -156,7 +161,7 @@ assert_failures_attributed() {
                 ;;
         esac
     done < <(awk '
-        /^error:/ && !/^error: aborting due to / {
+        /^error(\[[^]]*\])?:/ && !/^error: aborting due to / {
             if (pending) print "!"
             pending = 1
             next

@@ -2276,3 +2276,15 @@ is the honest form recorded in the ledger.
   would have made a prepared offline environment try to install the solver.
   CodeScene independently failed the advisory argument-count gate on
   `assert_gate_verdict`, so its six parameters are now a `GateExpectation`.
+- 2026-11-14: A fourth review round found the last gap in the attribution
+  helper. `assert_failures_attributed` counted only `^error:` headers, so an
+  `error[E0425]:` compiler failure in the same transcript was invisible: the
+  intended postcondition errors could be attributed and the gate would pass
+  while the run had not compiled. Both awk passes now match
+  `^error(\[[^]]*\])?:` — still excluding the `aborting due to` summary — so a
+  coded header is counted and, because it is never a failed postcondition,
+  rejects the run. Both contract gate tables gained a seventh shape in which
+  the intended rejection is accompanied by a coded error, and the fixture gained
+  `emission_coded_error` and `blank_tag_coded_error` to produce it.
+  `docs/verification.md` and `docs/developers-guide.md` now state the coded
+  header rule and the seven shapes.

@@ -133,10 +133,12 @@ add a stricter rule through `assert_failures_attributed`: every reported error
 must be a failed postcondition located in a named module, and the summary line
 must show the verifier ran to completion, and every error must carry exactly
 one source location, so a location-free failure cannot slip past the module
-check. Both are exercised in six shapes by
-`tests/support/verus_mutation_checks.rs` — the intended rejection, an
-unexpected success, a runner failure, an unrelated module, a non-postcondition
-error, and an unlocated postcondition error — and only the first may succeed.
+check, and a coded header such as `error[E0425]:` counts as an error so that a
+compiler failure cannot ride along with the intended rejection. Both are
+exercised in seven shapes by `tests/support/verus_mutation_checks.rs` — the
+intended rejection, an unexpected success, a runner failure, an unrelated
+module, a non-postcondition error, an unlocated postcondition error, and a
+coded compiler error — and only the first may succeed.
 
 Every gate needs a self-contained proof tree, because it supplies a mutated
 copy of a production module and must not touch the working tree. That tree is
