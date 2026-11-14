@@ -12,19 +12,38 @@ use rstest::rstest;
 
 use super::{fake_prover_tools, make_command, runner_log};
 
-/// The verdict a gate gave a fake run, checked against what it should give.
+/// One fake run's shape and the verdict its gate must give it.
 ///
-/// The gates share this shape because they answer the same question, and they
-/// differ only in the target, the injected mode, the diagnostic that names the
-/// reason for a rejection, and the mirror directory their transcript names.
-fn assert_gate_verdict(
-    target: &str,
+/// The gates answer the same question and differ only in these six values, so
+/// the expectation travels as one record. Passing them positionally made every
+/// call site a place to transpose two adjacent strings, which would have
+/// swapped a diagnostic for a confirmation without failing to compile.
+#[derive(Clone, Copy)]
+struct GateExpectation {
+    /// The Makefile target under test.
+    target: &'static str,
+    /// The fake runner's mode, which selects the injected transcript.
     mode: &'static str,
+    /// Whether this shape is a detection the gate should accept.
     should_succeed: bool,
-    expected_diagnostic: Option<&str>,
-    expected_confirmation: Option<&str>,
-    proof_dir_marker: &str,
-) -> Result<()> {
+    /// Text the gate's standard error must contain on a refusal.
+    diagnostic: Option<&'static str>,
+    /// Text the gate's standard output must contain on the intended rejection.
+    confirmation: Option<&'static str>,
+    /// The mirror directory the handoff check looks for in the runner's log.
+    proof_dir_marker: &'static str,
+}
+
+/// The verdict a gate gave a fake run, checked against what it should give.
+fn assert_gate_verdict(expectation: GateExpectation) -> Result<()> {
+    let GateExpectation {
+        target,
+        mode,
+        should_succeed,
+        diagnostic: expected_diagnostic,
+        confirmation: expected_confirmation,
+        proof_dir_marker,
+    } = expectation;
     let runner = fake_prover_tools(mode)?;
     let output = make_command(target, &runner)
         .output()
@@ -136,17 +155,17 @@ fn mutation_gate_requires_output_classification_failure(
 fn emission_mutation_gate_requires_an_attributed_rejection(
     #[case] mode: &'static str,
     #[case] should_succeed: bool,
-    #[case] expected_diagnostic: Option<&str>,
-    #[case] expected_confirmation: Option<&str>,
+    #[case] expected_diagnostic: Option<&'static str>,
+    #[case] expected_confirmation: Option<&'static str>,
 ) -> Result<()> {
-    assert_gate_verdict(
-        "verus-emission-mutation",
+    assert_gate_verdict(GateExpectation {
+        target: "verus-emission-mutation",
         mode,
         should_succeed,
-        expected_diagnostic,
-        expected_confirmation,
-        ".emission-mutation-",
-    )
+        diagnostic: expected_diagnostic,
+        confirmation: expected_confirmation,
+        proof_dir_marker: ".emission-mutation-",
+    })
 }
 
 /// The blank-tag gate rejects only a failure it can attribute.
@@ -190,15 +209,15 @@ fn emission_mutation_gate_requires_an_attributed_rejection(
 fn blank_tag_mutation_gate_requires_an_attributed_rejection(
     #[case] mode: &'static str,
     #[case] should_succeed: bool,
-    #[case] expected_diagnostic: Option<&str>,
-    #[case] expected_confirmation: Option<&str>,
+    #[case] expected_diagnostic: Option<&'static str>,
+    #[case] expected_confirmation: Option<&'static str>,
 ) -> Result<()> {
-    assert_gate_verdict(
-        "verus-blank-tag-mutation",
+    assert_gate_verdict(GateExpectation {
+        target: "verus-blank-tag-mutation",
         mode,
         should_succeed,
-        expected_diagnostic,
-        expected_confirmation,
-        ".blank-tag-mutation-",
-    )
+        diagnostic: expected_diagnostic,
+        confirmation: expected_confirmation,
+        proof_dir_marker: ".blank-tag-mutation-",
+    })
 }
