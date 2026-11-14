@@ -193,4 +193,16 @@ mod tests {
             Cow::Borrowed(original) if std::ptr::eq(original, text)
         ));
     }
+
+    /// An offset outside every span is neither a leading nor a trailing synthetic
+    /// space, so it trims nothing. The function still takes its owned path because
+    /// `has_potential_synthetic_edge_space` is satisfied textually, so the borrow
+    /// state is deliberately not asserted: the contract under test is unchanged
+    /// text and no panic on a non-matching offset.
+    #[test]
+    fn keeps_text_when_synthetic_offset_matches_no_span_edge() {
+        let text = "` foo `";
+
+        assert_eq!(trim_code_span_edge_spaces(text, &[0]), "` foo `");
+    }
 }

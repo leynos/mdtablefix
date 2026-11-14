@@ -11,6 +11,8 @@ mod common;
 
 #[path = "wrap_unit/code_spans.rs"]
 mod code_spans;
+#[path = "wrap_unit/code_spans_seams.rs"]
+mod code_spans_seams;
 #[path = "wrap_unit/date_strategies.rs"]
 mod date_strategies;
 #[path = "wrap_unit/dates.rs"]

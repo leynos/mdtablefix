@@ -19,6 +19,7 @@ fn overlong_span_rejects_invalid_text_ranges(#[case] start: usize, #[case] end: 
 
 #[rstest::rstest]
 #[case::mid_scalar(2)]
+#[case::at_end(5)]
 #[case::past_end(6)]
 fn split_span_rejects_invalid_authored_boundaries(#[case] boundary: usize) {
     let text = "`éx`";
@@ -42,6 +43,29 @@ fn preserve_span_boundaries_keeps_original_lines_for_invalid_ranges(
         joined,
         OverlongSpan {
             range: start..end,
+            pieces: vec!["replacement".to_owned()],
+        },
+        20,
+    );
+
+    assert_eq!(lines, original_lines);
+}
+
+/// A range that *is* a valid slice of `joined` but whose text appears in no
+/// line exercises the `span_lookup_miss` branch, which is distinct from the
+/// invalid-range early return covered above. The span must be absent from the
+/// wrapped lines to reach it.
+#[test]
+fn preserve_span_boundaries_keeps_lines_when_span_is_absent() {
+    let joined = "`present`";
+    let mut lines = vec!["before `other` after".to_owned()];
+    let original_lines = lines.clone();
+
+    preserve_span_boundaries(
+        &mut lines,
+        joined,
+        OverlongSpan {
+            range: 0..joined.len(),
             pieces: vec!["replacement".to_owned()],
         },
         20,
