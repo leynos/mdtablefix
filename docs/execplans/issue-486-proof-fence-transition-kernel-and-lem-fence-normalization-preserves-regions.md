@@ -2250,3 +2250,29 @@ is the honest form recorded in the ledger.
   theorem takes the rendered spelling of the emitted run as a hypothesis, so
   deleting the blank-tag disjunct breaks the positive witness rather than any
   major theorem, and both new gates are scoped accordingly.
+- 2026-11-14: Rebased onto `origin/main` at `e40c2ed` (the nightly toolchain and
+  Verus `0.2026.09.06.8dea4a2`), replaying four commits. Two conflicts, both
+  semantic rather than textual: `tests/support/fake_prover_tools.rs` kept this
+  branch's `RUNNER_SCRIPT` extraction while taking main's `VERUS_Z3_PATH` log
+  line and `--no-install-missing` argument, and `docs/developers-guide.md` kept
+  the five-target workflow list while taking main's `install-prover-tools`
+  sentence. The merge driver left a banner comment in the Rust file and a stale
+  wrap in the guide; `check-fmt` caught both. On the rebased tree `make verus`
+  reports 229 verified, 0 errors, and all five mutation gates plus the selftest
+  pass, so the proofs survive the toolchain move. Draft PR
+  [#717](https://github.com/leynos/mdtablefix/pull/717) opened with
+  `Closes #486`.
+
+  Three rounds of `coderabbit review --agent` then ran against the branch. The
+  first found that `assert_failures_attributed` compared no located count
+  against the error count, so a location-free postcondition failure could ride
+  along with the expected ones; the parser now emits one line per error and
+  requires the counts to match, and both gates gained an unlocated-failure
+  shape. It also asked for the 120-line shell fixture to move out of
+  `tests/support/fake_prover_tools.rs`, which it has, and corrected a false
+  claim that the second fence recogniser never decides literal-ness — its
+  `trailing_blank` is required by `closes_fence`. The second round found the
+  new gates depended on `verus-install` rather than `check-prover-tools`, which
+  would have made a prepared offline environment try to install the solver.
+  CodeScene independently failed the advisory argument-count gate on
+  `assert_gate_verdict`, so its six parameters are now a `GateExpectation`.
