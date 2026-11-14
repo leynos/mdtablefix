@@ -82,43 +82,84 @@ pub(super) fn update_span_state(
 ) -> SpanStateUpdate {
     let raw_fence = pending.open_fence_len.unwrap_or(0);
     match scan_continuation_span_state(continuation, raw_fence) {
-        Some(n) if n > 0 => {
-            let has_split_reopen =
-                split_reopen_span(continuation, continuation_offset, raw_fence).is_some();
-            if has_split_reopen {
-                trace!(
-                    continuation_mode = ?ContinuationMode::VerbatimFlush,
-                    raw_fence,
-                    new_fence_len = n,
-                    "selected verbatim continuation mode for split reopen"
-                );
-                pending.continuation_mode = ContinuationMode::VerbatimFlush;
-            }
-            pending.open_fence_len = Some(n);
+        Some(new_fence) if new_fence > 0 => {
+            record_open_span(
+                continuation,
+                continuation_offset,
+                raw_fence,
+                new_fence,
+                pending,
+            );
             SpanStateUpdate::StillOpen
         }
-        _ => {
-            pending.open_fence_len = None;
-            if let Some((split_at, new_len)) =
-                split_reopen_span(continuation, continuation_offset, raw_fence)
-            {
-                return SpanStateUpdate::ClosedAndReopened { split_at, new_len };
-            }
-            let continuation_mode =
-                if raw_fence > 0 && closing_fence_tail_starts_word(continuation, raw_fence) {
-                    ContinuationMode::VerbatimFlush
-                } else {
-                    ContinuationMode::Normalize
-                };
-            trace!(
-                ?continuation_mode,
-                raw_fence, "selected continuation mode before flushing pending prefix"
-            );
-            pending.continuation_mode = continuation_mode;
-            SpanStateUpdate::Flush
-        }
+        _ => resolve_closed_span(continuation, continuation_offset, raw_fence, pending),
     }
 }
+
+/// Records that the span is still open, noting a close-then-reopen chunk.
+///
+/// A chunk that closes the buffered span and opens another in the same chunk
+/// must be emitted verbatim: the two spans are separate source units, and
+/// reflowing across the boundary would join text that the source kept apart.
+fn record_open_span(
+    continuation: &str,
+    continuation_offset: usize,
+    raw_fence: usize,
+    new_fence: usize,
+    pending: &mut PendingPrefix,
+) {
+    if split_reopen_span(continuation, continuation_offset, raw_fence).is_some() {
+        trace!(
+            continuation_mode = ?ContinuationMode::VerbatimFlush,
+            raw_fence,
+            new_fence_len = new_fence,
+            "selected verbatim continuation mode for split reopen"
+        );
+        pending.continuation_mode = ContinuationMode::VerbatimFlush;
+    }
+    pending.open_fence_len = Some(new_fence);
+}
+
+/// Resolves the buffer once the chunk leaves no open span behind.
+///
+/// A chunk that reopens a span is split at that boundary; otherwise the buffer
+/// is ready to flush, in verbatim mode when payload follows the closer and in
+/// normalize mode otherwise.
+fn resolve_closed_span(
+    continuation: &str,
+    continuation_offset: usize,
+    raw_fence: usize,
+    pending: &mut PendingPrefix,
+) -> SpanStateUpdate {
+    pending.open_fence_len = None;
+    if let Some((split_at, new_len)) =
+        split_reopen_span(continuation, continuation_offset, raw_fence)
+    {
+        return SpanStateUpdate::ClosedAndReopened { split_at, new_len };
+    }
+    let continuation_mode = flush_mode_for(continuation, raw_fence);
+    trace!(
+        ?continuation_mode,
+        raw_fence, "selected continuation mode before flushing pending prefix"
+    );
+    pending.continuation_mode = continuation_mode;
+    SpanStateUpdate::Flush
+}
+
+/// Selects the flush mode for a chunk that leaves no span open.
+///
+/// Reflowing a word joined directly to the closer could introduce a space and
+/// change code-span payload, so that boundary selects the verbatim path. The
+/// guard keeps a chunk with no pending span in normalize mode, where the tail
+/// test has nothing to compare against.
+fn flush_mode_for(continuation: &str, raw_fence: usize) -> ContinuationMode {
+    if raw_fence > 0 && closing_fence_tail_starts_word(continuation, raw_fence) {
+        ContinuationMode::VerbatimFlush
+    } else {
+        ContinuationMode::Normalize
+    }
+}
+
 /// Detect payload immediately after a closing fence that requires verbatim use.
 ///
 /// Reflowing a word joined directly to the closer could introduce a space and

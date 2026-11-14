@@ -12,7 +12,6 @@
 use std::borrow::Cow;
 
 use tracing::trace;
-use unicode_width::UnicodeWidthStr;
 
 use super::{
     paragraph::{
@@ -25,14 +24,21 @@ use super::{
         pending_prefix_for_next_segment,
     },
     tokenize,
-    tokenize::{parse_open_code_span, position_after_close, scan_continuation_span_state},
+    tokenize::{parse_open_code_span, scan_continuation_span_state},
 };
 
+mod spacing;
 mod span_state;
 
-// The span-state transition is exercised through this module's tests, which
-// reach it by `use super::*`; re-exporting here keeps that path while the
-// implementation lives in the sibling.
+// The join spacing and span-state helpers are exercised through this module's
+// tests, which reach them by `use super::*`; re-exporting keeps that path while
+// the implementations live in siblings.
+use spacing::{
+    join_pending_continuation,
+    leading_run_needs_space,
+    should_emit_verbatim_for_width,
+    suppresses_join_space_after_nested_open_paren,
+};
 use span_state::{SpanStateUpdate, update_span_state};
 
 #[cfg(test)]
@@ -52,31 +58,33 @@ pub(super) fn apply_continuation_chunk(
     writer: &mut ParagraphWriter<'_>,
     state: &mut ParagraphState,
 ) {
-    if should_emit_verbatim_for_width(text, state) {
-        if let Some(pending) = state.pending_prefix.as_mut()
-            && pending.continuation_mode == ContinuationMode::VerbatimFlush
-        {
-            trace!(
-                ?pending.continuation_mode,
-                "flushing original lines for width-triggered verbatim continuation"
-            );
-            pending.original_lines.push(source_line.to_owned());
-            writer.flush_paragraph(state);
-            return;
-        }
-
-        if let Some(mut pending) = state.pending_prefix.take() {
-            pending.original_lines.push(source_line.to_owned());
-            writer.emit_pending_with_verbatim_continuation(pending, source_line, hard_break);
-            return;
-        }
+    if should_emit_verbatim_for_width(text, state)
+        && emit_verbatim_for_width(source_line, hard_break, writer, state)
+    {
+        return;
     }
 
     let Some(pending) = state.pending_prefix.as_mut() else {
         return;
     };
     pending.original_lines.push(source_line.to_owned());
+    let Some(continuation_offset) = join_chunk_with_spacing(pending, text, hard_break) else {
+        return;
+    };
+    apply_span_update(text, continuation_offset, hard_break, writer, state);
+}
 
+/// Joins `text` onto the pending buffer and records the space it inserted.
+///
+/// Returns the byte offset at which `text` begins inside the joined buffer, or
+/// `None` when the chunk was empty and nothing was joined. That offset is
+/// computed before the join because the span scan reports positions within
+/// `text`, which the caller needs in buffer coordinates.
+fn join_chunk_with_spacing(
+    pending: &mut PendingPrefix,
+    text: &str,
+    hard_break: bool,
+) -> Option<usize> {
     let open_fence_len = pending.open_fence_len.unwrap_or(0);
     let should_join_verbatim = pending.continuation_mode == ContinuationMode::TightCodeSpan;
     // Compute the leading backtick run once; both the offset calculation and
@@ -99,33 +107,66 @@ pub(super) fn apply_continuation_chunk(
     if joined && let Some(offset) = inserted_space_offset {
         pending.synthetic_join_spaces.push(offset);
     }
+    // The source broke the line whether or not there was text to append, so the
+    // marker is recorded before the early return.
     if hard_break {
         pending.hard_break = true;
     }
-    if !joined {
-        return;
+    joined.then_some(continuation_offset)
+}
+
+/// Emits a width-triggered verbatim continuation, reporting whether it did.
+///
+/// Two buffered shapes take this path: a paragraph already marked for verbatim
+/// flushing, which keeps its buffer and flushes immediately, and any other
+/// pending prefix, which is taken out and emitted with the source line. Returns
+/// `false` when there is no pending prefix, so the caller falls through to the
+/// ordinary join.
+fn emit_verbatim_for_width(
+    source_line: &str,
+    hard_break: bool,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+) -> bool {
+    if let Some(pending) = state.pending_prefix.as_mut()
+        && pending.continuation_mode == ContinuationMode::VerbatimFlush
+    {
+        trace!(
+            ?pending.continuation_mode,
+            "flushing original lines for width-triggered verbatim continuation"
+        );
+        pending.original_lines.push(source_line.to_owned());
+        writer.flush_paragraph(state);
+        return true;
     }
+
+    let Some(mut pending) = state.pending_prefix.take() else {
+        return false;
+    };
+    pending.original_lines.push(source_line.to_owned());
+    writer.emit_pending_with_verbatim_continuation(pending, source_line, hard_break);
+    true
+}
+
+/// Reacts to what a joined chunk did to the deferred span.
+///
+/// A still-open span disables tail reflow only in verbatim mode, a reopened span
+/// always disables it and may flush through the split, and a resolved span
+/// flushes when the source broke the line or reflow was already disallowed.
+fn apply_span_update(
+    text: &str,
+    continuation_offset: usize,
+    hard_break: bool,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+) {
+    let Some(pending) = state.pending_prefix.as_mut() else {
+        return;
+    };
     match update_span_state(text, continuation_offset, pending) {
-        SpanStateUpdate::StillOpen => {
-            if pending.continuation_mode == ContinuationMode::VerbatimFlush {
-                pending.tail_reflow = TailReflow::Disallowed;
-                trace!(
-                    mode = ?pending.continuation_mode,
-                    boundary = "span_still_open",
-                    line_count = pending.original_lines.len(),
-                    "disabled pending-prefix tail reflow"
-                );
-            }
-        }
+        SpanStateUpdate::StillOpen => disable_reflow_if_verbatim(pending),
         SpanStateUpdate::ClosedAndReopened { split_at, new_len } => {
-            pending.tail_reflow = TailReflow::Disallowed;
-            trace!(
-                mode = ?pending.continuation_mode,
-                boundary = "span_reopened",
-                offset = split_at,
-                line_count = pending.original_lines.len(),
-                "disabled pending-prefix tail reflow after a reopened span"
-            );
+            disable_tail_reflow_after_reopen(pending);
             if reopen_pending_span(writer, pending, split_at, new_len) {
                 writer.flush_paragraph(state);
             }
@@ -136,6 +177,37 @@ pub(super) fn apply_continuation_chunk(
             }
         }
     }
+}
+
+/// Disables tail reflow for a still-open span in verbatim mode.
+///
+/// A span that stays open keeps deferring, which is only safe while the buffer
+/// is joined the way the source wrote it. Any other mode leaves reflow enabled,
+/// because the span is still there to close later.
+fn disable_reflow_if_verbatim(pending: &mut PendingPrefix) {
+    if pending.continuation_mode == ContinuationMode::VerbatimFlush {
+        pending.tail_reflow = TailReflow::Disallowed;
+        trace!(
+            mode = ?pending.continuation_mode,
+            boundary = "span_still_open",
+            line_count = pending.original_lines.len(),
+            "disabled pending-prefix tail reflow"
+        );
+    }
+}
+
+/// Disables tail reflow for a span that closed and reopened within one chunk.
+///
+/// The two spans are separate source units, so the buffer must be emitted
+/// verbatim rather than reflowed across the boundary.
+fn disable_tail_reflow_after_reopen(pending: &mut PendingPrefix) {
+    pending.tail_reflow = TailReflow::Disallowed;
+    trace!(
+        mode = ?pending.continuation_mode,
+        boundary = "span_reopened",
+        line_count = pending.original_lines.len(),
+        "disabled pending-prefix tail reflow after a reopened span"
+    );
 }
 
 /// Split a close-and-reopen chunk into an emitted span and a newly pending one.
@@ -184,127 +256,6 @@ fn reopen_pending_span(
     pending.open_fence_len.is_none()
 }
 
-/// Decide whether wrapping a continuation would exceed its protected width.
-///
-/// A verbatim flush preserves source text when an open code span cannot be
-/// safely reflowed without changing its displayed content or prefix alignment.
-fn should_emit_verbatim_for_width(text: &str, state: &ParagraphState) -> bool {
-    if text.is_empty() {
-        trace!(
-            emit = false,
-            reason = "empty_text",
-            "checked width-triggered verbatim continuation"
-        );
-        return false;
-    }
-
-    let Some(pending) = state.pending_prefix.as_ref() else {
-        trace!(
-            emit = false,
-            reason = "no_pending_prefix",
-            "checked width-triggered verbatim continuation"
-        );
-        return false;
-    };
-
-    let open_fence_len = pending.open_fence_len.unwrap_or(0);
-    let is_tight_code_span = pending.continuation_mode == ContinuationMode::TightCodeSpan;
-    let leading_run_len = tokenize::opening_fence_run_len(text.as_bytes(), text);
-    let needs_space = !is_tight_code_span
-        && leading_run_needs_space(leading_run_len, open_fence_len, false)
-        && !suppresses_join_space_after_nested_open_paren(&pending.rest, open_fence_len);
-    let projected_width = UnicodeWidthStr::width(pending.rest.as_str())
-        + usize::from(!pending.rest.is_empty() && needs_space)
-        + UnicodeWidthStr::width(text);
-
-    let closes_pending_span_at_end = position_after_close(text, 0, open_fence_len)
-        .is_some_and(|close_end| text[close_end..].trim().is_empty())
-        && matches!(
-            scan_continuation_span_state(text, open_fence_len),
-            None | Some(0)
-        );
-
-    let emit = closes_pending_span_at_end && projected_width > pending.rest_width;
-    trace!(
-        emit,
-        ?pending.continuation_mode,
-        projected_width,
-        rest_width = pending.rest_width,
-        closes_pending_span_at_end,
-        open_fence_len,
-        "checked width-triggered verbatim continuation"
-    );
-    emit
-}
-
-/// Join a soft-wrapped continuation onto pending prefixed text.
-///
-/// Never synthesizes closing fences. Only backticks present in the source may
-/// close an open span; when the continuation does not begin with the matching
-/// closing fence run, the caller passes `needs_space` so a single space is
-/// inserted before appending.
-fn join_pending_continuation(existing: &mut String, continuation: &str, needs_space: bool) -> bool {
-    if continuation.is_empty() {
-        return false;
-    }
-
-    if !existing.is_empty() && needs_space {
-        existing.push(' ');
-    }
-    existing.push_str(continuation);
-
-    true
-}
-
-/// Decide whether a continuation chunk needs a leading space when joined
-/// onto the pending buffer.
-///
-/// A space is required unless the chunk starts with a backtick run whose
-/// length matches the currently open fence (i.e. the chunk begins with the
-/// span's closing fence). `leading_run_len` is the precomputed length of any
-/// such opening backtick run, as returned by `opening_fence_run_len`.
-fn leading_run_needs_space(
-    leading_run_len: Option<usize>,
-    open_fence_len: usize,
-    opener_at_eol: bool,
-) -> bool {
-    match leading_run_len {
-        Some(run_len) => run_len != open_fence_len,
-        // CommonMark turns a source line ending into a space inside code
-        // spans. For an opener at EOL, preserving that space creates MD038
-        // failures, so keep the continuation tight instead.
-        None if open_fence_len > 0 && opener_at_eol => false,
-        None => true,
-    }
-}
-
-/// Preserve a tight join after nested parentheses inside an open code span.
-///
-/// The second unmatched opener proves that adding Markdown's usual join space
-/// would become payload rather than a separator between prose tokens.
-fn suppresses_join_space_after_nested_open_paren(existing: &str, open_fence_len: usize) -> bool {
-    if open_fence_len == 0 || !existing.ends_with('(') {
-        return false;
-    }
-
-    let Some((_, code_tail)) = parse_open_code_span(existing) else {
-        return false;
-    };
-
-    unclosed_parenthesis_depth(code_tail) > 1
-}
-
-/// Count unmatched opening parentheses without underflowing on extra closers.
-///
-/// Only nesting depth matters to continuation spacing, so a saturating scan
-/// intentionally treats a leading closer as already balanced.
-fn unclosed_parenthesis_depth(text: &str) -> usize {
-    text.chars().fold(0usize, |depth, ch| match ch {
-        '(' => depth.saturating_add(1),
-        ')' => depth.saturating_sub(1),
-        _ => depth,
-    })
-}
 /// Emit the closed prefix segment and advance the continuation indentation.
 ///
 /// A split span must retain the original prefix once, then use its continuation
