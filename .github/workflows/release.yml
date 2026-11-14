@@ -111,7 +111,7 @@ jobs:
       # No toolchain input: setup-rust installs the nightly that the tagged
       # tree's rust-toolchain.toml pins, and cross and Cargo build with it.
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@0606ca899ce2995a0c4bc78e660e80832e6e8855
+        uses: leynos/shared-actions/.github/actions/setup-rust@203eedc136c14c28041e92c06a929383807b3a3f
         with:
           install-binstall: false
           use-sccache: false
