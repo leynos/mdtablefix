@@ -164,8 +164,9 @@ fn wrap_buffer(buffer: &[InlineFragment], width: usize) -> Vec<Vec<InlineFragmen
 
 /// Splits a boundary link line from its trailing prose and flushes both.
 ///
-/// Returns whether the boundary split applied. The caller only invokes this
-/// once `grouped_lines` holds at least two lines.
+/// Returns whether the boundary split applied. A layout with fewer than two
+/// lines has no penultimate line to compare against, so the split is declined
+/// rather than indexed past the start of the slice.
 fn flush_boundary_link(
     grouped_lines: &[Vec<InlineFragment>],
     width: usize,
@@ -173,7 +174,9 @@ fn flush_boundary_link(
     buffer: &mut Vec<InlineFragment>,
 ) -> bool {
     let split = grouped_lines
-        .get(grouped_lines.len() - 2)
+        .len()
+        .checked_sub(2)
+        .and_then(|penultimate| grouped_lines.get(penultimate))
         .zip(grouped_lines.last())
         .and_then(|(previous, line)| split_boundary_link_line(previous, line, width));
     let Some((link_line, remaining_line)) = split else {
@@ -212,7 +215,10 @@ fn fit_fragment(
 
     buffer.push(fragment);
     let mut grouped_lines = wrap_buffer(buffer, width);
-    if grouped_lines.len() == 1 {
+    // A wrap of whitespace-only content can fold away entirely, leaving no
+    // line to split around. Treat that, like a single line, as "nothing to
+    // flush yet" rather than indexing past the start of the layout.
+    if grouped_lines.len() <= 1 {
         return;
     }
     if flush_boundary_link(&grouped_lines, width, lines, buffer) {

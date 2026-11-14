@@ -1044,6 +1044,13 @@ merges whitespace-only wrap lines into adjacent content, and the second pass
 rebalances a trailing atomic or plain fragment only when the destination line
 still fits within the configured width.
 
+Merging can fold a whitespace-only wrap away entirely, so the layout handed
+back to `fit_fragment` may hold no lines at all. Both the flush decision in
+`fit_fragment` and the penultimate-line lookup in `flush_boundary_link` treat
+"fewer than two lines" as nothing to flush; neither indexes the layout without
+first proving the index exists. Callers must not assume a wrap of non-empty
+input produces at least one line.
+
 ### Key types and functions
 
 Table: Key types and functions.
