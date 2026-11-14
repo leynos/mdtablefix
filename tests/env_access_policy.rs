@@ -142,7 +142,7 @@ mod policy_reader;
 #[path = "env_access_policy/shell_guard.rs"]
 mod shell_guard;
 
-use make_reader::{expand_make_variables, recipe_commands, target_prerequisites};
+use make_reader::{expand_make_variables, recipe_commands};
 use policy_reader::{
     clippy_lint_level,
     covers_package,
@@ -342,3 +342,48 @@ fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
 // directory, `tests/`.
 #[path = "env_access_policy/shell_flags.rs"]
 mod shell_flags;
+
+/// Return the prerequisites named on `target`'s declaration line.
+///
+/// A target may have no recipe of its own and still gate real work through its
+/// prerequisites, which is how `lint` composes `lint-clippy` and
+/// `lint-whitaker` into one public command. [`recipe_commands`] deliberately
+/// does not follow prerequisites, so a caller that needs to know what a
+/// prerequisite-only target composes has to read the declaration.
+///
+/// This lives here rather than in `tests/support/make_reader.rs` because it is
+/// the only reader no other contract crate needs. That module's own rule is
+/// that it carries no reader a consumer does not use, since the alternative is
+/// a dead-code suppression in a repository whose lint policy exists to keep
+/// those out.
+///
+/// Returns `None` when the target is not declared. A target declared more than
+/// once also yields `None`: GNU Make runs the later recipe, so no single
+/// declaration can be said to be the one in force.
+///
+/// ```text
+/// let makefile = "lint: lint-clippy lint-whitaker\nlint-clippy:\n\tcargo clippy\n";
+/// assert_eq!(
+///     target_prerequisites(makefile, "lint"),
+///     Some(vec!["lint-clippy".to_owned(), "lint-whitaker".to_owned()])
+/// );
+/// assert_eq!(target_prerequisites(makefile, "missing"), None);
+/// ```
+fn target_prerequisites(makefile: &str, target: &str) -> Option<Vec<String>> {
+    let prefix = format!("{target}:");
+    let declarations: Vec<&str> = makefile
+        .lines()
+        .filter(|line| line.starts_with(&prefix))
+        .collect();
+    let [declaration] = declarations.as_slice() else {
+        return None;
+    };
+    let rest = declaration[prefix.len()..].trim();
+    // A `##` comment marks the documented target list; it is not a prerequisite.
+    let rest = rest.split("##").next().unwrap_or_default();
+    Some(
+        rest.split_whitespace()
+            .map(str::to_owned)
+            .collect::<Vec<String>>(),
+    )
+}

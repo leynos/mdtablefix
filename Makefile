@@ -82,17 +82,19 @@ lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker suite with warnin
 lint-clippy: check-static-regexes check-verification-ledger ## Run Clippy with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
 
-# The Dylint driver inherits whatever RUSTFLAGS the caller exported, and a
-# value meant for the cargo build (the parallel frontend, the mold linker)
-# breaks the driver's own compile of the lint libraries. Clear the ones that
-# name a linker, a codegen backend or a target before invoking the suite.
-WHITAKER_CLEAN_ENV = env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS \
+# The Dylint driver compiles the lint libraries with its own cargo, so it must
+# not inherit the cargo-level overrides that name a codegen backend or a target
+# for *this* build: those break the driver's compile. `RUSTFLAGS` is the
+# exception. It carries the standard development flags, the build standard
+# requires every development target to restate it while keeping the caller's
+# own, and the driver accepts it. So it is assigned rather than cleared.
+WHITAKER_CLEAN_ENV = env -u CARGO_ENCODED_RUSTFLAGS \
 	-u CARGO_PROFILE_DEV_CODEGEN_BACKEND -u CARGO_BUILD_TARGET \
 	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER \
 	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS -u CFLAGS -u LDFLAGS
 
 lint-whitaker: ## Run the Whitaker Dylint suite with clean driver inputs and warnings denied
-	$(WHITAKER_CLEAN_ENV) DYLINT_RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --workspace --all-targets --all-features
+	$(WHITAKER_CLEAN_ENV) RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)" DYLINT_RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --workspace --all-targets --all-features
 
 
 typecheck: ## Type-check all targets and features
