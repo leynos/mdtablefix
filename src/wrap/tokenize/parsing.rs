@@ -27,17 +27,18 @@ pub(super) fn parse_link_or_image(
     let start = idx;
 
     if let Some(text_end) = find_footnote_end(text, idx, observer)
-        && (text_end == text.len() || !text[text_end..].starts_with('('))
+        && !text
+            .get(text_end..)
+            .is_some_and(|rest| rest.starts_with('('))
     {
-        if let Some(observer) = observer.as_deref_mut() {
-            observer.observe(Event::FootnoteReferenceParsed {
-                token: &text[start..text_end],
-            });
+        if let (Some(observer), Some(token)) = (observer.as_deref_mut(), text.get(start..text_end))
+        {
+            observer.observe(Event::FootnoteReferenceParsed { token });
         }
         return (collect_range(text, start, text_end), text_end);
     }
 
-    if text[idx..].starts_with('!') {
+    if text.get(idx..).is_some_and(|rest| rest.starts_with('!')) {
         idx += '!'.len_utf8();
     }
 
@@ -45,13 +46,16 @@ pub(super) fn parse_link_or_image(
         return fallback_single_char(text, start);
     };
 
-    if text_end < text.len() && text[text_end..].starts_with('(') {
+    if text
+        .get(text_end..)
+        .is_some_and(|rest| rest.starts_with('('))
+    {
         if let Some(url_end) = parse_link_url(text, text_end) {
-            if let Some(observer) = observer.as_deref_mut() {
-                observer.observe(Event::LinkOrImageParsed {
-                    token: &text[start..url_end],
-                    is_image: text[start..].starts_with('!'),
-                });
+            if let (Some(observer), Some(token)) =
+                (observer.as_deref_mut(), text.get(start..url_end))
+            {
+                let is_image = text.get(start..).is_some_and(|rest| rest.starts_with('!'));
+                observer.observe(Event::LinkOrImageParsed { token, is_image });
             }
             return (collect_range(text, start, url_end), url_end);
         }
@@ -60,8 +64,9 @@ pub(super) fn parse_link_or_image(
         return (collect_range(text, start, text.len()), text.len());
     }
 
-    if text_end < text.len()
-        && text[text_end..].starts_with('[')
+    if text
+        .get(text_end..)
+        .is_some_and(|rest| rest.starts_with('['))
         && let Some(reference_end) = parse_link_text(text, text_end)
     {
         return (collect_range(text, start, reference_end), reference_end);
@@ -75,7 +80,7 @@ pub(super) fn parse_link_or_image(
 /// Escaped characters do not terminate the label, and an unterminated label
 /// returns `None` so the tokenizer can fall back to ordinary character input.
 fn find_footnote_end(text: &str, idx: usize, observer: &mut ObserverHandle<'_>) -> Option<usize> {
-    if idx >= text.len() || !text[idx..].starts_with("[^") {
+    if !text.get(idx..).is_some_and(|rest| rest.starts_with("[^")) {
         if let Some(observer) = observer.as_deref_mut() {
             observer.observe(Event::FootnoteEndNotFound {
                 start: idx,
@@ -87,22 +92,23 @@ fn find_footnote_end(text: &str, idx: usize, observer: &mut ObserverHandle<'_>) 
 
     let mut cursor = idx + "[^".len();
     while cursor < text.len() {
-        let ch = text[cursor..].chars().next()?;
+        let ch = text.get(cursor..)?.chars().next()?;
         cursor += ch.len_utf8();
 
         if ch == '\\' {
-            if let Some(escaped) = text[cursor..].chars().next() {
+            if let Some(escaped) = text.get(cursor..)?.chars().next() {
                 cursor += escaped.len_utf8();
             }
             continue;
         }
 
         if ch == ']' {
-            if let Some(observer) = observer.as_deref_mut() {
+            if let (Some(observer), Some(token)) = (observer.as_deref_mut(), text.get(idx..cursor))
+            {
                 observer.observe(Event::FootnoteLabelRecognized {
                     start: idx,
                     end: cursor,
-                    token: &text[idx..cursor],
+                    token,
                 });
             }
             return Some(cursor);
@@ -123,13 +129,13 @@ fn find_footnote_end(text: &str, idx: usize, observer: &mut ObserverHandle<'_>) 
 /// The returned byte offset is exclusive and is suitable for continuing into
 /// an inline destination or reference label.
 pub(super) fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
-    if idx >= text.len() || !text[idx..].starts_with('[') {
+    if !text.get(idx..).is_some_and(|rest| rest.starts_with('[')) {
         return None;
     }
     let mut cursor = idx + '['.len_utf8();
     let mut preceding_backslash_is_odd = false;
     while cursor < text.len() {
-        let ch = text[cursor..].chars().next()?;
+        let ch = text.get(cursor..)?.chars().next()?;
         cursor += ch.len_utf8();
         if ch == ']' && !preceding_backslash_is_odd {
             return Some(cursor);
@@ -144,14 +150,14 @@ pub(super) fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
 /// Nested parentheses are counted, while escaped parentheses remain literal;
 /// an unbalanced destination returns `None` for the caller's fallback path.
 pub(super) fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
-    if idx >= text.len() || !text[idx..].starts_with('(') {
+    if !text.get(idx..).is_some_and(|rest| rest.starts_with('(')) {
         return None;
     }
     idx += '('.len_utf8();
     let mut depth = 1;
     let mut preceding_backslash_is_odd = false;
     while idx < text.len() {
-        let Some(ch) = text[idx..].chars().next() else {
+        let Some(ch) = text.get(idx..)?.chars().next() else {
             break;
         };
         let is_escaped = preceding_backslash_is_odd;
@@ -176,27 +182,41 @@ pub(super) fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
 /// Returning a character boundary keeps tokenisation valid even when the
 /// apparent construct begins with malformed or incomplete syntax.
 fn fallback_single_char(text: &str, start: usize) -> (String, usize) {
-    let next = text[start..]
-        .chars()
-        .next()
+    let next = text
+        .get(start..)
+        .and_then(|rest| rest.chars().next())
         .map_or(text.len(), |ch| start + ch.len_utf8());
     (collect_range(text, start, next), next)
 }
 
 /// Determine whether the character at `idx` begins a Markdown image literal.
 ///
+/// Returns `false` for an offset that is not a character boundary. Without that
+/// rejection an interior offset can land, by accident, on a byte that happens
+/// to sit just past the multibyte scalar before the `[`, and the caller would
+/// then treat a malformed position as a valid image start.
+///
+/// `checked_add` is required rather than `idx + ch.len_utf8()`: the unchecked
+/// addition panics in debug and wraps to `0` in release when `idx` is near
+/// `usize::MAX`, and the wrapped index would then be probed as if valid.
+///
 /// # Examples
 ///
 /// ```rust,ignore
 /// assert!(looks_like_image_start("![alt](url)", 0, '!'));
 /// assert!(!looks_like_image_start("! not", 0, '!'));
+/// // Offset 1 is inside the two-byte `å`, so it is not a boundary.
+/// assert!(!looks_like_image_start("å[", 1, '!'));
 /// ```
 pub(super) fn looks_like_image_start(text: &str, idx: usize, ch: char) -> bool {
-    if ch != '!' {
+    if ch != '!' || !text.is_char_boundary(idx) {
         return false;
     }
-    let after_bang = idx + ch.len_utf8();
-    after_bang <= text.len() && text[after_bang..].starts_with('[')
+    let Some(after_bang) = idx.checked_add(ch.len_utf8()) else {
+        return false;
+    };
+    text.get(after_bang..)
+        .is_some_and(|rest| rest.starts_with('['))
 }
 
 /// Determine whether a character is considered trailing punctuation.

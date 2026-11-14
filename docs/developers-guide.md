@@ -1161,6 +1161,33 @@ coupled to its opening bracket.
   a matching closing fence invisible. All tokenizer entry points that close
   code spans use `position_after_close` so they also reject candidate closers
   embedded in a longer backtick run.
+- **Tokenizer byte offsets.** Callers should pass UTF-8 byte offsets at
+  `char_indices()` boundaries. A `&str` is already valid UTF-8, so these checks
+  concern offsets into valid text. An offset inside a multibyte scalar is
+  rejected with helper-specific fallbacks: `scan_while` and
+  `scan_code_suffix_end` return the supplied start, `collect_range` returns an
+  empty string for a rejected range, and `position_after_close`,
+  `parse_link_text`, `parse_link_url` and `looks_like_image_start` return
+  `None` or `false`. These fallbacks differ by helper; they do not promise to
+  clamp offsets to `text.len()`.
+
+  `text.len()` is itself a valid boundary, even though `char_indices()` does
+  not yield it: it is the position just past the last scalar, and helpers that
+  scan forwards legitimately accept it. Offsets **strictly beyond**
+  `text.len()` are invalid and take the same fallback as an interior offset, so
+  `position_after_close` returns `None` rather than wrapping or panicking.
+  Reversed ranges (`start > end`) are also rejected, returning the empty
+  string, rather than being silently reordered.
+
+  `looks_like_image_start` additionally rejects any `idx` that is not a
+  character boundary and uses `checked_add` for the step past the `!`. The
+  unchecked form advanced to the byte after the multibyte scalar, which could
+  land exactly on `[` and report an image start from an impossible position; at
+  `usize::MAX` it panicked in debug and wrapped in release.
+
+  Tokenization itself is unchanged by these guards: every caller already
+  iterates character boundaries, so the rejections describe unreachable
+  positions rather than a behaviour change to reachable input.
 - **Width-aware inline-code carries.** `merge_whitespace_only_lines` receives
   the active wrap width from `wrap_preserving_code`. Before carrying a previous
   inline-code tail across a single-space wrap artefact, it must compute the

@@ -76,6 +76,7 @@ fn parse_link_or_image_handles_nested_parentheses() {
     assert_eq!(token, "![alt](path(a(b)c))");
     assert_eq!(idx, token.len());
 }
+
 #[test]
 fn parse_link_or_image_falls_back_on_malformed_input() {
     let text = "[broken";
@@ -83,6 +84,7 @@ fn parse_link_or_image_falls_back_on_malformed_input() {
     assert_eq!(token, "[");
     assert_eq!(idx, "[".len());
 }
+
 #[test]
 fn parse_link_or_image_handles_deeply_nested_parentheses() {
     let text = "[link](url(a(b(c)d)e)) tail";
@@ -342,3 +344,6 @@ mod tracing_tests {
         assert!(logs_contain("unterminated_bracket"));
     }
 }
+
+#[path = "parsing_offset_tests.rs"]
+mod offset_tests;
