@@ -2342,3 +2342,21 @@ is the honest form recorded in the ledger.
   adds no shared helper, no fixture under `tests/data`, and no change to
   `tests/common`, `scripts/`, the `Makefile`, or any Verus module, so nothing
   it introduced is available to or required by the work here.
+- 2026-11-14 (later still): The first continuous-integration run on the rebased
+  tip failed the Windows `atomic write contract` job in
+  `cli_formatting_reaches_a_fixed_point`, on a proptest seed the earlier heads
+  never sampled. **The drift is inherited, not introduced here.** This branch
+  differs from `1fd13de` in exactly one production file,
+  `src/fences/compress.rs` (nine added lines), and the failing document holds
+  no fence, so the binary that produced the failure is `main`'s in every
+  respect that input reaches. The minimal case is a footnote definition whose
+  continuation is already wrapped once: with
+  `--wrap --breaks --fences --footnotes --headings`, a first pass leaves
+  `… noambqo sp jni` on the definition line and a three-space-indented
+  `zwjesuk) ls aa …` beneath it, and a second pass splits `sp` from `jni` and
+  indents the new line six spaces under the definition, so it is a real
+  fixed-point violation rather than a test artifact. It reproduces identically
+  on Linux with the local binary, and re-running the job on a fresh seed passed
+  in 9m46s. The failure is in the footnote-continuation wrap path, the family
+  of #504/#505/#507, not in the fence kernel this branch touches; fixing it is
+  outside #486 and is left recorded here rather than absorbed into this change.
