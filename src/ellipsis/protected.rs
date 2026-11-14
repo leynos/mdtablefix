@@ -43,9 +43,10 @@ fn autolink_span(text: &str, start: usize) -> Option<Range<usize>> {
     if has_odd_backslash_escape_bytes(text.as_bytes(), start) {
         return None;
     }
-    let relative_end = text[start..].find('>')?;
+    let remaining = text.get(start..)?;
+    let relative_end = remaining.find('>')?;
     let end = start + relative_end + '>'.len_utf8();
-    let content = &text[start + '<'.len_utf8()..end - '>'.len_utf8()];
+    let content = remaining.get('<'.len_utf8()..relative_end)?;
     is_uri_autolink(content)
         .then_some(start..end)
         .or_else(|| is_email_autolink(content).then_some(start..end))
@@ -95,7 +96,13 @@ fn semantic_token_spans(text: &str) -> Vec<Range<usize>> {
     {
         if character.is_whitespace() {
             if let Some(start) = token_start.take()
-                && is_semantic_token(&text[start..index])
+                // Defensive, and unreachable by construction: both offsets come
+                // from `char_indices()`, so every range is a valid slice. Kept
+                // because the checked form costs nothing and a future change to
+                // how `start` is derived would otherwise reintroduce a panic.
+                // No test can distinguish this from direct slicing; the mutation
+                // is recorded in the pull request instead.
+                && text.get(start..index).is_some_and(is_semantic_token)
             {
                 spans.push(start..index);
             }
@@ -119,12 +126,13 @@ fn is_semantic_token(token: &str) -> bool {
     } else {
         None
     };
-    if let Some(kind) = kind
+    if let Some(token_kind) = kind
         && tracing::enabled!(Level::TRACE)
     {
         trace!(
             token_length = token.chars().count(),
-            kind, "protected semantic ellipsis token"
+            kind = token_kind,
+            "protected semantic ellipsis token"
         );
     }
     kind.is_some()
@@ -132,30 +140,26 @@ fn is_semantic_token(token: &str) -> bool {
 
 /// Checks URL prefixes after removing one layer of punctuation around links.
 fn looks_like_bare_url(token: &str) -> bool {
-    let token = token.trim_start_matches(is_wrapper);
-    is_uri_autolink(token) || token.starts_with("www.")
+    let unwrapped = token.trim_start_matches(is_wrapper);
+    is_uri_autolink(unwrapped) || unwrapped.starts_with("www.")
 }
 
 /// Checks Unix, home-relative, and Windows-drive path prefixes.
 fn looks_like_path(token: &str) -> bool {
-    let token = token.trim_start_matches(is_wrapper);
-    token.starts_with('/')
-        || token.starts_with("./")
-        || token.starts_with("../")
-        || token.starts_with("~/")
-        || is_windows_drive_path(token)
+    let unwrapped = token.trim_start_matches(is_wrapper);
+    unwrapped.starts_with('/')
+        || unwrapped.starts_with("./")
+        || unwrapped.starts_with("../")
+        || unwrapped.starts_with("~/")
+        || is_windows_drive_path(unwrapped)
 }
 
 /// Identifies punctuation that can wrap a URL or path without belonging to it.
-fn is_wrapper(character: char) -> bool { matches!(character, '(' | '[' | '{' | '"' | '\'') }
+const fn is_wrapper(character: char) -> bool { matches!(character, '(' | '[' | '{' | '"' | '\'') }
 
 /// Recognises a drive-letter path while requiring a slash after the colon.
 fn is_windows_drive_path(token: &str) -> bool {
-    let bytes = token.as_bytes();
-    bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && matches!(bytes[2], b'/' | b'\\')
+    matches!(token.as_bytes(), [drive, b':', b'/' | b'\\', ..] if drive.is_ascii_alphabetic())
 }
 
 /// Sorts and merges overlapping protected ranges before prose replacement walks them.
@@ -190,13 +194,59 @@ mod tests {
     #[case::url("see https://example.com/a...b", vec!["https://example.com/a...b"])]
     #[case::escaped_autolink(r"\<https://example.com/a...b>", Vec::<&str>::new())]
     #[case::path("open ./a/.../b next", vec!["./a/.../b"])]
+    #[case::unicode("é <https://example.com/a...b> 例", vec!["<https://example.com/a...b>"])]
+    #[case::windows_path(r"open C:\a\...\b next", vec![r"C:\a\...\b"])]
+    // `is_windows_drive_path` accepts either separator after the colon, so
+    // both arms need a case; the backslash case above leaves the forward-slash
+    // arm unexercised.
+    #[case::windows_forward_slash_path("open C:/a/.../b next", vec!["C:/a/.../b"])]
+    // The drive byte must be ASCII alphabetic; a digit in that position is
+    // not a drive and must not be protected.
+    #[case::non_alphabetic_drive("open 1:/a/.../b next", Vec::<&str>::new())]
     #[case::slash_prose("choose and/or... input/output...", Vec::<&str>::new())]
     fn finds_literal_spans(#[case] input: &str, #[case] expected: Vec<&str>) {
         let actual = literal_spans(input)
             .into_iter()
-            .map(|span| &input[span])
+            .map(|span| {
+                input
+                    .get(span)
+                    .expect("protected span must have valid UTF-8 boundaries")
+            })
             .collect::<Vec<_>>();
         assert_eq!(actual, expected);
+    }
+
+    /// Pins each arm of the drive-path slice pattern directly.
+    ///
+    /// The `finds_literal_spans` cases above reach this predicate through a
+    /// `...`-bearing token, so they cannot distinguish "the separator matched"
+    /// from "the token was protected for another reason". These assertions name
+    /// the four shapes the pattern has to separate.
+    #[rstest::rstest]
+    #[case::forward_slash("C:/a", true)]
+    #[case::back_slash(r"C:\a", true)]
+    #[case::non_alphabetic_drive("1:/a", false)]
+    #[case::missing_separator("C:a", false)]
+    #[case::too_short("C:", false)]
+    fn is_windows_drive_path_requires_a_letter_then_a_separator(
+        #[case] token: &str,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(is_windows_drive_path(token), expected);
+    }
+
+    /// Proves the checked start offset in `autolink_span` is load-bearing.
+    ///
+    /// `autolink_span` is reachable with an arbitrary byte offset, including
+    /// one that splits a multibyte scalar. Direct slicing (`&text[start..]`)
+    /// panics on that input; the checked form declines with `None`.
+    #[rstest::rstest]
+    #[case::mid_scalar(1)]
+    #[case::past_the_end("é<https://example.com/a...b>".len() + 1)]
+    fn autolink_span_declines_offsets_that_are_not_sliceable(#[case] start: usize) {
+        let text = "é<https://example.com/a...b>";
+
+        assert_eq!(autolink_span(text, start), None);
     }
 
     #[traced_test]
@@ -223,7 +273,7 @@ mod tests {
                 prop_assert!(input.is_char_boundary(span.end));
             }
             for pair in spans.windows(2) {
-                prop_assert!(pair[0].end < pair[1].start);
+                prop_assert!(matches!(pair, [previous, next] if previous.end < next.start));
             }
         }
     }
