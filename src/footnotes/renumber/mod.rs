@@ -38,7 +38,7 @@ use super::{
 };
 use crate::{
     textproc::{Token, push_original_token, tokenize_markdown},
-    wrap::FenceTracker,
+    wrap::{FenceObservation, FenceTracker},
 };
 
 /// Finds numeric GFM references that may need sequential renumbering.
@@ -189,10 +189,7 @@ fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
             || parse_definition(line).is_some()
             || is_definition_continuation(line)
     });
-    while start < end
-        && parse_definition(&lines[start]).is_none()
-        && !lines[start].trim().is_empty()
-    {
+    while start < end && is_non_definition_prefix_line(&lines[start]) {
         start += 1;
     }
     if start < end
@@ -204,6 +201,24 @@ fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
     } else {
         None
     }
+}
+
+/// Reports whether a line can be skipped before a definition block starts.
+///
+/// A blank line is spacing rather than a definition, and a line that is not a
+/// definition cannot begin the block, so both are skipped while the start cursor
+/// advances to the first definition.
+fn is_non_definition_prefix_line(line: &str) -> bool {
+    parse_definition(line).is_none() && !line.trim().is_empty()
+}
+
+/// Reports whether a line must be left exactly as written.
+///
+/// Fence delimiters and fenced content are literal code, and definition lines
+/// are rewritten by their own pass; rewriting either here would either corrupt
+/// code or duplicate work.
+fn is_literal_or_definition(fence: FenceObservation, is_definition_line: bool) -> bool {
+    fence.is_fence_marker || fence.is_in_fence || is_definition_line
 }
 
 /// Rewrite eligible prose references while preserving definitions and fences.
@@ -218,10 +233,7 @@ fn apply_mapping_to_lines(
     let mut fences = FenceTracker::default();
     for (idx, line) in lines.iter_mut().enumerate() {
         let fence = fences.observe_source_line(line);
-        if fence.is_fence_marker
-            || fence.is_in_fence
-            || is_definition_line.get(idx).copied().unwrap_or(false)
-        {
+        if is_literal_or_definition(fence, is_definition_line.get(idx).copied().unwrap_or(false)) {
             continue;
         }
         *line = rewrite_tokens(line, mapping);

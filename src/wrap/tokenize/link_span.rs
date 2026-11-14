@@ -11,16 +11,25 @@ use super::{
     scanning::{bracket_follows_escaped_bang, has_odd_backslash_escape_bytes},
 };
 
+/// Reports whether an unescaped link or image opener begins at `start`.
+///
+/// An offset past the end cannot open anything, an escaped delimiter is literal
+/// text, and a bracket immediately after an escaped bang belongs to the image
+/// syntax the author escaped rather than a link of its own.
+fn starts_link_or_image(bytes: &[u8], start: usize) -> bool {
+    if start >= bytes.len() || has_odd_backslash_escape_bytes(bytes, start) {
+        return false;
+    }
+    bytes[start] != b'[' || !bracket_follows_escaped_bang(bytes, start)
+}
+
 /// Return the complete source span for an inline link or image.
 ///
 /// Escaped openers and reference labels without an inline destination are not
 /// classified. The returned range borrows the caller's original source.
 pub(crate) fn link_or_image_span(text: &str, start: usize) -> Option<Range<usize>> {
     let bytes = text.as_bytes();
-    if start >= text.len()
-        || has_odd_backslash_escape_bytes(bytes, start)
-        || (bytes[start] == b'[' && bracket_follows_escaped_bang(bytes, start))
-    {
+    if !starts_link_or_image(bytes, start) {
         return None;
     }
 

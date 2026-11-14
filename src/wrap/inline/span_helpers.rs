@@ -192,21 +192,31 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
     observer: &mut ObserverHandle<'_>,
 ) -> bool {
     match (kind, next_token, following_token) {
-        (SpanKind::Link, Some(next), _)
-            if looks_like_link(next)
-                || is_inline_code_token(next)
-                || is_trailing_punctuation_token(next) =>
-        {
-            true
-        }
+        (SpanKind::Link, Some(next), _) if couples_after_link(next) => true,
         (SpanKind::Code, Some(next), _) if is_trailing_punctuation_token(next) => true,
         (SpanKind::General, Some(next), Some(following))
-            if looks_like_footnote_ref(next, observer) && following == ":" =>
+            if is_colon_footnote(next, following, observer) =>
         {
             true
         }
         _ => false,
     }
+}
+
+/// Reports whether a token stays attached to a completed link span.
+///
+/// A following link, inline code span, or trailing punctuation continues the
+/// same atomic unit; ordinary prose after the link starts a new one.
+fn couples_after_link(next: &str) -> bool {
+    looks_like_link(next) || is_inline_code_token(next) || is_trailing_punctuation_token(next)
+}
+
+/// Reports whether `following` is the colon that closes a footnote reference.
+///
+/// The reference probe takes the observer, so it runs only for the general kind
+/// where that shape decides coupling.
+fn is_colon_footnote(next: &str, following: &str, observer: &mut ObserverHandle<'_>) -> bool {
+    looks_like_footnote_ref(next, observer) && following == ":"
 }
 
 /// Merges a backtick-opened code span into one grouped span and updates

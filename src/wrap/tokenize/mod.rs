@@ -165,13 +165,18 @@ fn push_newline_if_needed<I>(
 ) where
     I: Iterator,
 {
-    // Emit a newline token if another line follows or when the
-    // original input ended with a trailing newline. The peek avoids
-    // prematurely allocating for the final newline when it isn't
-    // necessary.
-    if lines.peek().is_some() || (had_trailing_newline && lines.peek().is_none()) {
+    if needs_newline_token(lines.peek().is_some(), had_trailing_newline) {
         tokens.push(Token::Newline);
     }
+}
+
+/// Reports whether a newline token belongs at this boundary.
+///
+/// A break is emitted whenever another line follows, and also after the final
+/// line when the source ended with a newline, so the tokenizer preserves the
+/// distinction between paragraph separation and an absent final break.
+fn needs_newline_token(has_following_line: bool, had_trailing_newline: bool) -> bool {
+    has_following_line || had_trailing_newline
 }
 
 /// Tokenizes inline Markdown `source` into an ordered list of [`Token`] values.

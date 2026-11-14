@@ -102,6 +102,17 @@ fn inline_code_tail_carry_fits(
     projected_width <= width
 }
 
+/// Reports whether a lone space follows a line holding a single fragment.
+///
+/// A one-fragment line has no internal break to protect, so its trailing space
+/// carries forward with it rather than being merged backwards.
+fn is_lone_space_after_single_fragment(
+    line_is_single_space: bool,
+    previous_line_has_single_fragment: bool,
+) -> bool {
+    line_is_single_space && previous_line_has_single_fragment
+}
+
 /// Merges whitespace-only wrap artefacts into neighbouring content lines.
 ///
 /// `lines` is the provisional fragment layout from `wrap_first_fit`, and the
@@ -126,15 +137,18 @@ pub(super) fn merge_whitespace_only_lines(
                 .is_some_and(|previous_line| previous_line.len() == 1);
             let mut should_carry_whitespace = !line_is_single_space;
 
-            if line_is_single_space
+            // The carry helper mutates `merged` and `pending_whitespace`, so it
+            // must stay inside the guard that decides whether it is wanted.
+            let carried_inline_code_tail = line_is_single_space
                 && !next_starts_atomic
                 && inline_code_tail_carry_fits(&merged, next_content_line(lines, index), width)
-                && carry_previous_inline_code_tail(&mut merged, &mut pending_whitespace)
+                && carry_previous_inline_code_tail(&mut merged, &mut pending_whitespace);
+            if carried_inline_code_tail
+                || is_lone_space_after_single_fragment(
+                    line_is_single_space,
+                    previous_line_has_single_fragment,
+                )
             {
-                should_carry_whitespace = true;
-            }
-
-            if line_is_single_space && previous_line_has_single_fragment {
                 should_carry_whitespace = true;
             }
 

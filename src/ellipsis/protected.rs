@@ -119,23 +119,31 @@ fn is_semantic_token(token: &str) -> bool {
         return false;
     }
 
-    let kind = if looks_like_bare_url(token) {
-        Some("bare_url")
-    } else if looks_like_path(token) {
-        Some("filesystem_path")
-    } else {
-        None
+    let Some(token_kind) = semantic_token_kind(token) else {
+        return false;
     };
-    if let Some(token_kind) = kind
-        && tracing::enabled!(Level::TRACE)
-    {
+    if tracing::enabled!(Level::TRACE) {
         trace!(
             token_length = token.chars().count(),
             kind = token_kind,
             "protected semantic ellipsis token"
         );
     }
-    kind.is_some()
+    true
+}
+
+/// Names the protected semantic class a token belongs to, if any.
+///
+/// The class is a stable label rather than a formatted message so the trace
+/// event can be filtered by it without parsing prose.
+fn semantic_token_kind(token: &str) -> Option<&'static str> {
+    if looks_like_bare_url(token) {
+        Some("bare_url")
+    } else if looks_like_path(token) {
+        Some("filesystem_path")
+    } else {
+        None
+    }
 }
 
 /// Checks URL prefixes after removing one layer of punctuation around links.

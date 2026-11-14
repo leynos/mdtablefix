@@ -174,22 +174,42 @@ fn classify_fragment(text: &str) -> FragmentKind {
     let without_opening = trimmed.trim_start_matches(is_opening_punct);
     if contains_link_with_trailing_punctuation(text) {
         FragmentKind::Link
-    } else if is_inline_code_token(text)
-        || is_inline_code_token(trimmed)
-        || is_inline_code_token(without_opening)
-        || has_inline_code_structure(text)
-    {
+    } else if is_any_code_shape(text, trimmed, without_opening) {
         FragmentKind::InlineCode
-    } else if looks_like_footnote_ref(text, &mut None)
-        || looks_like_footnote_ref(trimmed, &mut None)
-        || ends_with_footnote_ref(text, &mut None)
-    {
+    } else if is_any_footnote_shape(text, trimmed) {
         FragmentKind::FootnoteRef
-    } else if looks_like_bracketed_reference(text) || looks_like_bracketed_reference(trimmed) {
+    } else if is_any_bracketed_reference(text, trimmed) {
         FragmentKind::BracketedRef
     } else {
         FragmentKind::Plain
     }
+}
+
+/// Reports whether any of the fragment's spellings is an inline code span.
+///
+/// A span may carry trailing punctuation, opening punctuation, or an
+/// inflectional suffix after its closing fence, so each spelling is tested
+/// rather than only the original text.
+fn is_any_code_shape(text: &str, trimmed: &str, without_opening: &str) -> bool {
+    is_inline_code_token(text)
+        || is_inline_code_token(trimmed)
+        || is_inline_code_token(without_opening)
+        || has_inline_code_structure(text)
+}
+
+/// Reports whether the fragment is a footnote reference in any spelling.
+///
+/// The `word.[^label]` suffix shape is included because the wrapper keeps that
+/// punctuation attached to the marker.
+fn is_any_footnote_shape(text: &str, trimmed: &str) -> bool {
+    looks_like_footnote_ref(text, &mut None)
+        || looks_like_footnote_ref(trimmed, &mut None)
+        || ends_with_footnote_ref(text, &mut None)
+}
+
+/// Reports whether the fragment is a bare bracketed reference in any spelling.
+fn is_any_bracketed_reference(text: &str, trimmed: &str) -> bool {
+    looks_like_bracketed_reference(text) || looks_like_bracketed_reference(trimmed)
 }
 #[cfg(test)]
 #[path = "fragment_tests.rs"]

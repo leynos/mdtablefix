@@ -11,10 +11,7 @@ pub(super) fn cell_is_semantically_empty(cell: &Cell) -> bool {
 pub(super) fn split_physical_rows(mut physical_rows: Vec<Vec<Cell>>) -> (Vec<Vec<Cell>>, bool) {
     let expected_width = infer_expected_width(&physical_rows);
     if let Some(first_row) = physical_rows.first_mut()
-        && expected_width < first_row.len()
-        && first_row[expected_width..]
-            .iter()
-            .all(cell_is_semantically_empty)
+        && has_only_empty_padding(first_row, expected_width)
     {
         first_row.truncate(expected_width);
     }
@@ -30,6 +27,15 @@ pub(super) fn split_physical_rows(mut physical_rows: Vec<Vec<Cell>>) -> (Vec<Vec
         }
     }
     (logical_rows, split_within_line)
+}
+
+/// Reports whether everything past `width` is padding that can be dropped.
+///
+/// The row must be wider than the logical width for a trim to mean anything,
+/// and the surplus cells must all be empty; a surplus carrying content means the
+/// row is genuinely wider and must keep its shape.
+fn has_only_empty_padding(row: &[Cell], width: usize) -> bool {
+    width < row.len() && row[width..].iter().all(cell_is_semantically_empty)
 }
 
 /// Infers the logical table width from the first row and concatenation markers.
@@ -76,18 +82,42 @@ fn has_embedded_separator_row(row: &[Cell], width: usize) -> bool {
 
 /// Reports whether a physical row encodes multiple logical rows.
 fn is_concatenated_rows(row: &[Cell], width: usize) -> bool {
-    if width == 0 || row.len() <= width || !(row.len() + 1).is_multiple_of(width + 1) {
+    if !has_concatenation_shape(row, width) {
         return false;
     }
     let row_count = (row.len() + 1) / (width + 1);
-    row_count >= 2
-        && (1..row_count).all(|index| cell_is_semantically_empty(&row[index * (width + 1) - 1]))
-        && (0..row_count).all(|index| {
-            let start = index * (width + 1);
-            row[start..start + width]
-                .iter()
-                .any(|cell| !cell_is_semantically_empty(cell))
-        })
+    separators_are_empty(row, width, row_count)
+        && every_logical_row_has_content(row, width, row_count)
+}
+
+/// Reports whether `row` could hold whole logical rows of `width` separated by
+/// one cell.
+///
+/// A candidate must be wider than one logical row and divide exactly into
+/// `width` cells plus a separator, so the layout describes complete rows rather
+/// than a row with trailing padding.
+fn has_concatenation_shape(row: &[Cell], width: usize) -> bool {
+    width > 0 && row.len() > width && (row.len() + 1).is_multiple_of(width + 1)
+}
+
+/// Reports whether every cell between logical rows is semantically empty.
+///
+/// Those cells are the separators that make one physical row read as several;
+/// content in one would mean the split is not a separator at all.
+fn separators_are_empty(row: &[Cell], width: usize, row_count: usize) -> bool {
+    (1..row_count).all(|index| cell_is_semantically_empty(&row[index * (width + 1) - 1]))
+}
+
+/// Reports whether each recovered logical row carries at least one non-empty cell.
+///
+/// A row of padding alone would fabricate a row the source never had.
+fn every_logical_row_has_content(row: &[Cell], width: usize, row_count: usize) -> bool {
+    (0..row_count).all(|index| {
+        let start = index * (width + 1);
+        row[start..start + width]
+            .iter()
+            .any(|cell| !cell_is_semantically_empty(cell))
+    })
 }
 
 /// Appends each logical row recovered from a concatenated physical row.

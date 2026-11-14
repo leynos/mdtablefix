@@ -19,16 +19,19 @@ use crate::{
         classify_line_with_body,
         is_atx_heading_line,
         is_setext_pair,
-        quote_depth,
     },
     wrap::{
         BlockKind,
+        FenceObservation,
         FenceTracker,
         LinkReferenceMatcher,
         classify_residual_block,
-        leading_indent,
     },
 };
+
+mod prefix;
+
+use prefix::{content_indent_width, has_unmatched_prefix, shared_prefix_len};
 
 /// The parsed input values and context admitted by the production pair detector.
 struct ParsedSetextHeading {
@@ -93,7 +96,7 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
     while idx < lines.len() {
         let line = &lines[idx];
         let fence = fence_tracker.observe_source_line(line);
-        let continuation_indent = if fence.is_fence_marker || fence.is_in_fence {
+        let continuation_indent = if is_fence_line(fence) {
             lists.reset();
             None
         } else {
@@ -101,16 +104,8 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
             lists.observe(line, &classified)
         };
 
-        if !fence.is_fence_marker
-            && !fence.is_in_fence
-            && detect_verified_setext_heading(
-                line,
-                lines.get(idx + 1).map(String::as_str),
-                link_matcher,
-                continuation_indent,
-            )
-            .is_some()
-        {
+        let next_line = lines.get(idx + 1).map(String::as_str);
+        if is_setext_text_line(fence, line, next_line, link_matcher, continuation_indent) {
             setext_text_lines[idx] = true;
             lists.reset();
             idx += 2;
@@ -120,6 +115,31 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
     }
 
     setext_text_lines
+}
+
+/// Reports whether a line lies on a fence boundary or inside fenced code.
+///
+/// Both halves are the tracker's answer for this line: a marker opens or closes
+/// a fence, and `is_in_fence` covers every line between markers. Either way the
+/// line is literal, so list continuation state must not be updated from it.
+fn is_fence_line(fence: FenceObservation) -> bool { fence.is_fence_marker || fence.is_in_fence }
+
+/// Reports whether `line` is the text half of a valid Setext heading pair.
+///
+/// Prose outside fences is tested against the same structural predicate as
+/// [`convert_setext_headings`]; a fenced line is literal content and can never
+/// form a heading.
+fn is_setext_text_line(
+    fence: FenceObservation,
+    line: &str,
+    next_line: Option<&str>,
+    link_matcher: LinkReferenceMatcher,
+    continuation_indent: Option<usize>,
+) -> bool {
+    if is_fence_line(fence) {
+        return false;
+    }
+    detect_verified_setext_heading(line, next_line, link_matcher, continuation_indent).is_some()
 }
 
 /// Constructs a Setext replacement and independently checks its runtime ATX class.
@@ -296,81 +316,6 @@ fn is_setext_text(
         Some(_) => false,
     }
 }
-/// Returns the indentation width of a line's content, in columns.
-///
-/// Blockquote markers are consumed before the width is measured, so
-/// `>     code` counts as four columns inside the quote. A marker may itself be
-/// reached through one to three leading spaces, and those spaces belong to the
-/// marker rather than to the content: `   >     code` is four columns too,
-/// which is what makes it an indented code block. Tabs count as four columns,
-/// matching [`crate::wrap::leading_indent`].
-fn content_indent_width(line: &str) -> usize {
-    let mut rest = line;
-
-    while let Some(tail) = strip_blockquote_marker(rest) {
-        rest = tail;
-    }
-
-    leading_indent(rest).0
-}
-
-/// Strips one blockquote marker, returning the content that follows it.
-///
-/// A marker is up to three leading spaces, a `>`, and the single space that may
-/// follow it. The wrapper's blockquote prefix accepts the same shape, so both
-/// passes measure the quoted content from the same point. Four or more leading
-/// spaces are an indented code block rather than a marker, and are left in
-/// place for the caller to measure.
-fn strip_blockquote_marker(line: &str) -> Option<&str> {
-    let indent = line.bytes().take_while(|byte| *byte == b' ').count().min(3);
-    let marker = line.get(indent..)?.strip_prefix('>')?;
-    Some(marker.strip_prefix(' ').unwrap_or(marker))
-}
-
-/// Returns the byte length of the character-aligned prefix shared by a heading and its underline.
-fn shared_prefix_len(a: &str, b: &str) -> usize {
-    let mut end = 0;
-    let mut iter_a = a.char_indices();
-    let mut iter_b = b.char_indices();
-
-    loop {
-        match (iter_a.next(), iter_b.next()) {
-            (Some((idx_a, ch_a)), Some((_, ch_b))) if ch_a == ch_b => {
-                end = idx_a + ch_a.len_utf8();
-            }
-            _ => break,
-        }
-    }
-
-    end
-}
-
-/// Determine whether a line and its underline disagree on blockquote depth.
-///
-/// Setext headings must remain within one quote level. Up to three spaces of
-/// indentation may differ between the text and underline; the classifier
-/// independently rejects indented code.
-fn has_unmatched_prefix(line: &str, underline: &str) -> bool {
-    let line_prefix = prefix_of_indent_or_quote(line);
-    let underline_prefix = prefix_of_indent_or_quote(underline);
-    let line_depth = quote_depth(&line[..line_prefix]);
-    let underline_depth = quote_depth(&underline[..underline_prefix]);
-    line_depth != underline_depth
-}
-
-/// Returns the byte length of leading indentation and blockquote markers.
-fn prefix_of_indent_or_quote(text: &str) -> usize {
-    let mut last = 0;
-    for (idx, ch) in text.char_indices() {
-        if ch.is_whitespace() || ch == '>' {
-            last = idx + ch.len_utf8();
-            continue;
-        }
-        break;
-    }
-    last
-}
-
 /// Builds an ATX heading while retaining the source indentation or blockquote prefix.
 ///
 /// The structural conversion decision and emitted ATX class are checked
