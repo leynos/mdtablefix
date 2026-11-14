@@ -280,6 +280,50 @@ proptest! {
         );
     }
 
+    /// When the prose cannot sit beside the preserved piece, it is wrapped
+    /// independently — and every line it produces must still respect the width
+    /// limit.
+    ///
+    /// The no-panic and content properties say nothing about line length, so
+    /// without this the independent-wrap path could emit an overlong line and
+    /// still pass. The width is constructed so the join is declined while every
+    /// token remains breakable, which is exactly the precondition under which
+    /// the limit is a real obligation rather than an impossible one.
+    #[test]
+    fn reattach_prose_respects_width_when_it_wraps_independently(
+        (existing, prose, width) in non_fitting_reattachment(),
+        is_leading in any::<bool>(),
+    ) {
+        // Pin the precondition rather than trusting the generator: if the join
+        // could have fitted, this property would silently be testing the exact
+        // path it claims to exclude.
+        prop_assert!(
+            UnicodeWidthStr::width(existing.as_str())
+                + UnicodeWidthStr::width(prose.as_str())
+                > width,
+            "{:?} plus {:?} fits in width {}, so the independent-wrap path is not reached",
+            existing,
+            prose,
+            width,
+        );
+
+        let mut lines = vec![existing.clone()];
+        let edge = if is_leading { ProseEdge::Leading } else { ProseEdge::Trailing };
+
+        reattach_prose(&mut lines, &prose, width, edge);
+
+        for line in &lines {
+            prop_assert!(
+                UnicodeWidthStr::width(line.as_str()) <= width,
+                "reattaching {:?} at width {} produced overlong line {:?} in {:?}",
+                prose,
+                width,
+                line,
+                lines,
+            );
+        }
+    }
+
     /// When the prose does fit beside the preserved piece, the join is exact:
     /// the edge line becomes the concatenation and nothing is reflowed.
     ///
@@ -311,6 +355,23 @@ fn prose_fragment() -> impl Strategy<Value = String> {
         proptest::collection::vec(prop_oneof![Just('a'), Just('é'), Just(' ')], 0..9),
     )
         .prop_map(|(first, body)| std::iter::once(first).chain(body).collect())
+}
+
+/// A preserved piece and prose that is guaranteed *not* to fit beside it, so
+/// the independent-wrap path is taken rather than the fitting join.
+///
+/// `width` is the wider of the two sides. That is exactly wide enough for the
+/// preserved piece and for the prose on their own, so both remain wrappable and
+/// no emitted line is overlong for reasons unrelated to the reattachment, yet
+/// the concatenation always exceeds it, so `join_if_fits` must decline. Every
+/// prose token is a single character, so no token is unbreakable at this width.
+fn non_fitting_reattachment() -> impl Strategy<Value = (String, String, usize)> {
+    (prose_fragment(), prose_fragment()).prop_map(|(existing, prose)| {
+        let width = UnicodeWidthStr::width(existing.as_str())
+            .max(UnicodeWidthStr::width(prose.as_str()))
+            .max(1);
+        (existing, prose, width)
+    })
 }
 
 /// Drop whitespace so a property can compare visible content only.

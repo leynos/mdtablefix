@@ -11,6 +11,8 @@
 //! every sample — mid-scalar offsets and real span edges are both rare — and
 //! proptest turns that rejection rate into a spurious failure.
 
+use std::borrow::Cow;
+
 use proptest::prelude::*;
 
 use super::trim_code_span_edge_spaces;
@@ -77,6 +79,42 @@ fn mid_scalar_offsets(text: &str) -> Vec<usize> {
         .collect()
 }
 
+/// A fenced span whose content ends in a multibyte scalar, paired with the
+/// synthetic offset that lands inside that scalar.
+///
+/// The trimmer records a trailing trim when the *last byte* of the content
+/// range is synthetic, and that byte is the interior of the final `é`. The
+/// resulting content slice therefore cannot be represented, which is the
+/// checked-slice fallback rather than the prefilter exit: the content starts
+/// with a space, so the text contains a backtick-then-space sequence and
+/// `has_potential_synthetic_edge_space` is satisfied by construction.
+fn span_with_mid_scalar_trailing_edge() -> impl Strategy<Value = (String, usize)> {
+    span_with_trailing_edge("\u{e9}")
+}
+
+/// The same shape with an ASCII final content character.
+///
+/// It exists only as the control for the property above: the offset addresses
+/// the identical logical position, so if this one trims and the multibyte one
+/// does not, the difference is caused by the scalar split and nothing else.
+fn span_with_ascii_trailing_edge() -> impl Strategy<Value = (String, usize)> {
+    span_with_trailing_edge(" ")
+}
+
+/// Build `before` + fence + `" " + body + final_char` + fence + `after` and
+/// report the byte offset of that final content character.
+fn span_with_trailing_edge(final_char: &'static str) -> impl Strategy<Value = (String, usize)> {
+    (spanless_text(), spanless_text(), spanless_text(), 1usize..4).prop_map(
+        move |(before, body, after, fence_len)| {
+            let fence = "`".repeat(fence_len);
+            let content = format!(" {body}{final_char}");
+            let text = format!("{before}{fence}{content}{fence}{after}");
+            let content_end = before.len() + fence_len + content.len();
+            (text, content_end - 1)
+        },
+    )
+}
+
 proptest! {
     /// Every generated offset must be answered, never panic.
     ///
@@ -137,6 +175,52 @@ proptest! {
             text.as_str(),
             "non-edge offsets must leave {:?} untouched",
             text,
+        );
+    }
+
+    /// A synthetic offset on the last byte of a span whose content ends in a
+    /// multibyte scalar selects the trailing trim and then makes the content
+    /// slice unrepresentable.
+    ///
+    /// This is the checked-slice fallback specifically, not the prefilter exit
+    /// and not a mid-scalar curiosity: the offset is a real span edge, so the
+    /// trimmer gets as far as building the slice, and the content is built with
+    /// a leading space so the prefilter admits the text. The original must come
+    /// back borrowed and untouched rather than rebuilt around half a character.
+    #[test]
+    fn trim_code_span_edge_spaces_borrows_text_when_a_span_edge_splits_a_scalar(
+        (text, offset) in span_with_mid_scalar_trailing_edge(),
+    ) {
+        let trimmed = trim_code_span_edge_spaces(&text, &[offset]);
+
+        prop_assert!(
+            matches!(trimmed, Cow::Borrowed(original) if std::ptr::eq(original, text.as_str())),
+            "edge offset {} splitting a scalar in {:?} must return the original text, got {:?}",
+            offset,
+            text,
+            trimmed,
+        );
+    }
+
+    /// The control for the property above: the same offset at the same logical
+    /// position, on a span that ends in an ASCII space, must actually trim.
+    ///
+    /// Without this, the multibyte property would also pass if the generator
+    /// had drifted into a shape that never reaches the trim at all. Together the
+    /// two pin the honest claim: this offset position trims when it can, and
+    /// declines when doing so would split a character.
+    #[test]
+    fn trim_code_span_edge_spaces_trims_the_same_edge_for_ascii(
+        (text, offset) in span_with_ascii_trailing_edge(),
+    ) {
+        let trimmed = trim_code_span_edge_spaces(&text, &[offset]);
+
+        prop_assert!(
+            matches!(trimmed, Cow::Owned(_)) && trimmed.len() < text.len(),
+            "edge offset {} in {:?} must trim, got {:?}",
+            offset,
+            text,
+            trimmed,
         );
     }
 
