@@ -365,11 +365,12 @@ analysis they call.
   by `rewrite_with` with an `operation` of `"rewrite"` or `"rewrite_no_wrap"`
   and always with the file's path; and, because the binary is a separate crate
   and cannot reach that private helper,
-  `driver::report_line_endings(counts, operation, path)` in `src/driver.rs`,
-  called by `driver::analyse` with `"file"` and the display path — the path the
-  user wrote, not the bare name the capability reads by — and by `format_stdin`
-  with `"stdin"` and `None`, which the report renders as `<stdin>`. The message
-  shape is identical across boundaries, so one filter finds them all.
+  `driver::report_line_endings(counts, operation, path)` in
+  `src/driver/mod.rs`, called by `driver::analyse` with `"file"` and the
+  display path — the path the user wrote, not the bare name the capability
+  reads by — and by `format_stdin` with `"stdin"` and `None`, which the report
+  renders as `<stdin>`. The message shape is identical across boundaries, so
+  one filter finds them all.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.
@@ -380,13 +381,13 @@ analysis they call.
   side-effecting.
 
 Detection runs on the raw document at each input boundary: `rewrite_with` in
-`src/io/replace.rs`, `driver::analyse` in `src/driver.rs`, and `format_stdin` in
-`src/driver/run.rs`, each reporting through its own `report_line_endings` with
-the same message shape. The internal pipeline stays LF-only — `str::lines`
-strips each line's terminator before a transform sees it — and only the
-serializer re-applies the detected style. Standard input keeps its historical
-contract of printing one terminator even when it produces no lines, which
-`tests/parallel.rs` pins.
+`src/io/replace.rs`, `driver::analyse` in `src/driver/mod.rs`, and
+`format_stdin` in `src/driver/run.rs`, each reporting through its own
+`report_line_endings` with the same message shape. The internal pipeline stays
+LF-only — `str::lines` strips each line's terminator before a transform sees it
+— and only the serializer re-applies the detected style. Standard input keeps
+its historical contract of printing one terminator even when it produces no
+lines, which `tests/parallel.rs` pins.
 
 The mode selects behaviour rather than a formatting variant: every mode shares
 the one closure `formatting_closure` builds, and `driver::analyse` chooses what
@@ -430,10 +431,10 @@ filesystem access themselves.
   fails is logged at `debug` level and increments
   `mdtablefix_io_temporary_cleanup_failures_total`, and is not returned, so the
   caller still sees the original replacement failure; the `#[cfg(test)]`
-  re-export in `src/io.rs` lets `src/io_metrics_failure_tests.rs` drive it
+  re-export in `src/io/mod.rs` lets `src/io_metrics_failure_tests.rs` drive it
   directly.
 
-`src/reflow.rs`:
+`src/reflow/mod.rs`:
 
 - `Cell`: Carries a parsed cell payload and leading-empty state until the parse
   stage completes.
@@ -460,12 +461,12 @@ filesystem access themselves.
 - `infer_expected_width`: Derives the logical column count from the first row
   and complete legacy concatenations, including embedded separator rows.
 
-`src/table.rs`:
+`src/table/mod.rs`:
 
 - `format_separator_cells`: Expands separator cells to the target widths while
   preserving Markdown alignment markers.
 
-`src/process/buffer.rs`:
+`src/process/buffer/mod.rs`:
 
 - `TableSubstitutions`: Carries only the `ellipsis` and `code_emphasis` flags
   that must be applied before table reflow. The process module passes this
@@ -491,7 +492,7 @@ filesystem access themselves.
   not log raw Markdown lines; use bounded fields such as line lengths and
   buffer counts.
 
-`src/footnotes/renumber/definitions.rs`:
+`src/footnotes/renumber/definitions/mod.rs`:
 
 - `collect_definition_updates`: Scans lines for footnote definitions and
   promotable numeric-list candidates, assigns sequential numbers, and rewrites
@@ -502,7 +503,7 @@ filesystem access themselves.
   end. The sibling `reorder` module shares this boundary primitive so scanning
   and reordering compute definition boundaries identically.
 
-`src/footnotes/renumber/reorder.rs`:
+`src/footnotes/renumber/reorder/mod.rs`:
 
 - `reorder_definition_block`: Reorders the final footnote-definition block
   according to the numbering plan built by the sibling `definitions` module. It
@@ -537,9 +538,9 @@ refactoring audit covering issues `#357`–`#367` in PR `#368`.
 
 ### Read-only by type
 
-`ReadOnlyDir` in `src/driver.rs` is a newtype over `cap_std::fs_utf8::Dir`. It
-exposes only `new` and `read`, so the reporting modes receive a capability that
-cannot write: read-only access is a property of the type rather than of a
+`ReadOnlyDir` in `src/driver/mod.rs` is a newtype over `cap_std::fs_utf8::Dir`.
+It exposes only `new` and `read`, so the reporting modes receive a capability
+that cannot write: read-only access is a property of the type rather than of a
 convention or of a test double that declines to write.
 
 Re-use policy:
@@ -556,7 +557,7 @@ Re-use policy:
 
 ### One formatter, built once
 
-`Formatter` in `src/driver.rs` is:
+`Formatter` in `src/driver/mod.rs` is:
 
 ```rust
 pub type Formatter = dyn Fn(&SourceDocument<'_>) -> String + Sync;
@@ -605,9 +606,9 @@ reasoning as `AX-4`.
 
 ## The binary's private driver
 
-`src/driver.rs` is declared `mod driver;` in `src/main.rs`, so it is not part
-of the published library. The library's formatting entry points return values,
-not `Result`s, and its public filesystem entry points (`rewrite`,
+`src/driver/mod.rs` is declared `mod driver;` in `src/main.rs`, so it is not
+part of the published library. The library's formatting entry points return
+values, not `Result`s, and its public filesystem entry points (`rewrite`,
 `rewrite_no_wrap`, `replace_file`, and `replace_file_if_unchanged`) return
 `std::io::Result`, so they are fallible and independent of the CLI's filesystem
 policy and exit-status handling. The CLI's directory capabilities, and its
@@ -660,10 +661,10 @@ post-parse check that the four git-only flags arrive with `--git`.
 `src/git_inputs.rs` is the composition root: it turns the command line into a
 selection question and the answer back into the paths `run_files` receives, and
 it is the one module that knows the whole selection tree at once.
-`src/select.rs` and its submodules state and answer that question.
+`src/select/mod.rs` and its submodules state and answer that question.
 
 ```plaintext
-src/select.rs               the tree root: module list and dependency rule
+src/select/mod.rs               the tree root: module list and dependency rule
 src/select/policy.rs        select_files, FileIdentity, PathKind, PathProbe, ProbeFailure
 src/select/extensions.rs    --md-exts parsing and matching
 src/select/fs_probe.rs      AmbientPathProbe, the working-tree adapter
@@ -726,7 +727,8 @@ selected for the branch.
 
 ## Fence normalization module
 
-`src/fences.rs` exposes the preprocessing helpers used by the `--fences` option.
+`src/fences/mod.rs` exposes the preprocessing helpers used by the `--fences`
+option.
 
 - `compress_fences(lines: &[String]) -> Vec<String>` performs
   `FenceTracker`-driven conditional rewriting. For each matched fenced block,
@@ -813,9 +815,9 @@ depth-aware tracking.
    should prefer that classifier over adding a third route.
 
 2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
-   `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
-   `wrap_with_prefix` computes the available content width once from the
-   Unicode display width of the first-line prefix, then feeds the paragraph
+   `src/wrap/paragraph/mod.rs` is the single entry point for prefix-aware
+   wrapping. `wrap_with_prefix` computes the available content width once from
+   the Unicode display width of the first-line prefix, then feeds the paragraph
    text into `wrap_preserving_code`. `ParagraphState` owns the ordinary
    paragraph segments, their shared indentation, any remembered continuation
    indentation, and an optional deferred `PendingPrefix`.
@@ -1054,13 +1056,13 @@ Table: Key types and functions.
 | `determine_token_span`, `determine_token_span_observed`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/wrap/inline/span_grouping.rs`    |
 | `merge_whitespace_only_lines`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`      |
 | `rebalance_atomic_tails`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/postprocess.rs`      |
-| `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`               |
-| `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`               |
+| `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph/mod.rs`           |
+| `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/wrap/paragraph/mod.rs`           |
 | `PendingPrefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/wrap/paragraph/pending.rs`       |
 | `ContinuationMode`, `TailReflow`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/paragraph/pending.rs`       |
 | `conforming_source_lines_for_overlong_span` — Retains conforming authored boundaries only inside a cross-line code span that would be overlong when joined.                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/paragraph/spanning_code.rs` |
-| `emit_pending_with_verbatim_continuation` — Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/paragraph.rs`               |
-| `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/paragraph.rs`               |
+| `emit_pending_with_verbatim_continuation` — Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/paragraph/mod.rs`           |
+| `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/paragraph/mod.rs`           |
 | `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/paragraph/pending.rs`       |
 | `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/continuation.rs`            |
 | `join_pending_continuation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`            |
@@ -1147,7 +1149,7 @@ coupled to its opening bracket.
   the available width, `ParagraphWriter` defers it through `PendingPrefix` so
   the continuation and lazy continuation lines below it are folded into the
   same wrapped output. `wraps_to_tail` and `continuation_folds_tail` in
-  `src/wrap/paragraph.rs` decide whether folding is safe: a tail that would
+  `src/wrap/paragraph/mod.rs` decide whether folding is safe: a tail that would
   re-parse as a different block stays separate, which covers a tail indented by
   four or more columns (indented code), a tail that repeats its blockquote
   marker, and a footnote definition tail. Emitting a bare tail instead would
@@ -2457,7 +2459,7 @@ for a compact transition table. Record graph size, event mapping, lifecycle and
 error semantics, observability, generated-code legibility, and dependency
 adoption risk in an ADR update before adding a crate.
 
-### 1.2. Wrapping continuation state (`src/wrap/paragraph.rs`)
+### 1.2. Wrapping continuation state (`src/wrap/paragraph/mod.rs`)
 
 `ParagraphState` owns buffered prose, shared indentation, remembered
 continuation indentation, and an optional `PendingPrefix`. `PendingPrefix`
@@ -2489,7 +2491,7 @@ DOM conversion uses `collect_tables` and `collect_rows` as semantic entry
 points. Both delegate traversal to the canonical `collect_matching` walker, so
 pre-order traversal, handle cloning, and child borrowing remain consistent.
 
-### 1.4. `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
+### 1.4. `DefinitionScanState` (`src/footnotes/renumber/definitions/mod.rs`)
 
 `DefinitionScanState` accumulates the footnote-definition rewrite plan during a
 single scan over the input. It borrows the shared `(original → new)` mapping
@@ -2664,7 +2666,7 @@ wired back in with `#[path]`:
 mod tests;
 ```
 
-`src/headings.rs`, `src/io.rs`, and `src/main.rs` use this shape, as do the
+`src/headings.rs`, `src/io/mod.rs`, and `src/main.rs` use this shape, as do the
 tracing-snapshot modules listed under
 [Tracing-event snapshot tests](#tracing-event-snapshot-tests). The moved tests
 keep their original paths (`io::tests::…`), and `super` still resolves to the
