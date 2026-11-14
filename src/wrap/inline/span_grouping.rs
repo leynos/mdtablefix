@@ -14,6 +14,7 @@ use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 
 use super::{
+    coupling_report::{emit_footnote_reference_coupling, emit_whitespace_footnote_coupling},
     predicates::{
         is_inline_code_token,
         is_opening_punct,
@@ -52,15 +53,15 @@ fn is_code_token(token: &str) -> bool {
 
 /// A coupling decision about the token at `end`, ready to be reported.
 #[derive(Clone, Copy)]
-struct CouplingReport<'a> {
+pub(super) struct CouplingReport<'a> {
     /// The token stream the decision was made over.
-    tokens: &'a [String],
+    pub(super) tokens: &'a [String],
     /// The index of the token the decision concerns.
-    end: usize,
+    pub(super) end: usize,
     /// The classification of the span so far.
-    kind: SpanKind,
+    pub(super) kind: SpanKind,
     /// Whether the token was coupled into the span.
-    coupled: bool,
+    pub(super) coupled: bool,
 }
 
 /// Returns the span kind an opening punctuation token couples to, if any.
@@ -201,72 +202,6 @@ fn initial_token_span(
 #[cfg(test)]
 pub(in crate::wrap) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
     determine_token_span_observed(tokens, start, &mut None)
-}
-
-/// Reports whether whitespace before a colon-suffixed footnote reference was
-/// coupled into the current span.
-///
-/// Nothing is reported unless the next token really is a footnote reference, so
-/// the event describes a grouping decision rather than every whitespace run.
-/// The probe passes `&mut None`: it only selects whether to report, and
-/// forwarding the observer would emit a `FootnoteRefChecked` event for it.
-fn emit_whitespace_footnote_coupling(
-    report: CouplingReport<'_>,
-    observer: &mut ObserverHandle<'_>,
-) {
-    // Nothing will consume the event, so skip the probe entirely rather than
-    // paying for it and discarding the result.
-    let Some(observer) = observer.as_deref_mut() else {
-        return;
-    };
-    let Some(token) = report
-        .tokens
-        .get(report.end + 1)
-        .filter(|token| looks_like_footnote_ref(token, &mut None))
-    else {
-        return;
-    };
-    observer.observe(Event::WhitespaceFootnoteCoupling {
-        kind: report.kind,
-        token,
-        has_following_colon: report
-            .tokens
-            .get(report.end + 2)
-            .is_some_and(|following| following == ":"),
-        coupled: report.coupled,
-    });
-}
-
-/// Reports whether an adjacent footnote reference was coupled into the current
-/// span, and the context that decided it.
-fn emit_footnote_reference_coupling(report: CouplingReport<'_>, observer: &mut ObserverHandle<'_>) {
-    // Nothing will consume the event, so skip the probe and the coupling
-    // context rather than computing them and discarding the result.
-    let Some(observer) = observer.as_deref_mut() else {
-        return;
-    };
-    let Some(token) = report
-        .tokens
-        .get(report.end)
-        .filter(|token| looks_like_footnote_ref(token, &mut None))
-    else {
-        return;
-    };
-    let follows_space_before_colon = report
-        .end
-        .checked_sub(1)
-        .and_then(|previous| report.tokens.get(previous))
-        .is_some_and(|previous| previous.chars().all(char::is_whitespace))
-        && report
-            .tokens
-            .get(report.end + 1)
-            .is_some_and(|following| following == ":");
-    observer.observe(Event::FootnoteReferenceCoupling {
-        kind: report.kind,
-        token,
-        follows_space_before_colon,
-        coupled: report.coupled,
-    });
 }
 
 /// Couples a whitespace run to the span when the following token requires it.

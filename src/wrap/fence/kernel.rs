@@ -335,7 +335,7 @@ where
 {
     let features: Vec<LineFeatures> = lines
         .into_iter()
-        .map(|line| super::features_of(line.as_ref()))
+        .map(|line| super::line::features_of(line.as_ref()))
         .collect();
     regions(&features)
 }
