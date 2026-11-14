@@ -1,22 +1,26 @@
 //! The fake prover-tools runner the Verus harness drives `make` with.
 //!
 //! The runner is a script this process writes, so it is run through `bash`
-//! rather than executed directly (#586).
+//! rather than executed directly (#586). The script lives in the shared
+//! [`TestDir`] boundary from `tests/common/fs.rs`: writes and reads go through
+//! its directory capability, and an absolute path is derived only for the two
+//! process boundaries that need one — `make`, which receives the runner and
+//! log paths through the environment, and the working directory of the child.
 
 use std::process::Command;
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use cap_std::fs::{Permissions, PermissionsExt};
-use tempfile::TempDir;
+use cap_std::{
+    fs::{Permissions, PermissionsExt},
+    fs_utf8::Dir,
+};
 
-use super::{manifest_dir, open_dir, utf8};
+use super::{manifest_dir, test_fs::TestDir};
 
 /// A fake runner script in its own temporary directory, with its call log.
 pub struct FakeProverTools {
-    _directory: TempDir,
-    pub path: Utf8PathBuf,
-    log_path: Utf8PathBuf,
+    directory: TestDir,
     smoke_mode: &'static str,
 }
 
@@ -30,23 +34,32 @@ pub struct FakeProverTools {
 /// must refuse.
 const RUNNER_SCRIPT: &str = include_str!("fixtures/fake_prover_tools_runner.sh");
 
+/// The runner's file name, which the script's own log line reports.
+const RUNNER: &str = "prover-tools";
+
+/// The file the runner appends each invocation to.
+const LOG: &str = "prover-tools.log";
+
+impl FakeProverTools {
+    /// The absolute path of the runner, for the child process that runs it.
+    pub fn path(&self) -> Utf8PathBuf { self.directory.path().join(RUNNER) }
+
+    /// The directory capability holding the script and its log.
+    pub fn directory(&self) -> &Dir { self.directory.directory() }
+}
+
 /// Writes a fake runner whose smoke proof behaves as `smoke_mode` says.
 pub fn fake_prover_tools(smoke_mode: &'static str) -> Result<FakeProverTools> {
-    let directory = TempDir::new().context("create fake prover-tools directory")?;
-    let root = utf8(directory.path())?;
-    let handle = open_dir(root)?;
-    let path = root.join("prover-tools");
-    let log_path = root.join("prover-tools.log");
+    let directory = TestDir::new().context("create fake prover-tools directory")?;
+    let handle = directory.directory();
     handle
-        .write("prover-tools", RUNNER_SCRIPT)
+        .write(RUNNER, RUNNER_SCRIPT)
         .context("write fake prover-tools runner")?;
     handle
-        .set_permissions("prover-tools", Permissions::from_mode(0o755))
+        .set_permissions(RUNNER, Permissions::from_mode(0o755))
         .context("make fake prover-tools runner executable")?;
     Ok(FakeProverTools {
-        _directory: directory,
-        path,
-        log_path,
+        directory,
         smoke_mode,
     })
 }
@@ -60,7 +73,7 @@ pub fn fake_prover_tools(smoke_mode: &'static str) -> Result<FakeProverTools> {
 /// the script instead of executing a file it has just written. The path is
 /// single-quoted, because Make hands the value to a shell.
 fn runner_command(runner: &FakeProverTools) -> String {
-    format!("bash '{}'", runner.path.as_str().replace('\'', r"'\''"))
+    format!("bash '{}'", runner.path().as_str().replace('\'', r"'\''"))
 }
 
 /// Builds a `make` invocation of `target` that uses the fake runner.
@@ -71,18 +84,15 @@ pub fn make_command(target: &str, runner: &FakeProverTools) -> Command {
         .arg(target)
         .current_dir(manifest_dir())
         .env("PROVER_TOOLS", runner_command(runner))
-        .env("FAKE_PROVER_TOOLS_LOG", &runner.log_path)
+        .env("FAKE_PROVER_TOOLS_LOG", runner.path().with_file_name(LOG))
         .env("FAKE_PROVER_TOOLS_SMOKE_MODE", runner.smoke_mode);
     command
 }
 
 /// Reads the arguments the fake runner was called with, one call per line.
 pub fn runner_log(runner: &FakeProverTools) -> Result<String> {
-    let root = runner
-        .path
-        .parent()
-        .context("fake prover-tools path has no parent")?;
-    open_dir(root)?
-        .read_to_string("prover-tools.log")
+    runner
+        .directory()
+        .read_to_string(LOG)
         .context("read fake prover-tools log")
 }

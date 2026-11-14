@@ -2305,3 +2305,24 @@ is the honest form recorded in the ledger.
   `coderabbit review --agent` pass on that head returned no findings, and every
   GitHub check on `a015a2c`, the Windows atomic-write job and CodeScene
   included, is green.
+- 2026-11-14: Rebased onto `origin/main` at `6830a8e`, which had advanced three
+  commits past the previous base: `b081f9e` (camino/cap-std across integration
+  tests, #712), `97e7381` (self-named modules moved into `mod.rs`, #539), and
+  `6830a8e` (tokenizer byte-boundary guards, #546). All twelve branch commits
+  replayed with no conflicts, and `git range-diff` reports every commit
+  unchanged. The only file both sides touched is `docs/developers-guide.md`,
+  and the hunks are disjoint: main added the capability-scoped test filesystem
+  section and this branch added the mutation-gate paragraphs.
+
+  Main's test-filesystem convention is pertinent to this branch, because the
+  tests added here had hand-rolled their own temporary directories. `#712`
+  moved that boundary into `tests/common/fs.rs` as `TestDir` and requires
+  integration tests to read and write through a `cap_std` directory capability
+  on `camino` paths, converting a test when it is next changed. This branch's
+  three test files now follow it: `tests/support/fake_prover_tools.rs` keeps
+  its runner in a `TestDir` and exposes that capability instead of reopening
+  the parent path, `tests/verus_harness.rs` materialises its
+  verification-ledger fixture through it and holds the #586 write descriptor
+  open through it, and `tests/fence_regions.rs` opens `CARGO_MANIFEST_DIR` once
+  and walks, reads, and writes `tests/data` through capabilities, keeping
+  absolute paths for the child processes alone. No test changed what it asserts.

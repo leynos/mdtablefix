@@ -19,18 +19,25 @@
 //!
 //! Both sweeps self-guard: an empty or implausibly small corpus fails the test
 //! rather than passing vacuously, and each pins a fixture it must have covered.
+//!
+//! Filesystem access follows the integration-test convention in
+//! `docs/developers-guide.md`: `CARGO_MANIFEST_DIR` is opened once as the sole
+//! ambient boundary, and every read, walk, and write below it goes through a
+//! `cap_std` directory capability on `camino` UTF-8 paths. An absolute path is
+//! derived only where a child process needs one.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
-
+use anyhow::{Context as _, Result};
 use assert_cmd::Command;
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use mdtablefix::{
     compress_fences,
     wrap::{Region, classify_regions},
 };
-use tempfile::TempDir;
+
+#[path = "common/fs.rs"]
+mod test_fs;
+use test_fs::TestDir;
 
 /// Flag set `make fmt` runs, matching the estate `markdown-fencing-baseline`
 /// rule's `MDTABLEFIX_RULES`.
@@ -64,30 +71,50 @@ const UNCLOSED_DOCUMENTS: &[&str] = &[
     "> ````\n> ```\n> literal...\n",
 ];
 
-/// Returns every file under `root`, recursively.
+/// Opens the repository root, the suite's one ambient filesystem boundary.
+fn manifest_dir() -> Result<Dir> {
+    let manifest = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    Dir::open_ambient_dir(&manifest, ambient_authority())
+        .with_context(|| format!("open repository root {manifest}"))
+}
+
+/// The fixture corpus, opened beneath the repository capability.
+fn fixture_root(manifest: &Dir) -> Result<Dir> {
+    manifest
+        .open_dir("tests/data")
+        .context("open the fixture corpus at tests/data")
+}
+
+/// Returns every file under `root`, recursively, as paths relative to it.
 ///
 /// A directory that cannot be listed is an error, not an empty result: a walk
 /// that silently returns fewer files would let the sweep pass over a corpus it
 /// never read.
-fn data_files(root: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-    fn walk(directory: &Path, found: &mut Vec<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
-        for entry in
-            fs::read_dir(directory).map_err(|error| format!("{}: {error}", directory.display()))?
-        {
-            let path = entry
-                .map_err(|error| format!("{}: {error}", directory.display()))?
-                .path();
-            if path.is_dir() {
-                walk(&path, found)?;
+fn data_files(root: &Dir) -> Result<Vec<Utf8PathBuf>> {
+    fn walk(directory: &Dir, prefix: &Utf8Path, found: &mut Vec<Utf8PathBuf>) -> Result<()> {
+        for entry in directory.entries().context("list a fixture directory")? {
+            let entry = entry.context("read a fixture directory entry")?;
+            let name = entry.file_name().context("read a fixture entry's name")?;
+            let relative = prefix.join(name);
+            if entry
+                .file_type()
+                .context("read a fixture entry's file type")?
+                .is_dir()
+            {
+                walk(
+                    &entry.open_dir().context("open a fixture subdirectory")?,
+                    &relative,
+                    found,
+                )?;
             } else {
-                found.push(path);
+                found.push(relative);
             }
         }
         Ok(())
     }
 
     let mut found = Vec::new();
-    walk(root, &mut found)?;
+    walk(root, Utf8Path::new(""), &mut found)?;
     Ok(found)
 }
 
@@ -99,11 +126,9 @@ fn data_files(root: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
 /// that would have failed went unchecked. Failing here makes a non-UTF-8
 /// fixture a deliberate addition that updates this test rather than a silent
 /// gap.
-fn read_fixture(file: &Path) -> Result<String, Box<dyn std::error::Error>> {
-    let bytes = fs::read(file).map_err(|error| format!("{}: {error}", file.display()))?;
-    let text = String::from_utf8(bytes)
-        .map_err(|error| format!("{}: not valid UTF-8: {error}", file.display()))?;
-    Ok(text)
+fn read_fixture(root: &Dir, file: &Utf8Path) -> Result<String> {
+    root.read_to_string(file)
+        .with_context(|| format!("read fixture {file} as UTF-8"))
 }
 
 /// Splits a document into the lines the product actually sees.
@@ -128,10 +153,10 @@ fn lines_of(text: &str) -> Vec<String> {
 ///
 /// Returns the number of files checked. Every fixture must be readable as
 /// UTF-8; an unreadable one fails the sweep rather than being skipped.
-fn assert_regions_preserved(files: &[PathBuf]) -> Result<usize, Box<dyn std::error::Error>> {
+fn assert_regions_preserved(root: &Dir, files: &[Utf8PathBuf]) -> Result<usize> {
     let mut checked = 0_usize;
     for file in files {
-        let text = read_fixture(file)?;
+        let text = read_fixture(root, file)?;
 
         let lines = lines_of(&text);
         let normalized = compress_fences(&lines);
@@ -139,14 +164,12 @@ fn assert_regions_preserved(files: &[PathBuf]) -> Result<usize, Box<dyn std::err
         assert_eq!(
             normalized.len(),
             lines.len(),
-            "{} changed its line count under fence compression",
-            file.display(),
+            "{file} changed its line count under fence compression",
         );
         assert_eq!(
             classify_regions(&normalized),
             classify_regions(&lines),
-            "{} changed a line's region under fence compression",
-            file.display(),
+            "{file} changed a line's region under fence compression",
         );
         checked += 1;
     }
@@ -155,24 +178,25 @@ fn assert_regions_preserved(files: &[PathBuf]) -> Result<usize, Box<dyn std::err
 }
 
 /// Formats `text` once with the full flag set through the real binary.
-fn format_once(
-    directory: &TempDir,
-    name: &str,
-    text: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let path = directory.path().join(name);
-    fs::write(&path, text)?;
+fn format_once(directory: &TestDir, name: &str, text: &str) -> Result<String> {
+    directory
+        .directory()
+        .write(name, text)
+        .with_context(|| format!("write temporary fixture {name}"))?;
 
     Command::cargo_bin("mdtablefix")?
         .args(FULL)
         .arg("--in-place")
-        .arg(&path)
+        .arg(directory.path().join(name))
         .assert()
         .success()
         .stdout("")
         .stderr("");
 
-    Ok(fs::read_to_string(&path)?)
+    directory
+        .directory()
+        .read_to_string(name)
+        .with_context(|| format!("read formatted fixture {name}"))
 }
 
 /// Asserts that an unclosed block keeps its payload literal.
@@ -232,20 +256,16 @@ fn unclosed_fences_keep_their_payload_literal() {
 ///
 /// Returns the number of files checked. Every fixture must be readable as
 /// UTF-8; an unreadable one fails the sweep rather than being skipped.
-fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std::error::Error>> {
-    let directory = TempDir::new()?;
+fn assert_literal_lines_survive(root: &Dir, files: &[Utf8PathBuf]) -> Result<usize> {
+    let directory = TestDir::new().context("create the sweep's output directory")?;
     let mut checked = 0_usize;
     for file in files {
-        let text = read_fixture(file)?;
+        let text = read_fixture(root, file)?;
 
         let lines = lines_of(&text);
         let regions = classify_regions(&lines);
-        let name = file
-            .file_name()
-            .expect("a file has a name")
-            .to_string_lossy()
-            .into_owned();
-        let output = format_once(&directory, &name, &text)?;
+        let name = file.file_name().expect("a fixture path has a file name");
+        let output = format_once(&directory, name, &text)?;
         let output_text = lines_of(&output);
         let output_regions = classify_regions(&output_text);
         let mut output_literal_lines = output_text
@@ -261,14 +281,12 @@ fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std:
             assert_eq!(
                 output_literal_lines.next(),
                 Some(line.as_str()),
-                "{} changed or lost the literal line {line:?} under the full flag set",
-                file.display(),
+                "{file} changed or lost the literal line {line:?} under the full flag set",
             );
         }
         assert!(
             output_literal_lines.next().is_none(),
-            "{} gained an extra literal line under the full flag set",
-            file.display(),
+            "{file} gained an extra literal line under the full flag set",
         );
         checked += 1;
     }
@@ -277,20 +295,19 @@ fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std:
 }
 
 #[test]
-fn every_fixture_preserves_regions_under_fence_normalization()
--> Result<(), Box<dyn std::error::Error>> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let files = data_files(&root.join("tests").join("data"))?;
+fn every_fixture_preserves_regions_under_fence_normalization() -> Result<()> {
+    let root = fixture_root(&manifest_dir()?)?;
+    let files = data_files(&root)?;
 
     assert!(!files.is_empty(), "found no fixtures to check");
     assert!(
         files
             .iter()
-            .any(|path| path.file_name().is_some_and(|name| name == MUST_COVER)),
+            .any(|path| path.file_name() == Some(MUST_COVER)),
         "the region sweep must cover {MUST_COVER}",
     );
 
-    let checked = assert_regions_preserved(&files)?;
+    let checked = assert_regions_preserved(&root, &files)?;
 
     assert!(
         checked > 100,
@@ -300,13 +317,13 @@ fn every_fixture_preserves_regions_under_fence_normalization()
 }
 
 #[test]
-fn every_fixture_keeps_its_literal_lines_verbatim() -> Result<(), Box<dyn std::error::Error>> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let files = data_files(&root.join("tests").join("data"))?;
+fn every_fixture_keeps_its_literal_lines_verbatim() -> Result<()> {
+    let root = fixture_root(&manifest_dir()?)?;
+    let files = data_files(&root)?;
 
     assert!(!files.is_empty(), "found no fixtures to check");
 
-    let checked = assert_literal_lines_survive(&files)?;
+    let checked = assert_literal_lines_survive(&root, &files)?;
 
     assert!(
         checked > 100,
