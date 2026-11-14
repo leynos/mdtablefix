@@ -2607,7 +2607,45 @@ integration-test binary crates. The `#[expect(unused_macros)]` suppressions
 that previously guarded them were replaced by the export attribute when it
 became clear that multiple test binaries depend on them.
 
-### 2.3. `test-macros` crate
+### 2.3. Capability-scoped test filesystem access
+
+Integration tests use `camino::Utf8Path` and `camino::Utf8PathBuf` for runtime
+paths and perform filesystem operations through `cap_std::fs_utf8::Dir`.
+Absolute paths are retained only for process boundaries such as
+`std::process::Command`; reads, writes, metadata queries, copies, and
+permission changes use paths relative to an opened directory capability. A test
+that has not been converted yet still calls `std::fs` directly; convert it to
+the capability pattern when you next change it rather than adding further
+direct calls.
+
+The `camino` and `cap-std` crates are normal dependencies because the
+production CLI already uses them for file output. The integration suite shares
+those dependencies instead of declaring redundant dev-dependencies. This keeps
+production and test filesystem semantics aligned while avoiding two independent
+version declarations.
+
+`tests/common/fs.rs` owns `TestDir`, the reusable temporary-directory boundary.
+It converts `tempfile::TempDir`'s platform path to a UTF-8 path once, opens the
+directory capability, and retains the `TempDir` guard for the test's lifetime.
+Only integration tests may include this helper. Callers compose it by using
+relative paths with `TestDir::directory()` and by deriving an absolute
+`Utf8PathBuf` from `TestDir::path()` only when invoking a child process. It
+must not absorb fixture-specific logic or production filesystem behaviour.
+
+Repository fixture access remains an explicit ambient boundary. Focused modules
+such as `tests/cli_matrix/fixture_io.rs` open `CARGO_MANIFEST_DIR` once and
+expose only capability-scoped fixture queries. New tests must follow the same
+pattern instead of calling `std::fs`, storing `std::path::PathBuf`, or relying
+on `Utf8Path::exists`, which performs an ambient metadata query.
+
+Whitaker's `no_std_fs_operations` lint supports `excluded_paths` for genuinely
+unavoidable ambient boundaries. Prefer the capability pattern above; use a
+path-level exclusion only when the boundary cannot be expressed through
+`cap_std`, and record the reason beside the configuration. See the imported
+[Whitaker user's guide](whitaker-users-guide.md#no_std_fs_operations) for the
+configuration syntax and segment-matching rules.
+
+### 2.4. `test-macros` crate
 
 The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
 proc-macro attribute. It attaches an item-scoped
@@ -2658,7 +2696,7 @@ Apply it to any test that asserts on its own log lines:
 fn a_traced_case() { … }
 ```
 
-### 2.4. Inline unit-test modules
+### 2.5. Inline unit-test modules
 
 AGENTS.md caps a source file at 400 lines, so a `#[cfg(test)] mod tests` block
 that pushes its production module over the limit moves into a sibling file
@@ -2693,7 +2731,7 @@ message. Property tests that call `entry_names` use
 `.map_err(|error| TestCaseError::fail(error.to_string()))?`; `?` propagates the
 resulting property-case failure.
 
-### 2.5. Platform portability of the test suite
+### 2.6. Platform portability of the test suite
 
 Every tracked file is LF in the repository and checks out as LF on every
 platform, because `.gitattributes` pins `* text=auto eol=lf`. The CLI suites
@@ -2730,7 +2768,7 @@ that into a build failure before any test runs. Such items live inside the same
 enforcement, so no lint rule stands in for it: the Windows job already compiles
 the whole suite with warnings denied.
 
-### 2.6. Behaviour-driven scenario tests
+### 2.7. Behaviour-driven scenario tests
 
 `rstest-bdd` features live in `tests/features/`. The scenario bindings are in
 `tests/bdd_reporting.rs`, which is its own test binary, and the step
@@ -2767,7 +2805,7 @@ Conventions:
   `strict-compile-time-validation` feature that `rstest-bdd-macros` is pinned
   with in `Cargo.toml`.
 
-### 2.7. Build and test requirements
+### 2.8. Build and test requirements
 
 `make test` is two workspace-wide `cargo test` invocations, both with
 `RUSTFLAGS` set so that warnings are errors:
@@ -2861,7 +2899,7 @@ context radius is fixed at three lines, matching `git diff`, and the patience
 threshold switches algorithm above a line count so that diffing a very large
 file stays bounded without a wall-clock cut-off.
 
-### 2.8. Deterministic failure seams
+### 2.9. Deterministic failure seams
 
 The replacement tests drive two `#[cfg(test)]`-only, per-thread seams defined in
 `src/io/swap.rs`:

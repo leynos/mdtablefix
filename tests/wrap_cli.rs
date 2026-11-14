@@ -1,25 +1,27 @@
 //! CLI regression tests for wrap behaviour around verbatim code blocks.
 
-use std::fs;
-
 use assert_cmd::Command;
 use rstest::rstest;
-use tempfile::NamedTempFile;
+
+#[path = "common/fs.rs"]
+mod test_fs;
+use test_fs::TestDir;
 
 fn run_wrap_in_place_and_read_back(input: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let temp = NamedTempFile::new()?;
-    fs::write(temp.path(), input)?;
+    let dir = TestDir::new()?;
+    dir.directory().write("input.md", input)?;
+    let file_path = dir.path().join("input.md");
 
     let mut command = Command::cargo_bin("mdtablefix")?;
     command
         .args(["--wrap", "--in-place"])
-        .arg(temp.path())
+        .arg(file_path.as_std_path())
         .assert()
         .success()
         .stdout("")
         .stderr("");
 
-    Ok(fs::read_to_string(temp.path())?)
+    Ok(dir.directory().read_to_string("input.md")?)
 }
 
 /// Guards issue #261 by asserting `--wrap --in-place` leaves shell code blocks

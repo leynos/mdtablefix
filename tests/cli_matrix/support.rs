@@ -1,26 +1,29 @@
 //! Support types and runners for the CLI matrix integration test.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::{ExitStatus, Output},
-};
+use std::process::{ExitStatus, Output};
 
 use anyhow::{Context as _, Result};
 use assert_cmd::Command;
-use tempfile::tempdir;
+use camino::{Utf8Path, Utf8PathBuf};
 
 #[path = "cases.rs"]
 mod cases;
+#[path = "fixture_io.rs"]
+mod fixture_io;
 #[path = "invariants.rs"]
 mod invariants;
 #[path = "reporting.rs"]
 mod reporting;
 #[path = "support_tests.rs"]
 mod support_tests;
+#[path = "../common/fs.rs"]
+mod test_fs;
 
 pub(crate) use cases::{ALL_FLAGS, BASE_MATRIX_CASES, STAGED_FILE};
+pub(crate) use fixture_io::{fixture_exists, fixture_path};
+use fixture_io::{manifest_directory, read_fixture};
 pub(crate) use reporting::{assert_reporting_invariants, check_counts, diff_counts};
+use test_fs::TestDir;
 
 /// Represents a non-wrap CLI transform flag.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -295,16 +298,15 @@ pub(crate) fn fixture_has_table(file_name: &str) -> Result<bool> {
 ///
 /// The staged input takes its name from [`STAGED_FILE`] so that a mode which
 /// echoes the file it reports echoes the same name on every run.
-pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &Path) -> Result<PathBuf> {
+pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &TestDir) -> Result<Utf8PathBuf> {
     let fixture = fixture_path(case.logical.fixture);
-    let file_path = dir.join(STAGED_FILE);
-    fs::copy(&fixture, &file_path).with_context(|| {
-        format!(
-            "copy fixture '{}' to '{}'",
-            case.logical.fixture,
-            file_path.display(),
-        )
-    })?;
+    let file_path = Utf8PathBuf::from(STAGED_FILE);
+    let contents = manifest_directory()?
+        .read(&fixture)
+        .with_context(|| format!("read fixture '{fixture}'"))?;
+    dir.directory()
+        .write(&file_path, contents)
+        .with_context(|| format!("copy fixture '{}' to '{file_path}'", case.logical.fixture))?;
     Ok(file_path)
 }
 
@@ -315,11 +317,14 @@ pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &Path) -> Result<PathBuf> 
 /// the fixture, so the evidence is collected here rather than assumed.
 pub(crate) fn collect_result(
     output: Output,
-    file_path: &Path,
+    dir: &TestDir,
+    file_path: &Utf8Path,
     mode: ExecutionMode,
 ) -> Result<RunResult> {
-    let file_content = fs::read(file_path)
-        .with_context(|| format!("read file '{}' after {:?} run", file_path.display(), mode))?;
+    let file_content = dir
+        .directory()
+        .read(file_path)
+        .with_context(|| format!("read file '{file_path}' after {mode:?} run"))?;
 
     Ok(RunResult {
         output,
@@ -329,8 +334,8 @@ pub(crate) fn collect_result(
 
 /// Runs a physical matrix case through the real `mdtablefix` binary.
 pub(crate) fn run_physical_case(case: &PhysicalCase) -> Result<RunResult> {
-    let dir = tempdir().context("create temporary directory for matrix case")?;
-    let file_path = stage_fixture(case, dir.path())?;
+    let dir = TestDir::new().context("create temporary directory for matrix case")?;
+    let file_path = stage_fixture(case, &dir)?;
 
     let mut command = Command::cargo_bin("mdtablefix").context("create mdtablefix test command")?;
     // The command runs inside the temporary directory and is given the bare
@@ -339,23 +344,14 @@ pub(crate) fn run_physical_case(case: &PhysicalCase) -> Result<RunResult> {
     command
         .current_dir(dir.path())
         .args(case.args())
-        .arg(STAGED_FILE);
+        .arg(&file_path);
     let output = command.output().with_context(|| {
         format!(
             "execute mdtablefix for matrix case '{}'",
             case.snapshot_name()
         )
     })?;
-    collect_result(output, &file_path, case.mode)
-}
-
-/// Returns the repository-relative path to a matrix fixture.
-pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("data")
-        .join("cli-matrix")
-        .join(file_name)
+    collect_result(output, &dir, &file_path, case.mode)
 }
 
 /// Returns whether a matrix case identifier uses the documented character set.
