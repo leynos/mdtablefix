@@ -70,9 +70,9 @@ jobs:
       - name: Install Whitaker
         uses: leynos/shared-actions/.github/actions/install-whitaker@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
-          # [profile.dev] selects the cranelift codegen backend, so the Dylint
-          # driver must be built with the same component or it cannot compile
-          # the lint libraries. See tests/build_standard_support/cranelift.rs.
+          # The Cranelift component stays installed so the opt-in selection in
+          # .cargo/config.toml still works for the Dylint driver. See
+          # tests/build_standard_support/cranelift.rs.
           cranelift: 'true'
       - name: Lint
         run: make lint
@@ -130,7 +130,7 @@ jobs:
       # .cargo/config.toml, so it restates the build standard's parallel
       # frontend flag (mold is Linux-only and this runner is Windows).
       RUSTFLAGS: "-D warnings -Zthreads=8"
-      # Cranelift (the repository's development default) fails here: under it
+      # Cranelift (an opt-in, no longer the development default) fails here: under it
       # the `cli_matrix` and `wrap` test binaries exit abnormally with
       # 0xe06d7363 on Windows MSVC (run 43522434562), an unwinding failure.
       # This job asserts platform semantics, so it builds with LLVM.
