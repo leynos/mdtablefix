@@ -191,6 +191,29 @@ proptest! {
     fn trim_code_span_edge_spaces_borrows_text_when_a_span_edge_splits_a_scalar(
         (text, offset) in span_with_mid_scalar_trailing_edge(),
     ) {
+        // Pin the preconditions in-property rather than trusting the
+        // generator, which would otherwise silently test a different branch:
+        // the trimmer selects its trailing trim from the *last* content byte,
+        // and that byte must split a scalar for the content slice to be
+        // unrepresentable. Reproduce the trimmer's own arithmetic to say so.
+        let closing_fence_start = text
+            .get(offset + 1..)
+            .and_then(|tail| tail.find('`'))
+            .map(|relative| offset + 1 + relative);
+        prop_assert_eq!(
+            closing_fence_start,
+            Some(offset + 1),
+            "offset {} in {:?} must be the last content byte, immediately before the closing fence",
+            offset,
+            text,
+        );
+        prop_assert!(
+            !text.is_char_boundary(offset),
+            "offset {} in {:?} must split a multibyte scalar",
+            offset,
+            text,
+        );
+
         let trimmed = trim_code_span_edge_spaces(&text, &[offset]);
 
         prop_assert!(

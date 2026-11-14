@@ -360,11 +360,12 @@ fn prose_fragment() -> impl Strategy<Value = String> {
 /// A preserved piece and prose that is guaranteed *not* to fit beside it, so
 /// the independent-wrap path is taken rather than the fitting join.
 ///
-/// `width` is the wider of the two sides. That is exactly wide enough for the
-/// preserved piece and for the prose on their own, so both remain wrappable and
-/// no emitted line is overlong for reasons unrelated to the reattachment, yet
-/// the concatenation always exceeds it, so `join_if_fits` must decline. Every
-/// prose token is a single character, so no token is unbreakable at this width.
+/// `width` is the wider of the two sides. Because it is at least the prose's
+/// own display width, wrapping the prose on its own can never need a line wider
+/// than `width`, however the prose tokenizes — the unbreakable-token caveat
+/// that rules out a blanket width property cannot arise here. The preserved
+/// piece likewise fits unchanged. Yet the concatenation always exceeds
+/// `width`, so `join_if_fits` must decline and the independent path is taken.
 fn non_fitting_reattachment() -> impl Strategy<Value = (String, String, usize)> {
     (prose_fragment(), prose_fragment()).prop_map(|(existing, prose)| {
         let width = UnicodeWidthStr::width(existing.as_str())
