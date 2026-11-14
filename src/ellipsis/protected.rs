@@ -96,6 +96,12 @@ fn semantic_token_spans(text: &str) -> Vec<Range<usize>> {
     {
         if character.is_whitespace() {
             if let Some(start) = token_start.take()
+                // Defensive, and unreachable by construction: both offsets come
+                // from `char_indices()`, so every range is a valid slice. Kept
+                // because the checked form costs nothing and a future change to
+                // how `start` is derived would otherwise reintroduce a panic.
+                // No test can distinguish this from direct slicing; the mutation
+                // is recorded in the pull request instead.
                 && text.get(start..index).is_some_and(is_semantic_token)
             {
                 spans.push(start..index);
@@ -194,6 +200,9 @@ mod tests {
     // both arms need a case; the backslash case above leaves the forward-slash
     // arm unexercised.
     #[case::windows_forward_slash_path("open C:/a/.../b next", vec!["C:/a/.../b"])]
+    // The drive byte must be ASCII alphabetic; a digit in that position is
+    // not a drive and must not be protected.
+    #[case::non_alphabetic_drive("open 1:/a/.../b next", Vec::<&str>::new())]
     #[case::slash_prose("choose and/or... input/output...", Vec::<&str>::new())]
     fn finds_literal_spans(#[case] input: &str, #[case] expected: Vec<&str>) {
         let actual = literal_spans(input)
@@ -205,6 +214,39 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(actual, expected);
+    }
+
+    /// Pins each arm of the drive-path slice pattern directly.
+    ///
+    /// The `finds_literal_spans` cases above reach this predicate through a
+    /// `...`-bearing token, so they cannot distinguish "the separator matched"
+    /// from "the token was protected for another reason". These assertions name
+    /// the four shapes the pattern has to separate.
+    #[rstest::rstest]
+    #[case::forward_slash("C:/a", true)]
+    #[case::back_slash(r"C:\a", true)]
+    #[case::non_alphabetic_drive("1:/a", false)]
+    #[case::missing_separator("C:a", false)]
+    #[case::too_short("C:", false)]
+    fn is_windows_drive_path_requires_a_letter_then_a_separator(
+        #[case] token: &str,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(is_windows_drive_path(token), expected);
+    }
+
+    /// Proves the checked start offset in `autolink_span` is load-bearing.
+    ///
+    /// `autolink_span` is reachable with an arbitrary byte offset, including
+    /// one that splits a multibyte scalar. Direct slicing (`&text[start..]`)
+    /// panics on that input; the checked form declines with `None`.
+    #[rstest::rstest]
+    #[case::mid_scalar(1)]
+    #[case::past_the_end("é<https://example.com/a...b>".len() + 1)]
+    fn autolink_span_declines_offsets_that_are_not_sliceable(#[case] start: usize) {
+        let text = "é<https://example.com/a...b>";
+
+        assert_eq!(autolink_span(text, start), None);
     }
 
     #[traced_test]
