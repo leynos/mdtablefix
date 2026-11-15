@@ -148,7 +148,7 @@ where
 {
     match next_attachable_fence(lines.clone()) {
         NextFence::Attachable { blank_count } => {
-            skip_lines(lines, blank_count);
+            lines.by_ref().take(blank_count).for_each(drop);
             if let Some(fence_line) = lines.next() {
                 out.push(attach_specifier_to_fence(fence_line, specifier, indent));
                 let _ = tracker.observe_source_line(fence_line);
@@ -157,26 +157,8 @@ where
         }
         NextFence::NotAttachable { blank_count } => {
             out.push(specifier_line.to_owned());
-            copy_lines(lines, blank_count, out);
+            out.extend(lines.by_ref().take(blank_count).cloned());
             AttachmentOutcome::Preserved
         }
     }
-}
-
-/// Discard the next `count` lines.
-fn skip_lines<'a, I>(lines: &mut std::iter::Peekable<I>, count: usize)
-where
-    I: Iterator<Item = &'a String>,
-{
-    for _ in 0..count {
-        let _ = lines.next();
-    }
-}
-
-/// Copy the next `count` lines to `out`.
-fn copy_lines<'a, I>(lines: &mut std::iter::Peekable<I>, count: usize, out: &mut Vec<String>)
-where
-    I: Iterator<Item = &'a String>,
-{
-    out.extend(lines.by_ref().take(count).cloned());
 }
