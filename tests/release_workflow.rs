@@ -120,24 +120,49 @@ fn assert_checkout_ref(job: &Mapping) -> Result<()> {
 fn cross_comes_from_a_verified_official_archive() -> Result<()> {
     let workflow = parse_workflow()?;
     let root = as_mapping(&workflow, "workflow")?;
+    assert_cross_checksum_environment(root)?;
+
+    let build_steps = steps(job(&workflow, "build")?)?;
+    assert_setup_rust_inputs(build_steps)?;
+    assert_cross_cache_step(build_steps)?;
+    assert_cross_install_step(build_steps)?;
+    let add_target = command(named_step(build_steps, "Add release target")?)?;
+    ensure!(add_target == "rustup target add ${{ matrix.target }}");
+    Ok(())
+}
+
+/// Checks the workflow environment pins the cross checksum and no toolchain.
+fn assert_cross_checksum_environment(root: &Mapping) -> Result<()> {
     let env = as_mapping(get(root, "env")?, "workflow environment")?;
     ensure!(get_string(env, "CROSS_LINUX_X64_SHA256") == Some(CROSS_SHA256));
     ensure!(get(env, "RELEASE_RUST_VERSION").is_err());
+    Ok(())
+}
 
-    let build_steps = steps(job(&workflow, "build")?)?;
+/// Checks the Setup Rust step leaves the toolchain to `rust-toolchain.toml`.
+fn assert_setup_rust_inputs(build_steps: &[Value]) -> Result<()> {
     let setup_rust = named_step(build_steps, "Setup Rust")?;
     let setup_inputs = as_mapping(get(setup_rust, "with")?, "Setup Rust inputs")?;
     // No toolchain input: the tagged tree's rust-toolchain.toml selects the nightly.
     ensure!(get(setup_inputs, "toolchain").is_err());
     ensure!(get(setup_inputs, "install-binstall")?.as_bool() == Some(false));
     ensure!(get(setup_inputs, "use-sccache")?.as_bool() == Some(false));
+    Ok(())
+}
+
+/// Checks the cross binaries are cached under a version-keyed path.
+fn assert_cross_cache_step(build_steps: &[Value]) -> Result<()> {
     let cache = named_step(build_steps, "Cache the official cross binaries")?;
     ensure!(get_string(cache, "uses") == Some(CACHE_ACTION));
     ensure!(
         nested_string(cache, "with", "path")
             == Some("~/.local/share/mdtablefix-tools/cross-v${{ env.CROSS_VERSION }}")
     );
+    Ok(())
+}
 
+/// Checks cross is installed from the verified official archive, never built.
+fn assert_cross_install_step(build_steps: &[Value]) -> Result<()> {
     let install = command(named_step(
         build_steps,
         "Install cross from its official release",
@@ -159,8 +184,6 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
         ],
     )?;
     ensure!(!install.contains("cargo install"));
-    let add_target = command(named_step(build_steps, "Add release target")?)?;
-    ensure!(add_target == "rustup target add ${{ matrix.target }}");
     Ok(())
 }
 
@@ -196,11 +219,31 @@ fn cross_version_probe_preserves_failure_after_banner() -> Result<()> {
 fn successful_targets_publish_without_waiting_for_the_matrix() -> Result<()> {
     let workflow = parse_workflow()?;
     let build = job(&workflow, "build")?;
+    assert_build_runs_each_target_independently(build)?;
+    assert_prepare_upload_publish_order(steps(build)?)?;
+    assert_publish_step_is_idempotent(steps(build)?)?;
+    assert_no_aggregate_release_job(&workflow)
+}
+
+/// Checks the build job follows `prepare-release` and does not stop the
+/// matrix when one target fails.
+fn assert_build_runs_each_target_independently(build: &Mapping) -> Result<()> {
     ensure!(get_string(build, "needs") == Some("prepare-release"));
     let strategy = as_mapping(get(build, "strategy")?, "build strategy")?;
     ensure!(get(strategy, "fail-fast")?.as_bool() == Some(false));
+    Ok(())
+}
 
-    let build_steps = steps(build)?;
+/// Checks no job waits for the whole matrix before publishing.
+fn assert_no_aggregate_release_job(workflow: &Value) -> Result<()> {
+    let jobs = as_mapping(get(as_mapping(workflow, "workflow")?, "jobs")?, "jobs")?;
+    ensure!(!jobs.contains_key(Value::String("release".to_owned())));
+    Ok(())
+}
+
+/// Checks each target prepares, uploads, then publishes its own assets, and
+/// that the upload overwrites a stale artifact.
+fn assert_prepare_upload_publish_order(build_steps: &[Value]) -> Result<()> {
     let prepare_index = named_step_index(build_steps, "Prepare artifact")?;
     let upload_index = named_step_index(build_steps, "Upload release artifact")?;
     let publish_index = named_step_index(build_steps, "Publish this target's release assets")?;
@@ -211,6 +254,11 @@ fn successful_targets_publish_without_waiting_for_the_matrix() -> Result<()> {
     ensure!(get_string(upload, "uses") == Some(UPLOAD_ACTION));
     let upload_inputs = as_mapping(get(upload, "with")?, "artifact upload inputs")?;
     ensure!(get(upload_inputs, "overwrite")?.as_bool() == Some(true));
+    Ok(())
+}
+
+/// Checks the publish step skips identical assets and never clobbers.
+fn assert_publish_step_is_idempotent(build_steps: &[Value]) -> Result<()> {
     let publish = command(named_step(
         build_steps,
         "Publish this target's release assets",
@@ -229,9 +277,6 @@ fn successful_targets_publish_without_waiting_for_the_matrix() -> Result<()> {
         ],
     )?;
     ensure!(!publish.contains("--clobber"));
-
-    let jobs = as_mapping(get(as_mapping(&workflow, "workflow")?, "jobs")?, "jobs")?;
-    ensure!(!jobs.contains_key(Value::String("release".to_owned())));
     Ok(())
 }
 
@@ -243,7 +288,14 @@ fn cargo_binstall_archives_are_reproducible() -> Result<()> {
     let build_index = named_step_index(build_steps, "Build release binary")?;
     let prepare_index = named_step_index(build_steps, "Prepare artifact")?;
     ensure!(timestamp_index < build_index && build_index < prepare_index);
+    assert_release_build_command(build_steps)?;
+    assert_timestamp_command(build_steps)?;
+    assert_prepare_command(build_steps)?;
+    Ok(())
+}
 
+/// Checks the build step picks `cross` or Cargo per matrix builder.
+fn assert_release_build_command(build_steps: &[Value]) -> Result<()> {
     // `cross` cannot emit Apple or MSVC binaries, so the native runners drive
     // Cargo directly. Both arms build on the nightly that rust-toolchain.toml pins.
     let build = command(named_step(build_steps, "Build release binary")?)?;
@@ -256,7 +308,11 @@ fn cargo_binstall_archives_are_reproducible() -> Result<()> {
             "cargo build --release --target ${{ matrix.target }}",
         ],
     )?;
+    Ok(())
+}
 
+/// Checks `SOURCE_DATE_EPOCH` is taken from the tagged commit.
+fn assert_timestamp_command(build_steps: &[Value]) -> Result<()> {
     let timestamp = command(named_step(
         build_steps,
         "Set reproducible release timestamp",
@@ -265,7 +321,11 @@ fn cargo_binstall_archives_are_reproducible() -> Result<()> {
         timestamp
             == "echo \"SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)\" >> \"${GITHUB_ENV}\""
     );
+    Ok(())
+}
 
+/// Checks the artifact is packaged by the script, not by inline `tar`.
+fn assert_prepare_command(build_steps: &[Value]) -> Result<()> {
     // The archive itself is written by the packaging script. Every runner
     // image can execute that script, and its determinism is covered by
     // tests/release_packaging.rs; the workflow's job is only to invoke it.
@@ -310,12 +370,31 @@ fn every_release_step_runs_under_bash() -> Result<()> {
 fn manual_dispatch_builds_the_requested_release_tag() -> Result<()> {
     let workflow = parse_workflow()?;
     let root = as_mapping(&workflow, "workflow")?;
+    assert_manual_trigger_requires_release_tag(root)?;
+    assert_release_tag_environment_and_concurrency(root)?;
+    assert_both_jobs_check_out_the_release_tag(&workflow)?;
+    assert_verify_precedes_create(steps(job(&workflow, "prepare-release")?)?)
+}
+
+/// Checks the preparation and build jobs both check out the requested tag.
+fn assert_both_jobs_check_out_the_release_tag(workflow: &Value) -> Result<()> {
+    assert_checkout_ref(job(workflow, "prepare-release")?)?;
+    assert_checkout_ref(job(workflow, "build")?)
+}
+
+/// Checks the manual trigger requires a `release_tag` input.
+fn assert_manual_trigger_requires_release_tag(root: &Mapping) -> Result<()> {
     let triggers = as_mapping(get(root, "on")?, "workflow triggers")?;
     let dispatch = as_mapping(get(triggers, "workflow_dispatch")?, "manual trigger")?;
     let inputs = as_mapping(get(dispatch, "inputs")?, "manual inputs")?;
     let release_tag = as_mapping(get(inputs, "release_tag")?, "release_tag input")?;
     ensure!(get(release_tag, "required")?.as_bool() == Some(true));
+    Ok(())
+}
 
+/// Checks the release tag and the per-tag concurrency group come from the
+/// dispatch input, and that a running release is never cancelled.
+fn assert_release_tag_environment_and_concurrency(root: &Mapping) -> Result<()> {
     let env = as_mapping(get(root, "env")?, "workflow environment")?;
     ensure!(get_string(env, "RELEASE_TAG") == Some("${{ inputs.release_tag || github.ref_name }}"));
     let concurrency = as_mapping(get(root, "concurrency")?, "release concurrency")?;
@@ -326,32 +405,34 @@ fn manual_dispatch_builds_the_requested_release_tag() -> Result<()> {
             )
     );
     ensure!(get(concurrency, "cancel-in-progress")?.as_bool() == Some(false));
+    Ok(())
+}
 
-    let prepare = job(&workflow, "prepare-release")?;
-    let build = job(&workflow, "build")?;
-    assert_checkout_ref(prepare)?;
-    assert_checkout_ref(build)?;
-    let prepare_steps = steps(prepare)?;
+/// Checks the tag is verified against `Cargo.toml` before the release exists.
+fn assert_verify_precedes_create(prepare_steps: &[Value]) -> Result<()> {
     let verify_index = named_step_index(prepare_steps, "Verify release tag matches Cargo.toml")?;
     let create_index = named_step_index(prepare_steps, "Create the GitHub release when absent")?;
     ensure!(verify_index < create_index);
+    assert_verify_command(&prepare_steps[verify_index])?;
+    assert_create_command(&prepare_steps[create_index])
+}
+
+/// Checks the verify step compares the tag with the `Cargo.toml` version.
+fn assert_verify_command(step: &Value) -> Result<()> {
+    let verify = command(step.as_mapping().context("verify step")?)?;
     assert_fragments_in_order(
-        command(
-            prepare_steps[verify_index]
-                .as_mapping()
-                .context("verify step")?,
-        )?,
+        verify,
         &[
             "tag=\"${RELEASE_TAG#v}\"",
             "Cargo.toml",
             "if [[ \"${tag}\" != \"${cargo_version}\" ]]",
         ],
-    )?;
-    let create = command(
-        prepare_steps[create_index]
-            .as_mapping()
-            .context("create step")?,
-    )?;
+    )
+}
+
+/// Checks the create step makes a verified-tag release with generated notes.
+fn assert_create_command(step: &Value) -> Result<()> {
+    let create = command(step.as_mapping().context("create step")?)?;
     ensure!(create.contains("gh release view \"${RELEASE_TAG}\""));
     ensure!(create.contains("gh release create \"${RELEASE_TAG}\""));
     ensure!(create.contains("--generate-notes --verify-tag"));

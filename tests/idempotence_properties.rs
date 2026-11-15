@@ -260,6 +260,13 @@ fn generated_corpus_produces_changed_and_unchanged_documents() {
 /// for, so shorter ones are skipped.
 #[test]
 fn generated_corpus_reaches_both_defect_classes() {
+    assert_every_break_spelling_survives_a_wrap();
+    assert_class_b_blocks_are_fixed_points();
+}
+
+/// Asserts every thematic-break spelling the generator emits survives a wrap
+/// as a standalone line, and that the sweep reaches every spelling.
+fn assert_every_break_spelling_survives_a_wrap() {
     let breaks = sample(&proptest::sample::select(BREAK_SPELLINGS), SWEEP_DOCUMENTS);
     let mut covered = std::collections::BTreeSet::new();
     for break_line in &breaks {
@@ -279,20 +286,27 @@ fn generated_corpus_reaches_both_defect_classes() {
         BREAK_SPELLINGS.len(),
         "the generator did not reach every break spelling",
     );
+}
 
+/// Returns whether `block` is an overlong prefixed line with a code span and a
+/// continuation, the class B shape.
+fn is_class_b_block(block: &str) -> bool {
+    let mut block_lines = block.lines();
+    let Some(first_line) = block_lines.next() else {
+        return false;
+    };
+    is_overlong_prefixed_span_block(first_line, block_lines.next().is_some())
+}
+
+/// Asserts every class B block the generator emits is a fixed point of the
+/// formatter, and that the sweep reaches at least one.
+fn assert_class_b_blocks_are_fixed_points() {
     let class_b = sample(&overlong_code_span_block_strategy(), SWEEP_DOCUMENTS);
-    let mut spans = 0_usize;
-    for block in &class_b {
-        let mut block_lines = block.lines();
-        let Some(first_line) = block_lines.next() else {
-            continue;
-        };
-        let has_continuation = block_lines.next().is_some();
-        if !is_overlong_prefixed_span_block(first_line, has_continuation) {
-            continue;
-        }
-
-        spans += 1;
+    let shapes: Vec<&String> = class_b
+        .iter()
+        .filter(|block| is_class_b_block(block))
+        .collect();
+    for block in &shapes {
         let document = format!("{block}\n");
         let (once, twice) = format_twice(&document, &flags_for(1));
         assert_eq!(
@@ -301,7 +315,7 @@ fn generated_corpus_reaches_both_defect_classes() {
         );
     }
     assert!(
-        spans > 0,
+        !shapes.is_empty(),
         "the generator never produced a prefixed line with a code span and a continuation",
     );
 }

@@ -137,13 +137,14 @@ fn has_overlong_code_span(document: &str) -> bool {
 #[test]
 fn generated_corpus_reaches_every_flag() {
     let masks = sample(&(0u16..=255u16), SWEEP_DOCUMENTS);
-    let mut seen_enabled = std::collections::BTreeSet::new();
-    for mask in &masks {
-        for flag in flags_for(*mask) {
-            seen_enabled.insert(flag);
-        }
-    }
+    assert_every_flag_enabled(&masks);
+    assert_every_flag_disabled(&masks);
+}
 
+/// Asserts at least one mask in `masks` enables every flag in the pool.
+fn assert_every_flag_enabled(masks: &[u16]) {
+    let seen_enabled: std::collections::BTreeSet<_> =
+        masks.iter().flat_map(|mask| flags_for(*mask)).collect();
     let missing: Vec<_> = FLAG_POOL
         .iter()
         .filter(|flag| !seen_enabled.contains(**flag))
@@ -152,7 +153,10 @@ fn generated_corpus_reaches_every_flag() {
         missing.is_empty(),
         "the sweep never enabled {missing:?} across {SWEEP_DOCUMENTS} samples",
     );
+}
 
+/// Asserts at least one mask in `masks` leaves every flag in the pool off.
+fn assert_every_flag_disabled(masks: &[u16]) {
     for (index, flag) in FLAG_POOL.iter().enumerate() {
         let bit = 1 << index;
         assert!(

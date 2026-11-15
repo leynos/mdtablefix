@@ -92,13 +92,30 @@ fn report_line(file: &BatchFile) -> String {
     format!("{} +{RAGGED_INSERTIONS} -{RAGGED_DELETIONS}", file.name)
 }
 
+/// Writes every batch file into `directory` and returns their names in
+/// argument order.
+fn write_batch(directory: &Path) -> Vec<&'static str> {
+    for file in BATCH {
+        write_batch_file(directory, file);
+    }
+    BATCH.iter().map(|file| file.name).collect()
+}
+
+/// The stdout a `--check` run over the whole batch must produce: one report
+/// line per drifting file, in argument order.
+fn expected_reports() -> String {
+    let lines: Vec<String> = BATCH
+        .iter()
+        .filter(|file| file.ragged)
+        .map(|file| format!("{}\n", report_line(file)))
+        .collect();
+    lines.concat()
+}
+
 #[test]
 fn reports_every_file_in_order() {
     let dir = tempdir().expect("create temporary directory");
-    for file in BATCH {
-        write_batch_file(dir.path(), file);
-    }
-    let names: Vec<&str> = BATCH.iter().map(|file| file.name).collect();
+    let names = write_batch(dir.path());
 
     let mut args: Vec<&str> = vec!["--check"];
     args.extend(names.iter().copied());
@@ -110,11 +127,7 @@ fn reports_every_file_in_order() {
         "drifting files must exit 1: {}",
         stderr_of(&output)
     );
-    let mut expected = String::new();
-    for file in BATCH.iter().filter(|file| file.ragged) {
-        expected.push_str(&report_line(file));
-        expected.push('\n');
-    }
+    let expected = expected_reports();
     assert_eq!(
         stdout_of(&output),
         expected,
