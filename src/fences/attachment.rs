@@ -148,49 +148,35 @@ where
 {
     match next_attachable_fence(lines.clone()) {
         NextFence::Attachable { blank_count } => {
-            consume_attachable_fence(lines, blank_count, specifier, indent, out, tracker);
+            skip_lines(lines, blank_count);
+            if let Some(fence_line) = lines.next() {
+                out.push(attach_specifier_to_fence(fence_line, specifier, indent));
+                let _ = tracker.observe_source_line(fence_line);
+            }
             AttachmentOutcome::Attached
         }
         NextFence::NotAttachable { blank_count } => {
-            preserve_specifier_with_blanks(lines, blank_count, specifier_line, out);
+            out.push(specifier_line.to_owned());
+            copy_lines(lines, blank_count, out);
             AttachmentOutcome::Preserved
         }
     }
 }
 
-/// Skip `blank_count` blank lines, then emit the fence below with `specifier` attached.
-fn consume_attachable_fence<'a, I>(
-    lines: &mut std::iter::Peekable<I>,
-    blank_count: usize,
-    specifier: &str,
-    indent: &str,
-    out: &mut Vec<String>,
-    tracker: &mut FenceTracker,
-) where
-    I: Iterator<Item = &'a String> + Clone,
+/// Discard the next `count` lines.
+fn skip_lines<'a, I>(lines: &mut std::iter::Peekable<I>, count: usize)
+where
+    I: Iterator<Item = &'a String>,
 {
-    for _ in 0..blank_count {
+    for _ in 0..count {
         let _ = lines.next();
-    }
-    if let Some(fence_line) = lines.next() {
-        out.push(attach_specifier_to_fence(fence_line, specifier, indent));
-        let _ = tracker.observe_source_line(fence_line);
     }
 }
 
-/// Emit the specifier line unchanged, followed by the `blank_count` blank lines after it.
-fn preserve_specifier_with_blanks<'a, I>(
-    lines: &mut std::iter::Peekable<I>,
-    blank_count: usize,
-    specifier_line: &str,
-    out: &mut Vec<String>,
-) where
-    I: Iterator<Item = &'a String> + Clone,
+/// Copy the next `count` lines to `out`.
+fn copy_lines<'a, I>(lines: &mut std::iter::Peekable<I>, count: usize, out: &mut Vec<String>)
+where
+    I: Iterator<Item = &'a String>,
 {
-    out.push(specifier_line.to_owned());
-    for _ in 0..blank_count {
-        if let Some(blank_line) = lines.next() {
-            out.push(blank_line.clone());
-        }
-    }
+    out.extend(lines.by_ref().take(count).cloned());
 }
