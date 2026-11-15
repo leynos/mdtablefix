@@ -148,23 +148,49 @@ where
 {
     match next_attachable_fence(lines.clone()) {
         NextFence::Attachable { blank_count } => {
-            for _ in 0..blank_count {
-                let _ = lines.next();
-            }
-            if let Some(fence_line) = lines.next() {
-                out.push(attach_specifier_to_fence(fence_line, specifier, indent));
-                let _ = tracker.observe_source_line(fence_line);
-            }
+            consume_attachable_fence(lines, blank_count, specifier, indent, out, tracker);
             AttachmentOutcome::Attached
         }
         NextFence::NotAttachable { blank_count } => {
-            out.push(specifier_line.to_owned());
-            for _ in 0..blank_count {
-                if let Some(blank_line) = lines.next() {
-                    out.push(blank_line.clone());
-                }
-            }
+            preserve_specifier_with_blanks(lines, blank_count, specifier_line, out);
             AttachmentOutcome::Preserved
+        }
+    }
+}
+
+/// Skip `blank_count` blank lines, then emit the fence below with `specifier` attached.
+fn consume_attachable_fence<'a, I>(
+    lines: &mut std::iter::Peekable<I>,
+    blank_count: usize,
+    specifier: &str,
+    indent: &str,
+    out: &mut Vec<String>,
+    tracker: &mut FenceTracker,
+) where
+    I: Iterator<Item = &'a String> + Clone,
+{
+    for _ in 0..blank_count {
+        let _ = lines.next();
+    }
+    if let Some(fence_line) = lines.next() {
+        out.push(attach_specifier_to_fence(fence_line, specifier, indent));
+        let _ = tracker.observe_source_line(fence_line);
+    }
+}
+
+/// Emit the specifier line unchanged, followed by the `blank_count` blank lines after it.
+fn preserve_specifier_with_blanks<'a, I>(
+    lines: &mut std::iter::Peekable<I>,
+    blank_count: usize,
+    specifier_line: &str,
+    out: &mut Vec<String>,
+) where
+    I: Iterator<Item = &'a String> + Clone,
+{
+    out.push(specifier_line.to_owned());
+    for _ in 0..blank_count {
+        if let Some(blank_line) = lines.next() {
+            out.push(blank_line.clone());
         }
     }
 }

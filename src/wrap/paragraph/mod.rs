@@ -12,6 +12,7 @@ use unicode_width::UnicodeWidthStr;
 use super::{tokenize::parse_open_code_span, wiring::wrap_preserving_code};
 
 mod code_span_trim;
+mod flush;
 mod hard_break;
 mod pending;
 mod spanning_code;
@@ -263,75 +264,12 @@ impl<'a> ParagraphWriter<'a> {
     /// method returns no value, clears the state when flushing completes, and
     /// preserves hard-break segments as distinct wrapped emissions.
     pub(super) fn flush_paragraph(&mut self, state: &mut ParagraphState) {
-        if let Some(pending) = state.drain_pending_prefix() {
-            let mut pending = pending;
-
-            if pending.continuation_mode == ContinuationMode::VerbatimFlush {
-                if !pending.repeat_prefix {
-                    state.remember_continuation_indent(continuation_prefix_for(
-                        pending.prefix.as_str(),
-                        pending.repeat_prefix,
-                        pending.outer_prefix.as_deref(),
-                    ));
-                }
-                self.out.extend(pending.original_lines);
-                return;
-            }
-
-            // Advances `used_prefix` so a final flush never repeats list markers.
-            let prefix = pending_prefix_for_next_segment(&mut pending);
-            let rest = trim_code_span_edge_spaces(&pending.rest, &pending.synthetic_join_spaces);
-            let prefix_line = PrefixLine {
-                prefix: Cow::Owned(prefix),
-                rest: rest.as_ref(),
-                repeat_prefix: pending.repeat_prefix,
-                outer_prefix: pending.outer_prefix.as_deref().map(Cow::Borrowed),
-            };
-            self.append_stable_pending_prefix(&prefix_line, pending.rest_width);
-            if pending.hard_break {
-                self.ensure_trailing_hard_break_on_last_line();
-            }
-            if !pending.repeat_prefix {
-                state.remember_continuation_indent(continuation_prefix_for(
-                    pending.prefix.as_str(),
-                    pending.repeat_prefix,
-                    pending.outer_prefix.as_deref(),
-                ));
-            }
-        }
-
-        if state.buf.is_empty() {
+        if let Some(pending) = state.drain_pending_prefix()
+            && self.flush_pending_prefix(state, pending)
+        {
             return;
         }
-
-        if let Some(lines) = spanning_code::conforming_source_lines_for_overlong_span(
-            &state.buf,
-            &state.indent,
-            self.width,
-        ) {
-            self.out.extend(lines);
-            state.clear();
-            return;
-        }
-
-        let mut segment = String::new();
-        for (text, hard_break) in &state.buf {
-            if !segment.is_empty() {
-                segment.push(' ');
-            }
-            segment.push_str(text);
-            if *hard_break {
-                self.push_wrapped_segment(&state.indent, &segment);
-                self.ensure_trailing_hard_break_on_last_line();
-                segment.clear();
-            }
-        }
-
-        if !segment.is_empty() {
-            self.push_wrapped_segment(&state.indent, &segment);
-        }
-
-        state.clear();
+        self.flush_buffered_segments(state);
     }
 
     /// Wraps one buffered `segment` using the shared indentation `indent`.

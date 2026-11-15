@@ -22,36 +22,55 @@ pub(super) fn protect_table_lines(
     mut lines: Vec<String>,
     table_lines: &[String],
 ) -> (Vec<String>, ProtectedTableLines) {
+    let placeholder_prefix = unused_placeholder_prefix(&lines);
+    let mut table_line_counts = count_table_lines(table_lines);
+    let replacements = replace_table_lines(&mut lines, &mut table_line_counts, &placeholder_prefix);
+    (lines, ProtectedTableLines { replacements })
+}
+
+/// Selects a placeholder prefix that occurs in none of `lines`.
+fn unused_placeholder_prefix(lines: &[String]) -> String {
     let mut nonce = 0_usize;
-    let placeholder_prefix = loop {
+    loop {
         let candidate = format!("\u{E000}mdtablefix-table-{nonce}\u{E001}");
         if lines.iter().all(|line| !line.contains(&candidate)) {
-            break candidate;
+            return candidate;
         }
         nonce += 1;
-    };
-
-    let mut table_line_counts: HashMap<&str, usize> = HashMap::new();
-    for table_line in table_lines {
-        *table_line_counts
-            .entry(table_line.as_str())
-            .or_insert(0_usize) += 1;
     }
+}
 
+/// Counts how many times each distinct table row occurs.
+fn count_table_lines(table_lines: &[String]) -> HashMap<&str, usize> {
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    for table_line in table_lines {
+        *counts.entry(table_line.as_str()).or_insert(0_usize) += 1;
+    }
+    counts
+}
+
+/// Swaps each remaining table row in `lines` for a placeholder and returns the originals.
+///
+/// Each swap consumes one count, so duplicate rows are replaced in source order.
+fn replace_table_lines(
+    lines: &mut [String],
+    counts: &mut HashMap<&str, usize>,
+    placeholder_prefix: &str,
+) -> HashMap<String, String> {
     let mut replacements = HashMap::new();
     for (index, line) in lines.iter_mut().enumerate() {
-        if let Some(remaining) = table_line_counts.get_mut(line.as_str()) {
-            if *remaining == 0 {
-                continue;
-            }
-            *remaining -= 1;
-            let placeholder = format!("{placeholder_prefix}{index}");
-            let table_line = std::mem::replace(line, placeholder.clone());
-            replacements.insert(placeholder, table_line);
+        let Some(remaining) = counts.get_mut(line.as_str()) else {
+            continue;
+        };
+        if *remaining == 0 {
+            continue;
         }
+        *remaining -= 1;
+        let placeholder = format!("{placeholder_prefix}{index}");
+        let table_line = std::mem::replace(line, placeholder.clone());
+        replacements.insert(placeholder, table_line);
     }
-
-    (lines, ProtectedTableLines { replacements })
+    replacements
 }
 
 /// Restores protected table rows after non-table transformations finish.

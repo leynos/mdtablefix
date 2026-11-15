@@ -134,19 +134,21 @@ fn scan_footnote_label_end(text: &str, mut cursor: usize) -> Option<usize> {
     while cursor < text.len() {
         let ch = text.get(cursor..)?.chars().next()?;
         cursor += ch.len_utf8();
-
-        if ch == '\\' {
-            if let Some(escaped) = text.get(cursor..)?.chars().next() {
-                cursor += escaped.len_utf8();
-            }
-            continue;
-        }
-
-        if ch == ']' {
-            return Some(cursor);
+        match ch {
+            '\\' => cursor += escaped_char_len(text, cursor)?,
+            ']' => return Some(cursor),
+            _ => {}
         }
     }
     None
+}
+
+/// Returns the byte length of the character a backslash at `cursor - 1` escapes.
+///
+/// A backslash at the end of the input escapes nothing and yields zero; an offset
+/// outside the text yields `None`.
+fn escaped_char_len(text: &str, cursor: usize) -> Option<usize> {
+    Some(text.get(cursor..)?.chars().next().map_or(0, char::len_utf8))
 }
 
 /// Reports that no footnote label was found, naming the reason it failed.

@@ -235,50 +235,88 @@ pub(crate) fn position_after_close(
         return None;
     }
 
-    let bytes = text.as_bytes();
     let mut index = search_start;
     let mut escaped_candidate_end = None;
 
-    let has_matching_closing_fence = |search_from: usize| -> bool {
-        let mut close_index = search_from;
-
-        while close_index < text.len() {
-            let Some(ch) = text.get(close_index..).and_then(|rest| rest.chars().next()) else {
-                break;
-            };
-
-            if ch == '`'
-                && let Some(_end) = closing_fence_end(bytes, text, close_index, fence_len)
-            {
-                return true;
-            }
-
-            close_index += ch.len_utf8();
-        }
-
-        false
-    };
-
     while index < text.len() {
-        let ch = text.get(index..)?.chars().next()?;
-        if ch == '`'
-            && let Some(end) = closing_fence_end(bytes, text, index, fence_len)
-        {
-            if has_odd_backslash_escape_bytes(bytes, index) {
+        match scan_closing_step(text, index, fence_len)? {
+            CloseStep::Skip(len) => index += len,
+            CloseStep::EscapedRun(end) => {
                 escaped_candidate_end = Some(end);
                 index = end;
-                continue;
             }
-            if let Some(escaped_end) = escaped_candidate_end
-                && has_matching_closing_fence(end)
-            {
-                return Some(escaped_end);
+            CloseStep::ClosingRun(end) => {
+                return Some(prefer_escaped_close(
+                    text,
+                    end,
+                    fence_len,
+                    escaped_candidate_end,
+                ));
             }
-            return Some(end);
         }
-        index += ch.len_utf8();
     }
     escaped_candidate_end
+}
+
+/// What the scan for a closing fence found at one position.
+enum CloseStep {
+    /// Not a closing run; skip this many bytes.
+    Skip(usize),
+    /// A backslash-escaped closing run ending at this byte offset.
+    EscapedRun(usize),
+    /// An unescaped closing run ending at this byte offset.
+    ClosingRun(usize),
+}
+
+/// Classifies the character at `index` for the closing-fence scan.
+///
+/// Returns `None` when `index` is not on a character boundary inside `text`.
+fn scan_closing_step(text: &str, index: usize, fence_len: usize) -> Option<CloseStep> {
+    let bytes = text.as_bytes();
+    let ch = text.get(index..)?.chars().next()?;
+    let closing_end = (ch == '`')
+        .then(|| closing_fence_end(bytes, text, index, fence_len))
+        .flatten();
+    Some(match closing_end {
+        Some(end) if has_odd_backslash_escape_bytes(bytes, index) => CloseStep::EscapedRun(end),
+        Some(end) => CloseStep::ClosingRun(end),
+        None => CloseStep::Skip(ch.len_utf8()),
+    })
+}
+
+/// Chooses between an earlier escaped closing run and the unescaped one ending at `end`.
+///
+/// The earlier escaped run wins only when a further matching closing run follows `end`.
+fn prefer_escaped_close(
+    text: &str,
+    end: usize,
+    fence_len: usize,
+    escaped_candidate_end: Option<usize>,
+) -> usize {
+    match escaped_candidate_end {
+        Some(escaped_end) if has_matching_closing_fence(text, end, fence_len) => escaped_end,
+        _ => end,
+    }
+}
+
+/// Returns whether a closing run of exactly `fence_len` backticks occurs at or after `search_from`.
+fn has_matching_closing_fence(text: &str, search_from: usize, fence_len: usize) -> bool {
+    let bytes = text.as_bytes();
+    let mut close_index = search_from;
+
+    while close_index < text.len() {
+        let Some(ch) = text.get(close_index..).and_then(|rest| rest.chars().next()) else {
+            break;
+        };
+
+        if ch == '`' && closing_fence_end(bytes, text, close_index, fence_len).is_some() {
+            return true;
+        }
+
+        close_index += ch.len_utf8();
+    }
+
+    false
 }
 
 /// Track the active code-span fence while scanning a continuation fragment.
