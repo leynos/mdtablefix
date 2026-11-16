@@ -43,10 +43,17 @@
 //! the per-diagnostic reason assertion notices that the contributor has lost
 //! the sentence telling them which seam to use.
 
-use std::process::Command;
+use std::{
+    hash::{DefaultHasher, Hash, Hasher},
+    process::Command,
+    sync::{
+        Barrier,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
 use anyhow::{Context, Result, ensure};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 /// The fixture crate's source, stored as text so nothing compiles it in place.
@@ -95,22 +102,65 @@ const FIXTURE_MANIFEST: &str = concat!(
 /// The repository root, which is the directory holding `clippy.toml`.
 fn repository_root() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
-/// Writes `contents` to `name` only when the file differs from it.
+/// The directory name the fixture package is published under: one per distinct
+/// set of fixture contents, so a changed fixture never reuses a stale package.
+fn published_name() -> String {
+    let mut hasher = DefaultHasher::new();
+    (FIXTURE_MANIFEST, FIXTURE_SOURCE, TOOLCHAIN).hash(&mut hasher);
+    format!("package-{:016x}", hasher.finish())
+}
+
+/// Makes each staging directory name unique per call, not only per process, so
+/// threads never share one either.
+static NEXT_STAGING: AtomicU64 = AtomicU64::new(0);
+
+/// Publishes the fixture package under `scratch` and returns its directory.
 ///
-/// The fixture directory is fixed, so two test processes in one checkout share
-/// it. Leaving an unchanged file alone means a second process never rewrites
-/// what the first is reading, and the file's modification time stays put, so
-/// Cargo keeps the fixture's build instead of treating it as edited.
-fn write_if_changed(directory: &Dir, name: &str, contents: &str) -> Result<()> {
-    if directory
-        .read_to_string(name)
-        .is_ok_and(|current| current == contents)
-    {
+/// The package is written complete into a private staging directory and then
+/// renamed into place, so another test process in this checkout only ever sees
+/// a published package that is whole and never changes. When two processes
+/// publish at once, one rename wins and the other discards its staging copy and
+/// uses the winner's; either way the name, and so Cargo's cached build of the
+/// fixture, is the same on every run.
+fn publish_fixture_package(scratch: &Dir, name: &str) -> Result<()> {
+    if scratch.is_dir(name) {
         return Ok(());
     }
-    directory
-        .write(name, contents)
-        .with_context(|| format!("write the fixture file {name}"))
+    let staging_name = format!(
+        "staging-{}-{}-{name}",
+        std::process::id(),
+        NEXT_STAGING.fetch_add(1, Ordering::Relaxed)
+    );
+    scratch
+        .create_dir_all(&staging_name)
+        .context("create the fixture staging directory")?;
+    let staging = scratch
+        .open_dir(&staging_name)
+        .context("open the fixture staging directory")?;
+    staging
+        .write("Cargo.toml", FIXTURE_MANIFEST)
+        .context("write the fixture manifest")?;
+    staging
+        .write("lib.rs", FIXTURE_SOURCE)
+        .context("write the fixture source")?;
+    staging
+        .write("rust-toolchain.toml", TOOLCHAIN)
+        .context("write the fixture toolchain file")?;
+    if let Err(error) = scratch.rename(&staging_name, scratch, name) {
+        // A process that published first leaves the name taken; anything else
+        // is a real failure.
+        ensure!(
+            scratch.is_dir(name),
+            "publish the fixture package {name}: {error}"
+        );
+    }
+    // Still there only when another process won the rename.
+    if scratch.is_dir(&staging_name) {
+        scratch
+            .remove_dir_all(&staging_name)
+            .context("remove the fixture staging directory")?;
+    }
+    Ok(())
 }
 
 /// Materialize the fixture package and run Clippy over it.
@@ -121,14 +171,13 @@ fn write_if_changed(directory: &Dir, name: &str, contents: &str) -> Result<()> {
 /// separate from the repository's own build trees, and `cargo clean` removes it.
 fn lint_the_fixture() -> Result<String> {
     let scratch = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/env-access-fixture");
-    let root = scratch.join("package");
-    Dir::create_ambient_dir_all(&root, ambient_authority())
-        .with_context(|| format!("create the fixture directory {root}"))?;
-    let handle = Dir::open_ambient_dir(&root, ambient_authority())
-        .with_context(|| format!("open the fixture directory {root}"))?;
-    write_if_changed(&handle, "Cargo.toml", FIXTURE_MANIFEST)?;
-    write_if_changed(&handle, "lib.rs", FIXTURE_SOURCE)?;
-    write_if_changed(&handle, "rust-toolchain.toml", TOOLCHAIN)?;
+    Dir::create_ambient_dir_all(&scratch, ambient_authority())
+        .with_context(|| format!("create the fixture directory {scratch}"))?;
+    let handle = Dir::open_ambient_dir(&scratch, ambient_authority())
+        .with_context(|| format!("open the fixture directory {scratch}"))?;
+    let name = published_name();
+    publish_fixture_package(&handle, &name)?;
+    let root = scratch.join(&name);
 
     // `env!("CARGO")` is the compile-time path to the Cargo that built this
     // test. Reading `CARGO` from the process at run time would trip the very
@@ -225,4 +274,73 @@ fn the_lint_fires_for_every_prohibited_method() -> Result<()> {
         reported.len()
     );
     Ok(())
+}
+
+/// Scenario: several publishers race for one package name on a cold scratch
+/// directory, each released at the same moment by a barrier.
+/// Invariant: every publisher succeeds, exactly one package exists under the
+/// name, it is whole, and no staging directory is left behind.
+#[test]
+fn racing_publishers_leave_one_whole_package() -> Result<()> {
+    const PUBLISHERS: usize = 4;
+    let temporary = tempfile::TempDir::new().context("create a scratch directory")?;
+    let scratch = open_directory(temporary.path())?;
+    let name = published_name();
+
+    publish_together(&scratch, &name, PUBLISHERS)?;
+    assert_package_is_whole(&scratch, &name)?;
+    ensure!(
+        entries_other_than(&scratch, &name)? == 0,
+        "staging directories were left behind"
+    );
+    Ok(())
+}
+
+/// Opens an ambient directory by its standard-library path.
+fn open_directory(path: &std::path::Path) -> Result<Dir> {
+    let utf8 = Utf8Path::from_path(path).context("scratch path should be UTF-8")?;
+    Dir::open_ambient_dir(utf8, ambient_authority()).context("open the scratch directory")
+}
+
+/// Runs `publishers` threads that each publish `name` into `scratch`, released
+/// at the same moment, and fails if any of them fails.
+fn publish_together(scratch: &Dir, name: &str, publishers: usize) -> Result<()> {
+    let barrier = Barrier::new(publishers);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..publishers)
+            .map(|_| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    publish_fixture_package(scratch, name)
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("a publisher thread should not panic"))
+            .collect::<Result<Vec<()>>>()
+            .map(drop)
+    })
+}
+
+/// Checks the published package holds all three fixture files, unchanged.
+fn assert_package_is_whole(scratch: &Dir, name: &str) -> Result<()> {
+    let package = scratch
+        .open_dir(name)
+        .context("open the published package")?;
+    ensure!(package.read_to_string("Cargo.toml")? == FIXTURE_MANIFEST);
+    ensure!(package.read_to_string("lib.rs")? == FIXTURE_SOURCE);
+    ensure!(package.read_to_string("rust-toolchain.toml")? == TOOLCHAIN);
+    Ok(())
+}
+
+/// Counts the entries of `scratch` that are not the published package `name`.
+fn entries_other_than(scratch: &Dir, name: &str) -> Result<usize> {
+    let mut others = 0;
+    for entry in scratch.entries().context("list the scratch directory")? {
+        if entry?.file_name()? != name {
+            others += 1;
+        }
+    }
+    Ok(others)
 }

@@ -105,8 +105,8 @@ fn generated_structural_adjacencies_reach_every_shape() {
         "the forced flag mask must select --headings",
     );
 
-    assert_every_block_start_is_generated();
-    assert_every_delimiter_row_is_generated();
+    assert_every_choice_is_generated(NON_PARAGRAPH_STARTERS, "block-start class");
+    assert_every_choice_is_generated(TABLE_DELIMITER_ROWS, "delimiter-row spelling");
 
     let mut counts = ShapeCounts::default();
     for (document, shape, break_line) in &sample(&adjacency_strategy(), SWEEP_DOCUMENTS) {
@@ -148,33 +148,16 @@ impl ShapeCounts {
     }
 }
 
-/// Asserts the sweep reaches every block-start class.
-fn assert_every_block_start_is_generated() {
-    let starters: std::collections::BTreeSet<&str> = sample(
-        &proptest::sample::select(NON_PARAGRAPH_STARTERS),
-        SWEEP_DOCUMENTS,
-    )
-    .into_iter()
-    .collect();
+/// Asserts the sweep draws every one of `choices`, naming `what` on failure.
+fn assert_every_choice_is_generated(choices: &'static [&'static str], what: &str) {
+    let drawn: std::collections::BTreeSet<&str> =
+        sample(&proptest::sample::select(choices), SWEEP_DOCUMENTS)
+            .into_iter()
+            .collect();
     assert_eq!(
-        starters.len(),
-        NON_PARAGRAPH_STARTERS.len(),
-        "the generator did not reach every block-start class",
-    );
-}
-
-/// Asserts the sweep reaches every table delimiter-row spelling.
-fn assert_every_delimiter_row_is_generated() {
-    let rows: std::collections::BTreeSet<&str> = sample(
-        &proptest::sample::select(TABLE_DELIMITER_ROWS),
-        SWEEP_DOCUMENTS,
-    )
-    .into_iter()
-    .collect();
-    assert_eq!(
-        rows.len(),
-        TABLE_DELIMITER_ROWS.len(),
-        "the generator did not reach every delimiter-row spelling",
+        drawn.len(),
+        choices.len(),
+        "the generator did not reach every {what}",
     );
 }
 
