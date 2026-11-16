@@ -108,7 +108,7 @@ rstest-bdd-macros = { version = "0.6.0", features = ["strict-compile-time-valida
 toml = "1.1.2"
 syn = { version = "3.0.3", features = ["full", "visit", "extra-traits"] }
 proc-macro2 = "1.0.106"
-criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 
 [[bench]]
 name = "wrap_observer"
