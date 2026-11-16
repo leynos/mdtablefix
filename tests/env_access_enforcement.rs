@@ -59,13 +59,17 @@ const TOOLCHAIN: &str = include_str!("../rust-toolchain.toml");
 /// The reasons are asserted, not just the paths: a reason string is what tells
 /// a contributor which seam to reach for, so losing it degrades the diagnostic
 /// even while the method stays banned.
-const EXPECTED_DIAGNOSTICS: [(&str, &str); 6] = [
+const EXPECTED_DIAGNOSTICS: [(&str, &str); 7] = [
     ("std::env::var", "inject an environment reader"),
     ("std::env::var_os", "inject an environment reader"),
     ("std::env::vars", "inject an environment reader"),
     ("std::env::vars_os", "inject an environment reader"),
     ("std::env::set_var", "use a stub environment in tests"),
     ("std::env::remove_var", "use a stub environment in tests"),
+    (
+        "std::env::set_current_dir",
+        "process-wide working directory; pass the directory in or use Command::current_dir",
+    ),
 ];
 
 /// The manifest for the fixture package.
