@@ -9,24 +9,24 @@ use assert_cmd::Command;
 use serde_yaml::{Mapping, Value};
 
 // The paths are relative to this file's own directory, `tests/`.
-#[path = "support/workflow_yaml.rs"]
-mod workflow_yaml;
+#[path = "support/release_assertions.rs"]
+mod release_assertions;
 
-use workflow_yaml::{
-    as_mapping,
-    assert_fragments_in_order,
-    command,
-    get,
-    get_string,
-    job,
-    named_step,
-    named_step_index,
-    nested_string,
-    parse_workflow,
-    step_mapping,
-    steps,
+use release_assertions::{
+    assert_build_runs_each_target_independently,
+    assert_cross_cache_step,
+    assert_cross_checksum_environment,
+    assert_cross_install_step,
+    assert_no_aggregate_release_job,
+    assert_prepare_command,
+    assert_prepare_upload_publish_order,
+    assert_publish_step_is_idempotent,
+    assert_release_build_command,
+    assert_setup_rust_inputs,
+    assert_timestamp_command,
 };
 
+const RELEASE_WORKFLOW: &str = include_str!("../.github/workflows/release.yml");
 const CHECKOUT_ACTION: &str = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
 const CACHE_ACTION: &str = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
 const UPLOAD_ACTION: &str = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
@@ -39,6 +39,88 @@ const CROSS_VERSION_PROBE: &str = concat!(
     "  ) | sed -n '1p'\n",
     "}",
 );
+
+fn parse_workflow() -> Result<Value> {
+    serde_yaml::from_str(RELEASE_WORKFLOW).context("parse release workflow YAML")
+}
+
+fn as_mapping<'a>(value: &'a Value, description: &str) -> Result<&'a Mapping> {
+    value
+        .as_mapping()
+        .with_context(|| format!("{description} should be a mapping"))
+}
+
+fn get<'a>(mapping: &'a Mapping, key: &str) -> Result<&'a Value> {
+    mapping
+        .get(Value::String(key.to_owned()))
+        .with_context(|| format!("mapping should define {key}"))
+}
+
+fn job<'a>(workflow: &'a Value, name: &str) -> Result<&'a Mapping> {
+    let root = as_mapping(workflow, "workflow")?;
+    let jobs = as_mapping(get(root, "jobs")?, "jobs")?;
+    as_mapping(get(jobs, name)?, name)
+}
+
+fn steps(job: &Mapping) -> Result<&[Value]> {
+    get(job, "steps")?
+        .as_sequence()
+        .map(Vec::as_slice)
+        .context("job steps should be a sequence")
+}
+
+fn step_mapping<'a>(step: &'a Value, description: &str) -> Result<&'a Mapping> {
+    as_mapping(step, description)
+}
+
+fn named_step<'a>(steps: &'a [Value], name: &str) -> Result<&'a Mapping> {
+    steps
+        .iter()
+        .find_map(|step| {
+            let mapping = step.as_mapping()?;
+            (get_string(mapping, "name") == Some(name)).then_some(mapping)
+        })
+        .with_context(|| format!("job should define the {name} step"))
+}
+
+fn named_step_index(steps: &[Value], name: &str) -> Result<usize> {
+    steps
+        .iter()
+        .position(|step| {
+            step.as_mapping()
+                .and_then(|mapping| get_string(mapping, "name"))
+                == Some(name)
+        })
+        .with_context(|| format!("job should define the {name} step"))
+}
+
+fn get_string<'a>(mapping: &'a Mapping, key: &str) -> Option<&'a str> {
+    mapping
+        .get(Value::String(key.to_owned()))
+        .and_then(Value::as_str)
+}
+
+fn nested_string<'a>(mapping: &'a Mapping, group: &str, key: &str) -> Option<&'a str> {
+    mapping
+        .get(Value::String(group.to_owned()))
+        .and_then(Value::as_mapping)
+        .and_then(|nested| get_string(nested, key))
+}
+
+fn command(step: &Mapping) -> Result<&str> {
+    get_string(step, "run").context("step should define a run command")
+}
+
+fn assert_fragments_in_order(command: &str, fragments: &[&str]) -> Result<()> {
+    let mut search_start = 0;
+    for fragment in fragments {
+        let relative_index = command[search_start..]
+            .find(fragment)
+            .with_context(|| format!("command should contain {fragment:?} in order"))?;
+        search_start += relative_index + fragment.len();
+    }
+    Ok(())
+}
 
 fn assert_checkout_ref(job: &Mapping) -> Result<()> {
     let checkout = step_mapping(
@@ -64,62 +146,6 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
     assert_cross_install_step(build_steps)?;
     let add_target = command(named_step(build_steps, "Add release target")?)?;
     ensure!(add_target == "rustup target add ${{ matrix.target }}");
-    Ok(())
-}
-
-/// Checks the workflow environment pins the cross checksum and no toolchain.
-fn assert_cross_checksum_environment(root: &Mapping) -> Result<()> {
-    let env = as_mapping(get(root, "env")?, "workflow environment")?;
-    ensure!(get_string(env, "CROSS_LINUX_X64_SHA256") == Some(CROSS_SHA256));
-    ensure!(get(env, "RELEASE_RUST_VERSION").is_err());
-    Ok(())
-}
-
-/// Checks the Setup Rust step leaves the toolchain to `rust-toolchain.toml`.
-fn assert_setup_rust_inputs(build_steps: &[Value]) -> Result<()> {
-    let setup_rust = named_step(build_steps, "Setup Rust")?;
-    let setup_inputs = as_mapping(get(setup_rust, "with")?, "Setup Rust inputs")?;
-    // No toolchain input: the tagged tree's rust-toolchain.toml selects the nightly.
-    ensure!(get(setup_inputs, "toolchain").is_err());
-    ensure!(get(setup_inputs, "install-binstall")?.as_bool() == Some(false));
-    ensure!(get(setup_inputs, "use-sccache")?.as_bool() == Some(false));
-    Ok(())
-}
-
-/// Checks the cross binaries are cached under a version-keyed path.
-fn assert_cross_cache_step(build_steps: &[Value]) -> Result<()> {
-    let cache = named_step(build_steps, "Cache the official cross binaries")?;
-    ensure!(get_string(cache, "uses") == Some(CACHE_ACTION));
-    ensure!(
-        nested_string(cache, "with", "path")
-            == Some("~/.local/share/mdtablefix-tools/cross-v${{ env.CROSS_VERSION }}")
-    );
-    Ok(())
-}
-
-/// Checks cross is installed from the verified official archive, never built.
-fn assert_cross_install_step(build_steps: &[Value]) -> Result<()> {
-    let install = command(named_step(
-        build_steps,
-        "Install cross from its official release",
-    )?)?;
-    ensure!(install.contains(CROSS_VERSION_PROBE));
-    assert_fragments_in_order(
-        install,
-        &[
-            "if [[ -x \"${cross_binary}\" ]]",
-            "if ! installed_version=\"$(probe_cross_version)\"; then",
-            "installed_version=\"\"",
-            "if [[ \"${installed_version}\" != \"${expected_version}\" ]]",
-            "url=\"https://github.com/cross-rs/cross/releases/download/",
-            "curl --fail --location --proto '=https' --tlsv1.2 \"${url}\" -o \"${archive}\"",
-            "echo \"${CROSS_LINUX_X64_SHA256}  ${archive}\" | sha256sum --check --status",
-            "tar --extract --gzip --file \"${archive}\" --directory \"${cross_dir}\"",
-            "installed_version=\"$(probe_cross_version)\"",
-            "[[ \"${installed_version}\" == \"${expected_version}\" ]]",
-        ],
-    )?;
-    ensure!(!install.contains("cargo install"));
     Ok(())
 }
 
@@ -161,61 +187,6 @@ fn successful_targets_publish_without_waiting_for_the_matrix() -> Result<()> {
     assert_no_aggregate_release_job(&workflow)
 }
 
-/// Checks the build job follows `prepare-release` and does not stop the
-/// matrix when one target fails.
-fn assert_build_runs_each_target_independently(build: &Mapping) -> Result<()> {
-    ensure!(get_string(build, "needs") == Some("prepare-release"));
-    let strategy = as_mapping(get(build, "strategy")?, "build strategy")?;
-    ensure!(get(strategy, "fail-fast")?.as_bool() == Some(false));
-    Ok(())
-}
-
-/// Checks no job waits for the whole matrix before publishing.
-fn assert_no_aggregate_release_job(workflow: &Value) -> Result<()> {
-    let jobs = as_mapping(get(as_mapping(workflow, "workflow")?, "jobs")?, "jobs")?;
-    ensure!(!jobs.contains_key(Value::String("release".to_owned())));
-    Ok(())
-}
-
-/// Checks each target prepares, uploads, then publishes its own assets, and
-/// that the upload overwrites a stale artifact.
-fn assert_prepare_upload_publish_order(build_steps: &[Value]) -> Result<()> {
-    let prepare_index = named_step_index(build_steps, "Prepare artifact")?;
-    let upload_index = named_step_index(build_steps, "Upload release artifact")?;
-    let publish_index = named_step_index(build_steps, "Publish this target's release assets")?;
-    ensure!(prepare_index < upload_index && upload_index < publish_index);
-    let upload = build_steps[upload_index]
-        .as_mapping()
-        .context("upload step")?;
-    ensure!(get_string(upload, "uses") == Some(UPLOAD_ACTION));
-    let upload_inputs = as_mapping(get(upload, "with")?, "artifact upload inputs")?;
-    ensure!(get(upload_inputs, "overwrite")?.as_bool() == Some(true));
-    Ok(())
-}
-
-/// Checks the publish step skips identical assets and never clobbers.
-fn assert_publish_step_is_idempotent(build_steps: &[Value]) -> Result<()> {
-    let publish = command(named_step(
-        build_steps,
-        "Publish this target's release assets",
-    )?)?;
-    assert_fragments_in_order(
-        publish,
-        &[
-            "for file in \"${artifact_dir}\"/*",
-            "releases/tags/${RELEASE_TAG}",
-            "if [[ -n \"${asset_id}\" ]]",
-            "releases/assets/${asset_id}",
-            "cmp --silent \"${file}\" \"${existing_file}\"",
-            "continue",
-            "gh release upload \"${RELEASE_TAG}\" \"${file}\"",
-            "--repo \"${GITHUB_REPOSITORY}\"",
-        ],
-    )?;
-    ensure!(!publish.contains("--clobber"));
-    Ok(())
-}
-
 #[test]
 fn cargo_binstall_archives_are_reproducible() -> Result<()> {
     let workflow = parse_workflow()?;
@@ -227,58 +198,6 @@ fn cargo_binstall_archives_are_reproducible() -> Result<()> {
     assert_release_build_command(build_steps)?;
     assert_timestamp_command(build_steps)?;
     assert_prepare_command(build_steps)?;
-    Ok(())
-}
-
-/// Checks the build step picks `cross` or Cargo per matrix builder.
-fn assert_release_build_command(build_steps: &[Value]) -> Result<()> {
-    // `cross` cannot emit Apple or MSVC binaries, so the native runners drive
-    // Cargo directly. Both arms build on the nightly that rust-toolchain.toml pins.
-    let build = command(named_step(build_steps, "Build release binary")?)?;
-    assert_fragments_in_order(
-        build,
-        &[
-            "if [[ \"${{ matrix.builder }}\" == \"cross\" ]]",
-            "cross build --release --target ${{ matrix.target }}",
-            "else",
-            "cargo build --release --target ${{ matrix.target }}",
-        ],
-    )?;
-    Ok(())
-}
-
-/// Checks `SOURCE_DATE_EPOCH` is taken from the tagged commit.
-fn assert_timestamp_command(build_steps: &[Value]) -> Result<()> {
-    let timestamp = command(named_step(
-        build_steps,
-        "Set reproducible release timestamp",
-    )?)?;
-    ensure!(
-        timestamp
-            == "echo \"SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)\" >> \"${GITHUB_ENV}\""
-    );
-    Ok(())
-}
-
-/// Checks the artifact is packaged by the script, not by inline `tar`.
-fn assert_prepare_command(build_steps: &[Value]) -> Result<()> {
-    // The archive itself is written by the packaging script. Every runner
-    // image can execute that script, and its determinism is covered by
-    // tests/release_packaging.rs; the workflow's job is only to invoke it.
-    let prepare = command(named_step(build_steps, "Prepare artifact")?)?;
-    assert_fragments_in_order(
-        prepare,
-        &[
-            "scripts/package_release_artifacts.py",
-            "--binary \"target/${{ matrix.target }}/release/${REPO_NAME}${binary_ext}\"",
-            "--artifact-dir \"artifacts/${{ matrix.os }}-${{ matrix.arch }}\"",
-            "--version \"${RELEASE_TAG#v}\"",
-            "--target \"${{ matrix.target }}\"",
-            "--arch \"${{ matrix.arch }}\"",
-        ],
-    )?;
-    ensure!(!prepare.contains("sha256sum"));
-    ensure!(!prepare.contains("tar -C"));
     Ok(())
 }
 
