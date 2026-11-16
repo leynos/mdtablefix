@@ -1,10 +1,7 @@
 //! The ordering batch: a report list must follow argument order.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
-
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::tempdir;
 
 use super::{
@@ -78,13 +75,11 @@ const BATCH: &[BatchFile] = &[
     },
 ];
 
-/// Writes `file` into `directory` and returns its path.
-fn write_batch_file(directory: &Path, file: &BatchFile) -> PathBuf {
+/// Writes `file` into the `directory` capability.
+fn write_batch_file(directory: &Dir, file: &BatchFile) {
     let mut content = String::from(if file.ragged { RAGGED } else { CLEAN });
     content.push_str(&"unformatted prose line\n".repeat(file.padding));
-    let path = directory.join(file.name);
-    fs::write(&path, content).expect("write fixture");
-    path
+    directory.write(file.name, content).expect("write fixture");
 }
 
 /// The report line a drifting file must produce.
@@ -92,9 +87,9 @@ fn report_line(file: &BatchFile) -> String {
     format!("{} +{RAGGED_INSERTIONS} -{RAGGED_DELETIONS}", file.name)
 }
 
-/// Writes every batch file into `directory` and returns their names in
-/// argument order.
-fn write_batch(directory: &Path) -> Vec<&'static str> {
+/// Writes every batch file into the `directory` capability and returns their
+/// names in argument order.
+fn write_batch(directory: &Dir) -> Vec<&'static str> {
     for file in BATCH {
         write_batch_file(directory, file);
     }
@@ -115,7 +110,15 @@ fn expected_reports() -> String {
 #[test]
 fn reports_every_file_in_order() {
     let dir = tempdir().expect("create temporary directory");
-    let names = write_batch(dir.path());
+    // The one ambient boundary: the capability is opened here, and every
+    // fixture is written relative to it. The child process still takes the
+    // directory as its working directory.
+    let capability = Dir::open_ambient_dir(
+        Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8"),
+        ambient_authority(),
+    )
+    .expect("open the temporary directory");
+    let names = write_batch(&capability);
 
     let mut args: Vec<&str> = vec!["--check"];
     args.extend(names.iter().copied());

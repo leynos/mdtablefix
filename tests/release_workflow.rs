@@ -8,7 +8,25 @@ use anyhow::{Context, Result, ensure};
 use assert_cmd::Command;
 use serde_yaml::{Mapping, Value};
 
-const RELEASE_WORKFLOW: &str = include_str!("../.github/workflows/release.yml");
+// The paths are relative to this file's own directory, `tests/`.
+#[path = "support/workflow_yaml.rs"]
+mod workflow_yaml;
+
+use workflow_yaml::{
+    as_mapping,
+    assert_fragments_in_order,
+    command,
+    get,
+    get_string,
+    job,
+    named_step,
+    named_step_index,
+    nested_string,
+    parse_workflow,
+    step_mapping,
+    steps,
+};
+
 const CHECKOUT_ACTION: &str = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
 const CACHE_ACTION: &str = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
 const UPLOAD_ACTION: &str = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
@@ -21,88 +39,6 @@ const CROSS_VERSION_PROBE: &str = concat!(
     "  ) | sed -n '1p'\n",
     "}",
 );
-
-fn parse_workflow() -> Result<Value> {
-    serde_yaml::from_str(RELEASE_WORKFLOW).context("parse release workflow YAML")
-}
-
-fn as_mapping<'a>(value: &'a Value, description: &str) -> Result<&'a Mapping> {
-    value
-        .as_mapping()
-        .with_context(|| format!("{description} should be a mapping"))
-}
-
-fn get<'a>(mapping: &'a Mapping, key: &str) -> Result<&'a Value> {
-    mapping
-        .get(Value::String(key.to_owned()))
-        .with_context(|| format!("mapping should define {key}"))
-}
-
-fn job<'a>(workflow: &'a Value, name: &str) -> Result<&'a Mapping> {
-    let root = as_mapping(workflow, "workflow")?;
-    let jobs = as_mapping(get(root, "jobs")?, "jobs")?;
-    as_mapping(get(jobs, name)?, name)
-}
-
-fn steps(job: &Mapping) -> Result<&[Value]> {
-    get(job, "steps")?
-        .as_sequence()
-        .map(Vec::as_slice)
-        .context("job steps should be a sequence")
-}
-
-fn step_mapping<'a>(step: &'a Value, description: &str) -> Result<&'a Mapping> {
-    as_mapping(step, description)
-}
-
-fn named_step<'a>(steps: &'a [Value], name: &str) -> Result<&'a Mapping> {
-    steps
-        .iter()
-        .find_map(|step| {
-            let mapping = step.as_mapping()?;
-            (get_string(mapping, "name") == Some(name)).then_some(mapping)
-        })
-        .with_context(|| format!("job should define the {name} step"))
-}
-
-fn named_step_index(steps: &[Value], name: &str) -> Result<usize> {
-    steps
-        .iter()
-        .position(|step| {
-            step.as_mapping()
-                .and_then(|mapping| get_string(mapping, "name"))
-                == Some(name)
-        })
-        .with_context(|| format!("job should define the {name} step"))
-}
-
-fn get_string<'a>(mapping: &'a Mapping, key: &str) -> Option<&'a str> {
-    mapping
-        .get(Value::String(key.to_owned()))
-        .and_then(Value::as_str)
-}
-
-fn nested_string<'a>(mapping: &'a Mapping, group: &str, key: &str) -> Option<&'a str> {
-    mapping
-        .get(Value::String(group.to_owned()))
-        .and_then(Value::as_mapping)
-        .and_then(|nested| get_string(nested, key))
-}
-
-fn command(step: &Mapping) -> Result<&str> {
-    get_string(step, "run").context("step should define a run command")
-}
-
-fn assert_fragments_in_order(command: &str, fragments: &[&str]) -> Result<()> {
-    let mut search_start = 0;
-    for fragment in fragments {
-        let relative_index = command[search_start..]
-            .find(fragment)
-            .with_context(|| format!("command should contain {fragment:?} in order"))?;
-        search_start += relative_index + fragment.len();
-    }
-    Ok(())
-}
 
 fn assert_checkout_ref(job: &Mapping) -> Result<()> {
     let checkout = step_mapping(
