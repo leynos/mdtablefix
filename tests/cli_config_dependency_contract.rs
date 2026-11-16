@@ -167,13 +167,15 @@ fn the_library_reaches_no_binary_only_source() -> Result<()> {
         "the walk reached only {} sources, so it is not following declarations",
         reached.len()
     );
-    ensure_none_is_binary_only(&root, &reached)
+    let root =
+        Utf8Path::from_path(&root).context("the repository root is not representable as UTF-8")?;
+    ensure_none_is_binary_only(root, &reached)
 }
 
 /// Fails when any of the `reached` sources is one of the binary-only files.
-fn ensure_none_is_binary_only(root: &Path, reached: &[Utf8PathBuf]) -> Result<()> {
+fn ensure_none_is_binary_only(root: &Utf8Path, reached: &[Utf8PathBuf]) -> Result<()> {
     for path in reached {
-        let relative = relative(root, path.as_std_path());
+        let relative = relative(root.as_std_path(), path.as_std_path());
         ensure!(
             !BINARY_ONLY.contains(&relative.as_str()),
             "src/lib.rs reaches {relative}, which belongs to the binary"
