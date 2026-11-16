@@ -298,21 +298,32 @@ fn assert_create_command(step: &Value) -> Result<()> {
 fn release_actions_use_immutable_commit_pins() -> Result<()> {
     let workflow = parse_workflow()?;
     for job_name in ["prepare-release", "build"] {
-        for step in steps(job(&workflow, job_name)?)? {
-            let Some(reference) = step
-                .as_mapping()
-                .and_then(|mapping| get_string(mapping, "uses"))
-            else {
-                continue;
-            };
-            let (_, pin) = reference
-                .rsplit_once('@')
-                .with_context(|| format!("action reference {reference:?} should contain @"))?;
-            ensure!(
-                pin.len() == 40 && pin.bytes().all(|byte| byte.is_ascii_hexdigit()),
-                "action reference {reference:?} should use a full commit SHA"
-            );
+        for reference in job_action_references(job(&workflow, job_name)?)? {
+            ensure_commit_pinned(reference)?;
         }
     }
+    Ok(())
+}
+
+/// Returns the `uses:` reference of every step in `job` that names an action.
+fn job_action_references(job: &Mapping) -> Result<Vec<&str>> {
+    Ok(steps(job)?
+        .iter()
+        .filter_map(|step| {
+            step.as_mapping()
+                .and_then(|mapping| get_string(mapping, "uses"))
+        })
+        .collect())
+}
+
+/// Checks an action reference names a full 40-digit commit SHA after its `@`.
+fn ensure_commit_pinned(reference: &str) -> Result<()> {
+    let (_, pin) = reference
+        .rsplit_once('@')
+        .with_context(|| format!("action reference {reference:?} should contain @"))?;
+    ensure!(
+        pin.len() == 40 && pin.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "action reference {reference:?} should use a full commit SHA"
+    );
     Ok(())
 }
