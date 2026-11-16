@@ -162,13 +162,14 @@ use shell_guard::{
 /// Reading the process environment is disallowed so behaviour that depends on
 /// a variable takes it as an argument; mutating it is disallowed so tests stay
 /// parallelizable.
-const PROHIBITED_ENVIRONMENT_METHODS: [&str; 6] = [
+const PROHIBITED_ENVIRONMENT_METHODS: [&str; 7] = [
     "std::env::var",
     "std::env::var_os",
     "std::env::vars",
     "std::env::vars_os",
     "std::env::set_var",
     "std::env::remove_var",
+    "std::env::set_current_dir",
 ];
 
 /// Each package manifest that must enforce the policy, with its source.

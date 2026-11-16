@@ -24,3 +24,6 @@ pub fn mutate_the_environment() {
         env::remove_var("MDTABLEFIX_FIXTURE");
     }
 }
+
+/// Change the process-wide working directory.
+pub fn change_the_working_directory() -> std::io::Result<()> { env::set_current_dir(".") }
