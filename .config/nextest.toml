@@ -1,3 +1,7 @@
+# Setup scripts are experimental in the nextest versions the coverage action may
+# install, so the configuration opts in; newer versions accept the entry.
+experimental = ["setup-scripts"]
+
 # nextest's configuration for this repository. The default profile keeps the 180 s
 # per-test allowance that the coverage action writes when a repository has no file of
 # its own, and gives the trybuild tests more, because they compile the whole
@@ -18,4 +22,28 @@ max-threads = 1
 filter = 'binary(compile) | binary(env_access_enforcement)'
 test-group = "nested-cargo-builds"
 slow-timeout = { period = "180s", terminate-after = 3, grace-period = "5s" }
+
+# The trybuild suite and the environment-access fixture each start a nested
+# Cargo that compiles on its own. On a cold target the first test to run would
+# pay for that build inside its own deadline, and a timeout would blame a
+# sound assertion for a build nothing had prepared (Concordat NC-010). This
+# script runs the two test binaries once before nextest starts any of them,
+# with the same flags and target directory, so the nested builds are filled
+# outside every per-test allowance. It only runs when one of the two binaries
+# is selected.
+[scripts.setup.nested-cargo-builds]
+command = [
+  "cargo",
+  "test",
+  "--locked",
+  "--test",
+  "compile",
+  "--test",
+  "env_access_enforcement",
+]
+slow-timeout = { period = "300s", terminate-after = 3 }
+
+[[profile.default.scripts]]
+filter = 'binary(compile) | binary(env_access_enforcement)'
+setup = "nested-cargo-builds"
 

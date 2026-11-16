@@ -16,15 +16,18 @@
 //!
 //! The fixture is its own workspace root with no dependencies, so the
 //! repository's own gates never build it and the Clippy run has no dependency
-//! graph to resolve. It is materialized into a temporary directory rather than
-//! committed as a package, so no repository-wide scan, Cargo target, or
-//! `cargo package` run sees a second manifest in the tree.
+//! graph to resolve. It is materialized under `target/` rather than committed as
+//! a package, so no repository-wide scan or `cargo package` run sees a second
+//! manifest in the tree.
 //!
 //! The child environment is built explicitly with `Command::env`, per the
 //! policy this test defends: the parent test process's environment is never
 //! mutated. `CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR` are redirected into
-//! the temporary directory so the fixture build cannot collide with, or leave
-//! anything in, the repository's own build trees.
+//! the fixture's own directory so the fixture build cannot collide with, or
+//! leave anything in, the repository's own build trees. The directory is fixed
+//! rather than temporary, so a later run reuses the previous run's build and
+//! the nextest setup script (`.config/nextest.toml`) fills it before any
+//! deadline starts.
 //!
 //! Mutation proof (2026-09-07). Each mutation was applied alone and reverted:
 //!
@@ -43,9 +46,8 @@
 use std::process::Command;
 
 use anyhow::{Context, Result, ensure};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use tempfile::TempDir;
 
 /// The fixture crate's source, stored as text so nothing compiles it in place.
 const FIXTURE_SOURCE: &str = include_str!("data/env_access/prohibited.rs.txt");
@@ -90,18 +92,20 @@ const FIXTURE_MANIFEST: &str = concat!(
     "path = \"lib.rs\"\n",
 );
 
-/// Adapt an ambient path, as produced by [`TempDir::path`], into a UTF-8 path.
-fn utf8(path: &std::path::Path) -> Result<&Utf8Path> {
-    Utf8Path::from_path(path).context("temporary directory path should be UTF-8")
-}
-
 /// The repository root, which is the directory holding `clippy.toml`.
 fn repository_root() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
 /// Materialize the fixture package and run Clippy over it.
+///
+/// The package and its build products live in one fixed directory under this
+/// repository's own `target/`, so a second run finds the first run's build and
+/// reuses it rather than compiling again inside its deadline. The directory is
+/// separate from the repository's own build trees, and `cargo clean` removes it.
 fn lint_the_fixture() -> Result<String> {
-    let directory = TempDir::new().context("create a directory for the fixture package")?;
-    let root = utf8(directory.path())?.to_owned();
+    let scratch = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/env-access-fixture");
+    let root = scratch.join("package");
+    Dir::create_ambient_dir_all(&root, ambient_authority())
+        .with_context(|| format!("create the fixture directory {root}"))?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .with_context(|| format!("open the fixture directory {root}"))?;
     handle
@@ -123,9 +127,9 @@ fn lint_the_fixture() -> Result<String> {
         .arg(root.join("Cargo.toml"))
         // The configuration under test is this repository's own.
         .env("CLIPPY_CONF_DIR", repository_root())
-        // Keep the fixture's build products inside the temporary directory.
-        .env("CARGO_TARGET_DIR", root.join("target"))
-        .env("CARGO_BUILD_BUILD_DIR", root.join("build"))
+        // Keep the fixture's build products in the fixture's own directory.
+        .env("CARGO_TARGET_DIR", scratch.join("target"))
+        .env("CARGO_BUILD_BUILD_DIR", scratch.join("build"))
         // `make test` exports `RUSTFLAGS=-D warnings`, which would turn the
         // fixture's own unrelated warnings into errors and truncate the run
         // before every method is reported. The coverage job wraps the suite in
@@ -144,8 +148,6 @@ fn lint_the_fixture() -> Result<String> {
         .output()
         .context("run Clippy over the fixture package")?;
 
-    // `directory` is dropped here, after Clippy has finished with it.
-    drop(directory);
     String::from_utf8(output.stderr).context("Clippy output should be UTF-8")
 }
 

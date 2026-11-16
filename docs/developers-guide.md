@@ -2385,6 +2385,14 @@ default branch has written one (`setup-rust` owns that directory and only a
 push to the default branch writes it). Before that cache exists, the nested
 builds can exceed 180 s.
 
+A nextest setup script, `nested-cargo-builds`, runs
+`cargo test --locked --test compile --test env_access_enforcement` once before
+nextest starts either binary, so the nested builds are paid for outside every
+per-test allowance and the tests that follow reuse them. It runs only when one
+of the two binaries is selected. The environment-access test builds its fixture
+under `target/env-access-fixture` rather than a temporary directory, so a
+second run reuses the first run's build instead of compiling again.
+
 ### Cranelift
 
 The estate standard is LLVM, so LLVM is the default backend here. The Cranelift
