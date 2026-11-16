@@ -95,6 +95,24 @@ const FIXTURE_MANIFEST: &str = concat!(
 /// The repository root, which is the directory holding `clippy.toml`.
 fn repository_root() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
+/// Writes `contents` to `name` only when the file differs from it.
+///
+/// The fixture directory is fixed, so two test processes in one checkout share
+/// it. Leaving an unchanged file alone means a second process never rewrites
+/// what the first is reading, and the file's modification time stays put, so
+/// Cargo keeps the fixture's build instead of treating it as edited.
+fn write_if_changed(directory: &Dir, name: &str, contents: &str) -> Result<()> {
+    if directory
+        .read_to_string(name)
+        .is_ok_and(|current| current == contents)
+    {
+        return Ok(());
+    }
+    directory
+        .write(name, contents)
+        .with_context(|| format!("write the fixture file {name}"))
+}
+
 /// Materialize the fixture package and run Clippy over it.
 ///
 /// The package and its build products live in one fixed directory under this
@@ -108,15 +126,9 @@ fn lint_the_fixture() -> Result<String> {
         .with_context(|| format!("create the fixture directory {root}"))?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .with_context(|| format!("open the fixture directory {root}"))?;
-    handle
-        .write("Cargo.toml", FIXTURE_MANIFEST)
-        .context("write the fixture manifest")?;
-    handle
-        .write("lib.rs", FIXTURE_SOURCE)
-        .context("write the fixture source")?;
-    handle
-        .write("rust-toolchain.toml", TOOLCHAIN)
-        .context("write the fixture toolchain file")?;
+    write_if_changed(&handle, "Cargo.toml", FIXTURE_MANIFEST)?;
+    write_if_changed(&handle, "lib.rs", FIXTURE_SOURCE)?;
+    write_if_changed(&handle, "rust-toolchain.toml", TOOLCHAIN)?;
 
     // `env!("CARGO")` is the compile-time path to the Cargo that built this
     // test. Reading `CARGO` from the process at run time would trip the very
