@@ -147,48 +147,69 @@ fn matrix_cases_enable_and_disable_each_transform() {
     }
 }
 
+/// Asserts `case` declares each reporting mode once, and only modes that the
+/// printing rows do not already run.
+fn assert_declared_modes_are_new_and_distinct(case: &BaseCase) {
+    let declared: BTreeSet<ExecutionMode> = case.reporting.iter().copied().collect();
+    assert_eq!(
+        declared.len(),
+        case.reporting.len(),
+        "{} declares a reporting mode twice",
+        case.id,
+    );
+    for mode in case.reporting {
+        assert!(
+            mode.reports(),
+            "{} declares {mode:?}, which every row already runs",
+            case.id,
+        );
+    }
+}
+
+/// Asserts a curated `row` is not half-covered: it declares both reporting
+/// modes.
+fn assert_row_carries_both_reporting_modes(row: &BaseCase) {
+    let declared: BTreeSet<ExecutionMode> = row.reporting.iter().copied().collect();
+    assert_eq!(
+        declared,
+        BTreeSet::from([ExecutionMode::Check, ExecutionMode::Diff]),
+        "{} must carry both reporting modes through both wrap variants",
+        row.id,
+    );
+}
+
 /// The reporting subset is curated on purpose: it declares only modes the
 /// printing rows do not already run, no curated row is half-covered, and it
 /// stays narrower than the matrix it is drawn from.
 #[test]
 fn matrix_reporting_rows_are_curated() -> anyhow::Result<()> {
-    for case in BASE_MATRIX_CASES {
-        let declared: BTreeSet<ExecutionMode> = case.reporting.iter().copied().collect();
-        assert_eq!(
-            declared.len(),
-            case.reporting.len(),
-            "{} declares a reporting mode twice",
-            case.id,
-        );
-        for mode in case.reporting {
-            assert!(
-                mode.reports(),
-                "{} declares {mode:?}, which every row already runs",
-                case.id,
-            );
-        }
-    }
-
+    BASE_MATRIX_CASES
+        .iter()
+        .for_each(assert_declared_modes_are_new_and_distinct);
     let rows: Vec<&BaseCase> = BASE_MATRIX_CASES
         .iter()
         .filter(|case| !case.reporting.is_empty())
         .collect();
+    assert_reporting_subset_stays_narrow(&rows);
+    assert_rows_cover_tables_and_fixtures(&rows)
+}
+
+/// Asserts the reporting subset exists and is narrower than the whole matrix.
+fn assert_reporting_subset_stays_narrow(rows: &[&BaseCase]) {
     assert!(!rows.is_empty(), "the reporting modes would go untested");
     assert!(
         rows.len() < BASE_MATRIX_CASES.len(),
         "the reporting subset must stay curated rather than expand the whole matrix",
     );
+}
 
+/// Asserts the curated `rows` carry both modes, include a document that needs
+/// table repair, and do not rest on a single fixture.
+fn assert_rows_cover_tables_and_fixtures(rows: &[&BaseCase]) -> anyhow::Result<()> {
     let mut fixtures = BTreeSet::new();
     let mut tables = 0;
     for row in rows {
-        let declared: BTreeSet<ExecutionMode> = row.reporting.iter().copied().collect();
-        assert_eq!(
-            declared,
-            BTreeSet::from([ExecutionMode::Check, ExecutionMode::Diff]),
-            "{} must carry both reporting modes through both wrap variants",
-            row.id,
-        );
+        assert_row_carries_both_reporting_modes(row);
         fixtures.insert(row.fixture);
         if fixture_has_table(row.fixture)? {
             tables += 1;

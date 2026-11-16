@@ -22,6 +22,12 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
             .iter()
             .all(|line| line.chars().any(|ch| !ch.is_whitespace()))
     );
+    assert_continuations_align_with_prefix(output, prefix);
+    assert_code_spans_stay_on_one_line(output);
+}
+
+/// Asserts every continuation line is indented by exactly the marker width.
+fn assert_continuations_align_with_prefix(output: &[String], prefix: &str) {
     let indent = " ".repeat(prefix.len());
     for line in output.iter().skip(1) {
         assert!(line.starts_with(&indent));
@@ -32,7 +38,10 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
             prefix.len()
         );
     }
+}
 
+/// Asserts no code span is split across lines or left unclosed.
+fn assert_code_spans_stay_on_one_line(output: &[String]) {
     let mut open: Option<usize> = None;
     for line in output {
         scan_code_spans(line, &mut open);

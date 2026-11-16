@@ -67,20 +67,18 @@ fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
                 push_collapsed_text_char(ch, out, last_space);
             }
         }
-        NodeData::Element { name, .. } => {
-            if is_ignored_tag(name.local.as_ref()) {
-                return;
-            }
-            for child in handle.children.borrow().iter() {
-                collect_text(child, out, last_space);
-            }
-        }
-        NodeData::Document => {
-            for child in handle.children.borrow().iter() {
-                collect_text(child, out, last_space);
-            }
+        NodeData::Element { name, .. } if is_ignored_tag(name.local.as_ref()) => {}
+        NodeData::Element { .. } | NodeData::Document => {
+            collect_child_text(handle, out, last_space);
         }
         _ => {}
+    }
+}
+
+/// Appends the text of every child of `handle`, in document order.
+fn collect_child_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
+    for child in handle.children.borrow().iter() {
+        collect_text(child, out, last_space);
     }
 }
 

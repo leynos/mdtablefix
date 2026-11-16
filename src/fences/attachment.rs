@@ -148,9 +148,7 @@ where
 {
     match next_attachable_fence(lines.clone()) {
         NextFence::Attachable { blank_count } => {
-            for _ in 0..blank_count {
-                let _ = lines.next();
-            }
+            lines.by_ref().take(blank_count).for_each(drop);
             if let Some(fence_line) = lines.next() {
                 out.push(attach_specifier_to_fence(fence_line, specifier, indent));
                 let _ = tracker.observe_source_line(fence_line);
@@ -159,11 +157,7 @@ where
         }
         NextFence::NotAttachable { blank_count } => {
             out.push(specifier_line.to_owned());
-            for _ in 0..blank_count {
-                if let Some(blank_line) = lines.next() {
-                    out.push(blank_line.clone());
-                }
-            }
+            out.extend(lines.by_ref().take(blank_count).cloned());
             AttachmentOutcome::Preserved
         }
     }

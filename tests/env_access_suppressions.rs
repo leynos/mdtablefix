@@ -215,6 +215,30 @@ fn is_under(path: &Utf8Path, root: &str) -> bool {
 /// The crate root, used as the capability root for the scan.
 fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
+/// Fails unless `sources` includes a file under every required root, so an
+/// empty or truncated walk cannot pass the scan vacuously.
+fn ensure_scan_reaches_required_roots(sources: &[(Utf8PathBuf, String)]) -> Result<()> {
+    for required in REQUIRED_ROOTS {
+        ensure!(
+            sources.iter().any(|(path, _)| is_under(path, required)),
+            "the scan should reach {required}, saw {} sources",
+            sources.len()
+        );
+    }
+    Ok(())
+}
+
+/// Lists every protected-lint suppression in `sources`, one line per finding.
+fn policy_offences(sources: &[(Utf8PathBuf, String)]) -> Result<Vec<String>> {
+    let mut offences = Vec::new();
+    for (path, contents) in sources {
+        for finding in suppressed_lints(path, contents).with_context(|| format!("scan {path}"))? {
+            offences.push(format!("{path} {finding}"));
+        }
+    }
+    Ok(offences)
+}
+
 /// Scenario: every Rust source in the repository is parsed and its attributes
 /// examined.
 /// Invariant: none allows a protected lint. The inner form is the case that
@@ -233,20 +257,8 @@ fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 fn no_source_allows_a_policy_lint() -> Result<()> {
     let root = manifest_dir();
     let sources = rust_sources(&root, ".")?;
-    for required in REQUIRED_ROOTS {
-        ensure!(
-            sources.iter().any(|(path, _)| is_under(path, required)),
-            "the scan should reach {required}, saw {} sources",
-            sources.len()
-        );
-    }
-
-    let mut offences = Vec::new();
-    for (path, contents) in &sources {
-        for finding in suppressed_lints(path, contents).with_context(|| format!("scan {path}"))? {
-            offences.push(format!("{path} {finding}"));
-        }
-    }
+    ensure_scan_reaches_required_roots(&sources)?;
+    let offences = policy_offences(&sources)?;
 
     ensure!(
         offences.is_empty(),

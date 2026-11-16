@@ -29,6 +29,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 
 // The paths are relative to this file's own directory, `tests/`.
 #[path = "support/module_graph.rs"]
@@ -62,9 +63,19 @@ const BINARY_ONLY: [&str; 6] = [
 /// The repository root, as the test binary was compiled against it.
 fn repository_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
-/// Reads a repository file as text.
-fn read(path: &Path) -> Result<String> {
-    std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))
+/// Opens the repository root as a directory capability.
+///
+/// The one ambient boundary of the reads below: every file is read relative to
+/// the capability this returns.
+fn repository_dir() -> Result<Dir> {
+    Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("opening the repository root")
+}
+
+/// Reads a repository file, named relative to the root capability, as text.
+fn read(root: &Dir, path: &Utf8Path) -> Result<String> {
+    root.read_to_string(path)
+        .with_context(|| format!("reading {path}"))
 }
 
 /// Renders `path` relative to `root`, with `/` separators.
@@ -105,9 +116,14 @@ fn no_library_source_names_the_framework() -> Result<()> {
         sources.len()
     );
 
+    let capability = repository_dir()?;
     let files: Vec<(String, String)> = sources
         .iter()
-        .map(|path| Ok((relative(&root, path), read(path)?)))
+        .map(|path| {
+            let name = relative(&root, path);
+            let contents = read(&capability, Utf8Path::new(&name))?;
+            Ok((name, contents))
+        })
         .collect::<Result<_>>()?;
     let naming = offenders(&files, FRAMEWORK);
 
@@ -151,14 +167,20 @@ fn the_library_reaches_no_binary_only_source() -> Result<()> {
         "the walk reached only {} sources, so it is not following declarations",
         reached.len()
     );
-    for path in &reached {
-        let relative = relative(&root, path.as_std_path());
+    let root =
+        Utf8Path::from_path(&root).context("the repository root is not representable as UTF-8")?;
+    ensure_none_is_binary_only(root, &reached)
+}
+
+/// Fails when any of the `reached` sources is one of the binary-only files.
+fn ensure_none_is_binary_only(root: &Utf8Path, reached: &[Utf8PathBuf]) -> Result<()> {
+    for path in reached {
+        let relative = relative(root.as_std_path(), path.as_std_path());
         ensure!(
             !BINARY_ONLY.contains(&relative.as_str()),
             "src/lib.rs reaches {relative}, which belongs to the binary"
         );
     }
-
     Ok(())
 }
 
@@ -250,10 +272,21 @@ fn the_walk_refuses_an_unanalysable_module_declaration() {
 /// it belongs to rather than matched wherever it appears.
 #[test]
 fn the_manifest_declares_the_framework() -> Result<()> {
-    let source = read(&repository_root().join("Cargo.toml"))?;
-    let manifest: toml::Value = toml::from_str(&source)
-        .context("Cargo.toml is not valid TOML, so the manifest half of the contract cannot run")?;
+    let manifest = parse_manifest()?;
+    assert_framework_is_optional(&manifest)?;
+    assert_cli_feature_enables_the_framework(&manifest)?;
+    assert_binary_requires_the_cli_feature(&manifest)
+}
 
+/// Parses the repository's `Cargo.toml`.
+fn parse_manifest() -> Result<toml::Value> {
+    let source = read(&repository_dir()?, Utf8Path::new("Cargo.toml"))?;
+    toml::from_str(&source)
+        .context("Cargo.toml is not valid TOML, so the manifest half of the contract cannot run")
+}
+
+/// The framework is declared, and declared `optional`.
+fn assert_framework_is_optional(manifest: &toml::Value) -> Result<()> {
     // The witness: an expected key that is absent must fail here rather than
     // reporting a satisfied contract on a manifest this test cannot read.
     let dependencies = manifest
@@ -267,7 +300,11 @@ fn the_manifest_declares_the_framework() -> Result<()> {
         framework.get("optional").and_then(toml::Value::as_bool) == Some(true),
         "{FRAMEWORK} is no longer `optional`, so `default-features = false` keeps compiling it"
     );
+    Ok(())
+}
 
+/// `default` enables `cli`, and `cli` enables the framework and `serde`.
+fn assert_cli_feature_enables_the_framework(manifest: &toml::Value) -> Result<()> {
     let features = manifest
         .get("features")
         .and_then(toml::Value::as_table)
@@ -288,7 +325,11 @@ fn the_manifest_declares_the_framework() -> Result<()> {
             "the `{feature}` feature no longer includes `{required}`"
         );
     }
+    Ok(())
+}
 
+/// The `mdtablefix` binary, not some other target, requires the `cli` feature.
+fn assert_binary_requires_the_cli_feature(manifest: &toml::Value) -> Result<()> {
     let binaries = manifest
         .get("bin")
         .and_then(toml::Value::as_array)
