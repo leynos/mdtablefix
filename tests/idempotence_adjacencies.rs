@@ -105,104 +105,121 @@ fn generated_structural_adjacencies_reach_every_shape() {
         "the forced flag mask must select --headings",
     );
 
-    let starters: std::collections::BTreeSet<&str> = sample(
-        &proptest::sample::select(NON_PARAGRAPH_STARTERS),
-        SWEEP_DOCUMENTS,
-    )
-    .into_iter()
-    .collect();
-    assert_eq!(
-        starters.len(),
-        NON_PARAGRAPH_STARTERS.len(),
-        "the generator did not reach every block-start class",
-    );
+    assert_every_choice_is_generated(NON_PARAGRAPH_STARTERS, "block-start class");
+    assert_every_choice_is_generated(TABLE_DELIMITER_ROWS, "delimiter-row spelling");
 
-    let rows: std::collections::BTreeSet<&str> = sample(
-        &proptest::sample::select(TABLE_DELIMITER_ROWS),
-        SWEEP_DOCUMENTS,
-    )
-    .into_iter()
-    .collect();
-    assert_eq!(
-        rows.len(),
-        TABLE_DELIMITER_ROWS.len(),
-        "the generator did not reach every delimiter-row spelling",
-    );
+    let mut counts = ShapeCounts::default();
+    for (document, shape, break_line) in &sample(&adjacency_strategy(), SWEEP_DOCUMENTS) {
+        assert_adjacency_behaves(document, *shape, break_line, &mut counts);
+    }
+    counts.assert_every_shape_was_generated();
+}
 
-    let adjacencies = sample(&adjacency_strategy(), SWEEP_DOCUMENTS);
-    let mut converting = 0_usize;
-    let mut refusing = 0_usize;
-    let mut delimiter_rows = 0_usize;
-    let mut combined = 0_usize;
+/// How many generated adjacencies fell into each shape.
+#[derive(Default)]
+struct ShapeCounts {
+    converting: usize,
+    refusing: usize,
+    delimiter_rows: usize,
+    combined: usize,
+}
 
-    for (document, shape, break_line) in &adjacencies {
-        let (once, twice) = format_twice(document, &flags_for(HEADINGS));
-        assert_eq!(twice, once, "the adjacency drifted: {document:?}");
-
-        let lines: Vec<&str> = once.lines().collect();
+impl ShapeCounts {
+    /// Asserts the sweep produced at least one adjacency of every shape.
+    fn assert_every_shape_was_generated(&self) {
         assert!(
-            lines.contains(&break_line.as_str()),
-            "the {break_line:?} break was consumed in {document:?}: {lines:?}",
+            self.converting > 0,
+            "the generator never produced a converting adjacency",
         );
+        assert!(
+            self.refusing > 0,
+            "the generator never produced a block-start adjacency",
+        );
+        assert!(
+            self.delimiter_rows > 0,
+            "the generator never produced a table-delimiter adjacency, so the delimiter-row guard \
+             is not exercised by this sweep",
+        );
+        assert!(
+            self.combined > 0,
+            "the generator never produced a combined adjacency, so the shapes are only ever \
+             exercised one boundary at a time",
+        );
+    }
+}
 
-        match shape {
-            Shape::Converting => {
-                converting += 1;
-                assert!(
-                    lines.iter().any(|line| line.starts_with('#')),
-                    "the paragraph above a break did not convert: {lines:?}",
-                );
-            }
-            Shape::BlockStart => refusing += 1,
-            Shape::TableDelimiterRow => {
-                delimiter_rows += 1;
-                assert!(
-                    lines.iter().any(|line| is_delimiter_row(line)),
-                    "the delimiter row was consumed in {document:?}: {lines:?}",
-                );
-            }
-            // The chain holds a converting boundary, a thematic break below it,
-            // a table, and a delimiter row above the trailing break, so it
-            // carries the obligations of the other shapes at once rather than
-            // depending on a document that isolates one of them.
-            Shape::CombinedAdjacency => {
-                combined += 1;
-                // The trailing break is asserted for every shape above; the
-                // chain's own `***` is not, and the two boundaries around it are
-                // both guard cases, so the break between them could be absorbed
-                // by either and leave the fixed-point assertion satisfied.
-                assert!(
-                    lines.contains(&"***"),
-                    "the intermediate thematic break was consumed in {document:?}: {lines:?}",
-                );
-                assert!(
-                    lines.iter().any(|line| line.starts_with('#')),
-                    "the paragraph above a break did not convert: {lines:?}",
-                );
-                assert!(
-                    lines.iter().any(|line| is_delimiter_row(line)),
-                    "the delimiter row was consumed in {document:?}: {lines:?}",
-                );
-            }
+/// Asserts the sweep draws every one of `choices`, naming `what` on failure.
+fn assert_every_choice_is_generated(choices: &'static [&'static str], what: &str) {
+    let drawn: std::collections::BTreeSet<&str> =
+        sample(&proptest::sample::select(choices), SWEEP_DOCUMENTS)
+            .into_iter()
+            .collect();
+    assert_eq!(
+        drawn.len(),
+        choices.len(),
+        "the generator did not reach every {what}",
+    );
+}
+
+/// Formats one adjacency twice, asserts the shape-independent obligations, then
+/// the obligations of its own shape, and counts it.
+fn assert_adjacency_behaves(
+    document: &str,
+    shape: Shape,
+    break_line: &str,
+    counts: &mut ShapeCounts,
+) {
+    let (once, twice) = format_twice(document, &flags_for(HEADINGS));
+    assert_eq!(twice, once, "the adjacency drifted: {document:?}");
+
+    let lines: Vec<&str> = once.lines().collect();
+    assert!(
+        lines.contains(&break_line),
+        "the {break_line:?} break was consumed in {document:?}: {lines:?}",
+    );
+
+    match shape {
+        Shape::Converting => {
+            counts.converting += 1;
+            assert_paragraph_converted(&lines);
+        }
+        Shape::BlockStart => counts.refusing += 1,
+        Shape::TableDelimiterRow => {
+            counts.delimiter_rows += 1;
+            assert_delimiter_row_survives(document, &lines);
+        }
+        // The chain holds a converting boundary, a thematic break below it, a
+        // table, and a delimiter row above the trailing break, so it carries the
+        // obligations of the other shapes at once rather than depending on a
+        // document that isolates one of them.
+        Shape::CombinedAdjacency => {
+            counts.combined += 1;
+            // The trailing break is asserted for every shape; the chain's own
+            // `***` is not, and the two boundaries around it are both guard
+            // cases, so the break between them could be absorbed by either and
+            // leave the fixed-point assertion satisfied.
+            assert!(
+                lines.contains(&"***"),
+                "the intermediate thematic break was consumed in {document:?}: {lines:?}",
+            );
+            assert_paragraph_converted(&lines);
+            assert_delimiter_row_survives(document, &lines);
         }
     }
+}
 
+/// Asserts the paragraph above a break became an ATX heading.
+fn assert_paragraph_converted(lines: &[&str]) {
     assert!(
-        converting > 0,
-        "the generator never produced a converting adjacency",
+        lines.iter().any(|line| line.starts_with('#')),
+        "the paragraph above a break did not convert: {lines:?}",
     );
+}
+
+/// Asserts a table delimiter row is still table syntax after formatting.
+fn assert_delimiter_row_survives(document: &str, lines: &[&str]) {
     assert!(
-        refusing > 0,
-        "the generator never produced a block-start adjacency",
-    );
-    assert!(
-        delimiter_rows > 0,
-        "the generator never produced a table-delimiter adjacency, so the delimiter-row guard is \
-         not exercised by this sweep",
-    );
-    assert!(
-        combined > 0,
-        "the generator never produced a combined adjacency, so the shapes are only ever exercised \
-         one boundary at a time",
+        lines.iter().any(|line| is_delimiter_row(line)),
+        "the delimiter row was consumed in {document:?}: {lines:?}",
     );
 }
