@@ -9,9 +9,11 @@ connects it to the production function.
 ## Current status
 
 The proofs run under Verus `0.2026.09.06.8dea4a2`, the release pinned in
-`tools/verus/VERSION`; `make verus` reports 176 verified items with no errors.
-Under the previous release, `0.2025.04.19.1b16620`, it reported 178. The two
-that went were the executable constants `COMPRESSED_MARKER` and
+`tools/verus/VERSION`; `make verus` reports 229 verified items with no errors.
+Most of the increase over the base revision's 176 is the fence-normalization
+document theorem, its composition lemmas, and its witnesses. Under the previous
+release, `0.2025.04.19.1b16620`, the base revision reported 178. The two that
+went were the executable constants `COMPRESSED_MARKER` and
 `COMPRESSED_MARKER_LEN`, which the new release cannot erase when they sit
 outside `verus!` syntax; `compressed` now writes the same two literals, and
 `spec_compressed` is unchanged. The new release also requires every verified
@@ -106,25 +108,42 @@ element for element, and `compress_fences` consults the same
 classification and the rewrite decision cannot hold different notions of what a
 delimiter is.
 
-The region-preservation theorem is one-sided and domain-scoped, and that is the
-honest form. It is one-sided because a tilde line closes a tilde opener but
-cannot close the three-backtick opener the pass writes in its place, so the two
-runs legitimately disagree about delimiter identity: what the theorem
-establishes is that no line moves between the literal and prose regions --
-delimiter spelling may change, payload regions may not. It is domain-scoped
-because it is stated over guarded block interiors whose lines arrive as
-pre-parsed `LineFeatures`, and its document-level form instantiates the
-composition law over a chain of preserved spans the caller supplies rather than
-deriving that chain from the pass's own fold. What the theorem does **not** by
-itself establish is that the bytes `compress_fences` writes, over a whole
-document, preserve regions -- that needs the driver induction recorded under
-[remaining external contracts](#remaining-external-contracts), and until it
-exists the corpus sweep is evidence for the driver, not a proof of it.
+The region-preservation theorem is one-sided, and that is the honest form. It
+is one-sided because a tilde line closes a tilde opener but cannot close the
+three-backtick opener the pass writes in its place, so the two runs
+legitimately disagree about delimiter identity: what the theorem establishes is
+that no line moves between the literal and prose regions -- delimiter spelling
+may change, payload regions may not. Lines arrive as pre-parsed `LineFeatures`,
+so fence recognition and blockquote parsing stay external contracts throughout.
+
+The document-level form does not take its partition on trust.
+`lemma_document_regions_preserved` states
+`LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS` over the whole document, and the
+chain of preserved spans it composes is the one the pass's own fold builds.
+`spec_chain_of` records the spans the driver has completed after each prefix,
+appending a cut exactly when a step writes; `lemma_fold_invariant` proves
+`INV-DRIVER-FOLD` at every prefix, from the plan alone;
+`lemma_chain_preserved_prefix` and `lemma_chain_preserved_push` extend a
+preserved chain at its top, because `spec_chain_preserved` peels its last span;
+and `lemma_spans_compose_regions` turns the chain into equality of the whole
+document's region sequence. `lemma_document_tail_composes` appends the block a
+document ended inside, which is the fourth flush path. The driver instantiation
+this ledger previously recorded as open is therefore closed.
+
+The only hypothesis the theorem takes about the emitted run is the rendered
+spelling: `spec_emission_reads_back` over `spec_agendum_line` at every
+position. That remains an external contract, because Verus cannot reason about
+a compiled regular expression, but it is consumed rather than restated.
+`lemma_released_block_reads_back` and `lemma_released_span_reads_back` derive
+each position's emitter fact from the agendum the driver chose, and the
+consumers in `verus/plan_spec_emission.rs` extract the three shapes.
 `lemma_witness_interior_is_literal` exhibits an interior satisfying every
 hypothesis and pins the regions both runs agree on, so the conclusion is not an
 empty sequence, and `lemma_witness_conflict_is_rejected` proves the guard fires
 on the issue #480 shape. `tests/fence_regions.rs` exercises the same reasoning
-over every fixture.
+over every fixture and four unclosed documents; that sweep is executable
+evidence, not the theorem, because a corpus says nothing about a document no
+fixture holds.
 
 Non-vacuity is otherwise carried by the witness lemmas beside each obligation,
 which state their conclusions as values rather than as equalities between two
@@ -143,12 +162,12 @@ rule that refuses a rewrite when only one end of a block may be respelled. Each
 was checked to be falsifiable rather than merely true: removing the
 transition's depth check from `verus/fence_spec.rs` makes the run fail.
 
-Four further witnesses, in `verus/plan_spec_witnesses_fold.rs`, have the driver
-fold itself as their subject, one per route a document can take through it.
-Until they were added no witness exercised `spec_drive` at all, so nothing in
-that block would have failed had the fold wired its rules together wrongly.
-They pin the whole plan — `agenda`, `unclosed`, and `unclosed_lines` — as
-values rather than as an equation between two unknowns:
+Five further witnesses have the driver fold itself as their subject, one per
+route a document can take through it. Until they were added no witness exercised
+`spec_drive` at all, so nothing in that block would have failed had the fold
+wired its rules together wrongly. They pin the whole plan — `agenda`,
+`unclosed`, and `unclosed_lines` — as values rather than as an equation between
+two unknowns. Four live in `verus/plan_spec_witnesses_fold.rs`:
 `lemma_witness_matched_block_plan_is_live` for a matched close, whose agenda is
 `Compressed` throughout because a block with no interior line never raises its
 conflict flag; `lemma_witness_unmatched_block_plan_is_live` for the fourth
@@ -157,61 +176,118 @@ closes its fences; `lemma_witness_conflict_fallback_plan_is_live` for the
 [issue #480](https://github.com/leynos/mdtablefix/issues/480) shape driven to
 its fallback, whose observable effect is `Normalized` at the opener and
 `Verbatim` for the lines after it; and
-`lemma_witness_empty_document_plan_is_live` for the fold's base case. These
-lemmas live under `verus/` and so appear in the prose above rather than in the
-claim table, whose rows must name a symbol that occurs in `src/`.
+`lemma_witness_empty_document_plan_is_live` for the fold's base case. The fifth,
+`lemma_witness_matched_normalized_plan_is_live`, lives in its own
+`verus/plan_spec_witnesses_fold_normalized.rs` — split out to keep both files
+under the 400-line ceiling — because the route it pins, a *matched* block
+released `Normalized`, is one the other four cannot reach. Its document is a
+four-backtick `null` opener, an interior three-backtick pair and a
+four-backtick closer, and its agenda is `Normalized`, `Verbatim`, `Verbatim`,
+`Normalized` with no unclosed block. These lemmas live under `verus/` and so
+appear in the prose rather than in the claim table, whose executable-function
+column must name a symbol that occurs in `src/`.
+
+Two further witnesses guard the emission contract itself, in
+`verus/plan_spec_witnesses.rs`.
+`lemma_witness_normalized_contract_refuses_a_wrong_respelling` exhibits a
+`null`-tagged opener against a repainted emission that the contract rejects, and
+`lemma_witness_null_specifier_reads_back` exhibits the same opener against the
+emission production actually writes, which it accepts. Together they show the
+relation is neither vacuous nor true of every pair — the property a contract
+weakened to `true` silently loses. Both are load-bearing: the second is what
+fails when the blank-tag disjunct is deleted, as
+`make verus-blank-tag-mutation` demonstrates.
 
 ## Claim ledger
 
-| Claim                                             | Executable function                             | Input domain                                                                                                           | Unverified external contracts                                                                                                                          | Result class                                                                                                                                            |
-| ------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Structural classification and bounded body offset | `classify_seq`                                  | All `&[char]` lines and `ClassifyCtxKernel` values                                                                     | `is_table_delimiter`, `table_cells_are_delimiters`, `is_table_delimiter_cell`, `is_thematic_break`, `ordered_list_item`                                | Exact `LineClass` and scalar offset (local correctness)                                                                                                 |
-| Setext pair acceptance                            | `is_setext_pair_seq`                            | Candidate and underline with their classifier contexts                                                                 | Same five trusted matcher contracts                                                                                                                    | Acceptance implies `ParagraphText` candidate and `SetextUnderline` underline (local correctness)                                                        |
-| Setext candidate decision and later-pass refusal  | `is_setext_text_seq`                            | All lines and classifier contexts, including completed `convert_accepted_setext_seq` output                            | Same five trusted matcher contracts                                                                                                                    | Acceptance implies `ParagraphText`; therefore the completed `AtxHeading` output is rejected as a candidate (local correctness)                          |
-| Setext underline component predicate              | `is_setext_underline_seq`                       | All lines and classifier contexts; used by `is_setext_pair_seq`                                                        | Same five trusted matcher contracts                                                                                                                    | Acceptance implies `SetextUnderline` (local correctness; component of pair acceptance)                                                                  |
-| Prefix separation                                 | `needs_space_after_seq`                         | Any retained Unicode-scalar prefix                                                                                     | None                                                                                                                                                   | Determines whether the retained prefix needs a separator (local correctness)                                                                            |
-| Prefix admission                                  | `valid_setext_prefix`                           | Any retained indentation and quote prefix                                                                              | Same five trusted matcher contracts                                                                                                                    | Paragraph probe starts after the retained prefix (local correctness)                                                                                    |
-| Complete Setext output construction               | `convert_setext_seq`                            | Valid prefix, levels one and two, arbitrary supplied text, and capacity bound                                          | Same five trusted matcher contracts                                                                                                                    | Exact assembled output is `AtxHeading` and not `ParagraphText` in every outside-fence context (local construction correctness)                          |
-| Accepted production Setext conversion             | `convert_accepted_setext_seq`                   | Candidate/underline and their actual contexts, valid prefix, levels one/two, and capacity bound                        | Same five trusted matcher contracts                                                                                                                    | `Some` iff source roles and prefix admission hold; output is exact assembly and `AtxHeading` in every outside-fence context (local correctness)         |
-| Emitted Setext ATX check                          | `is_atx_heading_seq`                            | Completed lines and classifier contexts                                                                                | Same five trusted matcher contracts                                                                                                                    | Classifies a supplied completed line; runtime guard remains a checked-output safeguard (checked-output guarantee)                                       |
-| Canonical-break line construction                 | `canonical_break_chars`                         | Empty builder state                                                                                                    | None                                                                                                                                                   | Exactly seventy underscore characters (local correctness)                                                                                               |
-| Canonical-break classification                    | `classify_seq`                                  | Exact unprefixed 70-underscore line under every outside-fence context and any previous class or prefix-agreement value | Same five trusted matcher contracts                                                                                                                    | `lemma_canonical_break_remains_structural` proves `ThematicBreak` (local correctness)                                                                   |
-| Setext pair detection                             | `detect_setext_heading`                         | Production candidate/underline pair with indentation and prefix context                                                | Same five trusted matcher contracts                                                                                                                    | Calls the proved pair gate and retains production prefix checks                                                                                         |
-| Setext production extraction                      | `detect_setext_heading`                         | Eligible pair, actual underline context, indentation and prefix context                                                | Same five trusted matcher contracts                                                                                                                    | Passes the actual pair contexts and extracted values to the production acceptance wrapper; exact native parsing/content extraction is regression-tested |
-| Setext output assembly adapter                    | `convert_setext`                                | Retained prefix, level one or two, and candidate text                                                                  | Same five trusted matcher contracts                                                                                                                    | Calls `convert_accepted_setext_seq`, which proves the accepted roles and completed output class                                                         |
-| Setext checked-output guarantee                   | `detect_verified_setext_heading`                | Completed output line and classifier context                                                                           | Same five trusted matcher contracts                                                                                                                    | Runtime guard accepts only output classified `AtxHeading`; it is not a construction proof                                                               |
-| Wrapping break preservation                       | `wrapping_boundary_seq`                         | Exact unprefixed canonical line under every outside-fence context                                                      | Same five trusted matcher contracts                                                                                                                    | Returns the thematic-break boundary, not paragraph content; production wrapper and path regression (cross-pass preservation)                            |
-| Heading break preservation                        | `is_setext_pair_seq`                            | Exact unprefixed canonical line as candidate under every outside-fence context                                         | Same five trusted matcher contracts                                                                                                                    | Thematic-break class fails paragraph-candidate role; wrapper lemma and path regression (cross-pass preservation)                                        |
-| Table break preservation                          | `is_table_class`                                | Thematic-break class returned for the exact canonical line                                                             | Same five trusted matcher contracts                                                                                                                    | Rejects the table-input gate; wrapper lemma and path regression (cross-pass preservation)                                                               |
-| Orphan-specifier break preservation               | `can_be_orphan_specifier_seq`                   | Exact unprefixed canonical line under every outside-fence context                                                      | Same five trusted matcher contracts                                                                                                                    | Returns false for thematic-break class; wrapper lemma and path regression (cross-pass preservation)                                                     |
-| Fixture classification compatibility              | `fixture_lines_match_the_classification_oracle` | Every `tests/data` line with independently carried fence, preceding-class and prefix state                             | Same five trusted matcher contracts                                                                                                                    | Differentially compares an independent regex reference and pins path, class and FNV-1a source-line hash (compatibility evidence and regression)         |
-| Fence closing-rule decision                       | `closes_fence`                                  | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                                               | Boolean iff `spec_closes`                                                                                                                               |
-| Would-be-closer decision                          | `agrees_with_opener`                            | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                                               | Boolean iff `spec_agrees_with_opener`                                                                                                                   |
-| Interior-delimiter decision                       | `interior_delimiter`                            | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                                               | Boolean iff `spec_interior_delimiter`                                                                                                                   |
-| Compression-conflict decision                     | `compression_changes_region`                    | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                                               | Boolean iff `spec_compression_changes_region`                                                                                                           |
-| Compressed delimiter state                        | `compressed`                                    | All opener states                                                                                                      | None                                                                                                                                                   | Exact state; three backticks at the opening depth                                                                                                       |
-| Fence transition and line region                  | `fence_step`                                    | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                                               | Exact next state and `Region`                                                                                                                           |
-| Whole-document region classification              | `regions`                                       | Every `LineFeatures` slice                                                                                             | Fence recognition and blockquote parsing                                                                                                               | Exact `Region` sequence, element for element                                                                                                            |
-| Region preservation under delimiter compression   | `regions`                                       | A block interior meeting the compression guard                                                                         | Fence recognition and blockquote parsing                                                                                                               | Equal region sequences under the original and compressed openers                                                                                        |
-| Block-opener construction                         | `open_block`                                    | Every `LineFacts` value                                                                                                | Fence recognition and blockquote parsing                                                                                                               | Exact `Option<Block>`; `None` iff the line has no marker                                                                                                |
-| Conflict accumulation                             | `absorb`                                        | Every block and optional line features                                                                                 | Fence recognition and blockquote parsing                                                                                                               | Exact block; opener fixed, flag a disjunction over the lines                                                                                            |
-| Planner routing                                   | `plan_step`                                     | Every planner state and `LineFacts` value                                                                              | Fence recognition and blockquote parsing                                                                                                               | Exact `Step`; the pass's only source of a release                                                                                                       |
-| Delimiter rewrite eligibility                     | `delimiters_eligible`                           | Every release and rewrite-candidate pair                                                                               | Fence recognition and blockquote parsing                                                                                                               | Exact boolean; opener alone, both ends, or neither                                                                                                      |
-| Outer-delimiter position decision                 | `is_outer_delimiter`                            | Every position, block length, release, and flag                                                                        | None                                                                                                                                                   | Exact boolean; position 0, or the last position of a matched block                                                                                      |
-| Per-position emission decision                    | `delimiter_agendum`                             | Every position classification and compression answer                                                                   | None                                                                                                                                                   | Exact `Agendum`; compressed, normalized, or verbatim                                                                                                    |
-| Released-block agenda                             | `block_agenda`                                  | Every block length, release, and answers                                                                               | Fence recognition and blockquote parsing                                                                                                               | Exact `Agendum` sequence of the block's own length                                                                                                      |
-| Document region preservation under compression    | `block_agenda`                                  | Every chain of preserved spans over planner-routed blocks, supplied by the caller                                      | Fence recognition, blockquote parsing, the emission read-back contract, and the driver induction that would build the chain from the fold's own agenda | Full `Region`-sequence equality over any chain of preserved spans                                                                                       |
-| Segment walked at a document offset               | `regions`                                       | Every span and every offset                                                                                            | Fence recognition and blockquote parsing                                                                                                               | Equal states and equal region sequences over the span's own lines                                                                                       |
-| Released block read at a document offset          | `block_agenda`                                  | Every offset, for a released block whose per-line facts are supplied as hypotheses                                     | Fence recognition, blockquote parsing, and the emission read-back contract                                                                             | The route's obligation: `ends_at` where a state conclusion exists                                                                                       |
-| Line inside an open block                         | `fence_step`                                    | Every opener state and non-fence-shaped line                                                                           | Fence recognition and blockquote parsing                                                                                                               | The line still leaves the fence open; it cannot route as buffer-or-close                                                                                |
+| Claim                                                  | Executable function                             | Input domain                                                                                                           | Unverified external contracts                                                                                           | Result class                                                                                                                                                |
+| ------------------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Structural classification and bounded body offset      | `classify_seq`                                  | All `&[char]` lines and `ClassifyCtxKernel` values                                                                     | `is_table_delimiter`, `table_cells_are_delimiters`, `is_table_delimiter_cell`, `is_thematic_break`, `ordered_list_item` | Exact `LineClass` and scalar offset (local correctness)                                                                                                     |
+| Setext pair acceptance                                 | `is_setext_pair_seq`                            | Candidate and underline with their classifier contexts                                                                 | Same five trusted matcher contracts                                                                                     | Acceptance implies `ParagraphText` candidate and `SetextUnderline` underline (local correctness)                                                            |
+| Setext candidate decision and later-pass refusal       | `is_setext_text_seq`                            | All lines and classifier contexts, including completed `convert_accepted_setext_seq` output                            | Same five trusted matcher contracts                                                                                     | Acceptance implies `ParagraphText`; therefore the completed `AtxHeading` output is rejected as a candidate (local correctness)                              |
+| Setext underline component predicate                   | `is_setext_underline_seq`                       | All lines and classifier contexts; used by `is_setext_pair_seq`                                                        | Same five trusted matcher contracts                                                                                     | Acceptance implies `SetextUnderline` (local correctness; component of pair acceptance)                                                                      |
+| Prefix separation                                      | `needs_space_after_seq`                         | Any retained Unicode-scalar prefix                                                                                     | None                                                                                                                    | Determines whether the retained prefix needs a separator (local correctness)                                                                                |
+| Prefix admission                                       | `valid_setext_prefix`                           | Any retained indentation and quote prefix                                                                              | Same five trusted matcher contracts                                                                                     | Paragraph probe starts after the retained prefix (local correctness)                                                                                        |
+| Complete Setext output construction                    | `convert_setext_seq`                            | Valid prefix, levels one and two, arbitrary supplied text, and capacity bound                                          | Same five trusted matcher contracts                                                                                     | Exact assembled output is `AtxHeading` and not `ParagraphText` in every outside-fence context (local construction correctness)                              |
+| Accepted production Setext conversion                  | `convert_accepted_setext_seq`                   | Candidate/underline and their actual contexts, valid prefix, levels one/two, and capacity bound                        | Same five trusted matcher contracts                                                                                     | `Some` iff source roles and prefix admission hold; output is exact assembly and `AtxHeading` in every outside-fence context (local correctness)             |
+| Emitted Setext ATX check                               | `is_atx_heading_seq`                            | Completed lines and classifier contexts                                                                                | Same five trusted matcher contracts                                                                                     | Classifies a supplied completed line; runtime guard remains a checked-output safeguard (checked-output guarantee)                                           |
+| Canonical-break line construction                      | `canonical_break_chars`                         | Empty builder state                                                                                                    | None                                                                                                                    | Exactly seventy underscore characters (local correctness)                                                                                                   |
+| Canonical-break classification                         | `classify_seq`                                  | Exact unprefixed 70-underscore line under every outside-fence context and any previous class or prefix-agreement value | Same five trusted matcher contracts                                                                                     | `lemma_canonical_break_remains_structural` proves `ThematicBreak` (local correctness)                                                                       |
+| Setext pair detection                                  | `detect_setext_heading`                         | Production candidate/underline pair with indentation and prefix context                                                | Same five trusted matcher contracts                                                                                     | Calls the proved pair gate and retains production prefix checks                                                                                             |
+| Setext production extraction                           | `detect_setext_heading`                         | Eligible pair, actual underline context, indentation and prefix context                                                | Same five trusted matcher contracts                                                                                     | Passes the actual pair contexts and extracted values to the production acceptance wrapper; exact native parsing/content extraction is regression-tested     |
+| Setext output assembly adapter                         | `convert_setext`                                | Retained prefix, level one or two, and candidate text                                                                  | Same five trusted matcher contracts                                                                                     | Calls `convert_accepted_setext_seq`, which proves the accepted roles and completed output class                                                             |
+| Setext checked-output guarantee                        | `detect_verified_setext_heading`                | Completed output line and classifier context                                                                           | Same five trusted matcher contracts                                                                                     | Runtime guard accepts only output classified `AtxHeading`; it is not a construction proof                                                                   |
+| Wrapping break preservation                            | `wrapping_boundary_seq`                         | Exact unprefixed canonical line under every outside-fence context                                                      | Same five trusted matcher contracts                                                                                     | Returns the thematic-break boundary, not paragraph content; production wrapper and path regression (cross-pass preservation)                                |
+| Heading break preservation                             | `is_setext_pair_seq`                            | Exact unprefixed canonical line as candidate under every outside-fence context                                         | Same five trusted matcher contracts                                                                                     | Thematic-break class fails paragraph-candidate role; wrapper lemma and path regression (cross-pass preservation)                                            |
+| Table break preservation                               | `is_table_class`                                | Thematic-break class returned for the exact canonical line                                                             | Same five trusted matcher contracts                                                                                     | Rejects the table-input gate; wrapper lemma and path regression (cross-pass preservation)                                                                   |
+| Orphan-specifier break preservation                    | `can_be_orphan_specifier_seq`                   | Exact unprefixed canonical line under every outside-fence context                                                      | Same five trusted matcher contracts                                                                                     | Returns false for thematic-break class; wrapper lemma and path regression (cross-pass preservation)                                                         |
+| Fixture classification compatibility                   | `fixture_lines_match_the_classification_oracle` | Every `tests/data` line with independently carried fence, preceding-class and prefix state                             | Same five trusted matcher contracts                                                                                     | Differentially compares an independent regex reference and pins path, class and FNV-1a source-line hash (compatibility evidence and regression)             |
+| Fence closing-rule decision                            | `closes_fence`                                  | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                | Boolean iff `spec_closes`                                                                                                                                   |
+| Would-be-closer decision                               | `agrees_with_opener`                            | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                | Boolean iff `spec_agrees_with_opener`                                                                                                                       |
+| Interior-delimiter decision                            | `interior_delimiter`                            | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                | Boolean iff `spec_interior_delimiter`                                                                                                                       |
+| Compression-conflict decision                          | `compression_changes_region`                    | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                | Boolean iff `spec_compression_changes_region`                                                                                                               |
+| Compressed delimiter state                             | `compressed`                                    | All opener states                                                                                                      | None                                                                                                                    | Exact state; three backticks at the opening depth                                                                                                           |
+| Fence transition and line region                       | `fence_step`                                    | All opener states and parsed line features                                                                             | Fence recognition and blockquote parsing                                                                                | Exact next state and `Region`                                                                                                                               |
+| Whole-document region classification                   | `regions`                                       | Every `LineFeatures` slice                                                                                             | Fence recognition and blockquote parsing                                                                                | Exact `Region` sequence, element for element                                                                                                                |
+| Region preservation under delimiter compression        | `regions`                                       | A block interior meeting the compression guard                                                                         | Fence recognition and blockquote parsing                                                                                | Equal region sequences under the original and compressed openers                                                                                            |
+| Block-opener construction                              | `open_block`                                    | Every `LineFacts` value                                                                                                | Fence recognition and blockquote parsing                                                                                | Exact `Option<Block>`; `None` iff the line has no marker                                                                                                    |
+| Conflict accumulation                                  | `absorb`                                        | Every block and optional line features                                                                                 | Fence recognition and blockquote parsing                                                                                | Exact block; opener fixed, flag a disjunction over the lines                                                                                                |
+| Planner routing                                        | `plan_step`                                     | Every planner state and `LineFacts` value                                                                              | Fence recognition and blockquote parsing                                                                                | Exact `Step`; the pass's only source of a release                                                                                                           |
+| Delimiter rewrite eligibility                          | `delimiters_eligible`                           | Every release and rewrite-candidate pair                                                                               | Fence recognition and blockquote parsing                                                                                | Exact boolean; opener alone, both ends, or neither                                                                                                          |
+| Outer-delimiter position decision                      | `is_outer_delimiter`                            | Every position, block length, release, and flag                                                                        | None                                                                                                                    | Exact boolean; position 0, or the last position of a matched block                                                                                          |
+| Per-position emission decision                         | `delimiter_agendum`                             | Every position classification and compression answer                                                                   | None                                                                                                                    | Exact `Agendum`; compressed, normalized, or verbatim                                                                                                        |
+| Released-block agenda                                  | `block_agenda`                                  | Every block length, release, and answers                                                                               | Fence recognition and blockquote parsing                                                                                | Exact `Agendum` sequence of the block's own length                                                                                                          |
+| Whole-document region preservation under normalization | `compress_fences`                               | Every source sequence and matching rewritability sequence whose rendering parses back to the plan's agenda             | Fence recognition, blockquote parsing, and the rendered-spelling contract at every position                             | `LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS`: equal `Region` sequences for the source and emitted runs over the whole document (document-level preservation) |
+| Emission read-back consumption                         | `rewrite_marker`                                | Every released block, its planner agenda, and an emitted sequence meeting the contract at every position               | Fence recognition, blockquote parsing, and the rendered-spelling contract (consumed rather than proved)                 | Three emission shapes derived from the agendum: verbatim agreement, delimiter read-back, and the compressed three-backtick shape (local correctness)        |
+| Emission contract inhabited and discriminating         | `rewrite_marker`                                | A `null`-tagged opener against both the emitter's actual respelling and a repainted one                                | Fence recognition and blockquote parsing                                                                                | The contract accepts the real normalization and rejects the wrong respelling (non-vacuity)                                                                  |
+| Matched-block normalization route                      | `drive_step`                                    | A four-backtick `null` opener, a three-backtick interior pair, and a four-backtick closer, all rewritable              | Fence recognition and blockquote parsing                                                                                | Agenda exactly `Normalized`, `Verbatim`, `Verbatim`, `Normalized`, with no unclosed block (non-vacuity for the fold)                                        |
+| Rendered delimiter spelling                            | `rewrite_marker`                                | Generated fence lines: both markers, runs of three to ten, indent up to eight columns, and bounded language strings    | The rendering/parsing boundary itself: the regex that reads the written bytes back                                      | Compress writes three backticks keeping indent and non-`null` language; preserve keeps the original run; both idempotent (executable evidence only)         |
+| Segment walked at a document offset                    | `regions`                                       | Every span and every offset                                                                                            | Fence recognition and blockquote parsing                                                                                | Equal states and equal region sequences over the span's own lines                                                                                           |
+| Released block read at a document offset               | `block_agenda`                                  | Every offset, for a released block whose per-line facts are supplied as hypotheses                                     | Fence recognition, blockquote parsing, and the emission read-back contract                                              | The route's obligation: `ends_at` where a state conclusion exists                                                                                           |
+| Line inside an open block                              | `fence_step`                                    | Every opener state and non-fence-shaped line                                                                           | Fence recognition and blockquote parsing                                                                                | The line still leaves the fence open; it cannot route as buffer-or-close                                                                                    |
 
-_Table 1: The verification claim ledger._
+*Table 1: The verification claim ledger.*
 
 The table's shorthand “Same five trusted matcher contracts” names the five
 trusted matcher bodies `is_table_delimiter`, `table_cells_are_delimiters`,
 `is_table_delimiter_cell`, `is_thematic_break` and `ordered_list_item`. Each is
 reached through the classifier refinement; their verification is tracked by
 issue #567.
+
+## Executable evidence
+
+Not every check of the pass is a proof, and the distinction is load-bearing
+here: a corpus sweep cannot establish a property over a document no fixture
+holds, and a property test cannot establish one over unbounded input. These are
+the executable checks the claims above lean on, with the claim each supports.
+They are evidence, not proof, and none should be cited as a theorem.
+
+- **Corpus region sweep.** `tests/fence_regions.rs` runs
+  `regions(compress_fences(lines)) == regions(lines)` at every index for every
+  fixture under `tests/data/`, plus four hand-written documents that reach
+  `flush_unclosed` because no fixture ends inside a fence. It also runs the
+  full flag set through the binary and requires every classifier-literal line
+  to survive byte for byte. It supports the document theorem's conclusion over
+  the corpus it reads and says nothing about the rest.
+- **Delimiter spelling properties.** `src/fences_properties.rs` generates fence
+  lines over both markers, runs of three to ten, indentation up to eight
+  columns, and a language drawn from empty, the `null` variants and a bounded
+  non-`null` word. It pins that `rewrite_marker` under `Strategy::Compress`
+  writes exactly three backticks while keeping indentation and any non-`null`
+  language, that `Strategy::Preserve` keeps the original marker run, and that
+  both are idempotent. This is the rendered-spelling half of the emission
+  contract, which the proof consumes as a hypothesis.
+- **Reference classification.** `src/classify_fixture_tests.rs` compares every
+  fixture line against an independent regex reference carrying its own state
+  and against a reviewed snapshot; the fixture-compatibility row cites it.
+- **Pass-level regressions.** `tests/fences.rs` pins the issue #480
+  reproduction, the `null`-specifier blank-tag cases and the orphan-specifier
+  cases — production behaviour the specifications model rather than prove.
+- **Idempotence sweeps.** `tests/idempotence_properties.rs` and
+  `src/fences_properties.rs::rewriting_is_idempotent` cover stability under
+  repeated passes. Idempotence is tracked by
+  [ADR 0006](adrs/0006-single-pass-idempotence.md) and is not a claim in this
+  ledger's table.
 
 ## Policy
 
@@ -254,6 +330,32 @@ issue #567.
   verifies. `LEM-NO-CONFLICT-ALL-CLEAR` and the compressed-block induction both
   depend on that flag, so a gate that still verified would mean those lemmas
   were proved from something other than the property they claim.
+- `make verus-emission-mutation` replaces the `Normalized` arm of
+  `spec_emission_reads_back` with `true` and requires the run to fail in the
+  consumer lemma and in the witness that pins what the arm rejects. A contract
+  that is `true` rejects nothing, so a gate that still verified would mean the
+  document theorem never read the clause it claims to consume.
+- `make verus-blank-tag-mutation` deletes the `spec_blank_tag_raised` disjunct
+  from `spec_delimiter_reads_back`. Every theorem takes read-back as a
+  hypothesis, so narrowing it cannot break a theorem body; what fails is
+  `lemma_witness_null_specifier_reads_back`, the evidence that a real
+  normalization satisfies the hypothesis at all. That is what makes the witness
+  load-bearing: the gate also fails, as a mutation that verified, if the
+  witness is ever removed.
+- The two contract gates share `assert_failures_attributed` from
+  `scripts/verus-mutation-mirror.sh`: every reported error must be a failed
+  postcondition located in a named module, and the summary line must show the
+  verifier ran to completion. An unrelated obligation, a parse error, or a
+  runner failure therefore cannot pass as a detection. Each error must also
+  carry exactly one source location: none would leave the module check looking
+  complete, and a second one could name an unrelated module after an expected
+  one. A coded header such as `error[E0425]:` counts as an error too, and since
+  it is never a failed postcondition it rejects the run rather than hiding
+  beside the intended failure. A `note:` or `warning:` header ends the error
+  block it follows, so a trigger suggestion's own location is not counted as a
+  second one. Both gates are exercised in nine shapes by
+  `tests/support/verus_mutation_checks.rs`, where only the intended rejection —
+  plain, or followed by a trigger-suggestion note — may succeed.
 
 ## Remaining external contracts
 
@@ -265,105 +367,81 @@ unexamined assumption.
   already-reduced `LineFeatures`, so none depends on the reduction being
   correct. The kernel body itself runs no regex; the reduction happens in
   `src/wrap/fence.rs`, whose entry points are `#[cfg(not(verus_keep_ghost))]`.
-- **The emission read-back contract is stated but not enforced.**
+- **The rendered-spelling contract is consumed but not proved.**
   `spec_emission_reads_back` states what the parser reads off the bytes the
-  emitter writes. **Nothing verifies it.** A seeded fault was run to establish
-  this rather than to assume it: replacing the whole `Agendum::Normalized` arm
-  with `true` in a mirrored proof tree verifies cleanly at 178 verified / 0
-  errors, byte-identical to the unmutated control. Its input type is also
-  uninhabited — `pub struct SpecLine` is never constructed anywhere in the
-  tree, so the contract has no subject a caller could supply. Its real evidence
-  is the property tests over the regex and the emitter, and it should be read
-  as a specification the proofs are written _against_ rather than one they
-  check. The clause has already been corrected once by a counterexample. The
-  `Normalized` clause originally claimed that a delimiter re-spelled in its own
-  marker family reads back as the source line. It does not: dropping a `null`
-  language specifier — which `src/fences.rs::is_null_lang` does, and which
+  emitter writes, and it is the one hypothesis the document theorem takes about
+  the emitted run. It is **consumed**: `spec_agendum_line` constructs the
+  contract's `SpecLine` from the agendum the driver chose,
+  `lemma_released_block_reads_back` and `lemma_released_span_reads_back` derive
+  each position's emitter fact from it, and the consumers in
+  `verus/plan_spec_emission.rs` extract the three shapes. It is still not
+  **proved**: Verus cannot reason about a compiled regular expression, so the
+  claim that the written bytes parse back as the agendum's spelling rests on
+  the production regex and on the property tests in `src/fences_properties.rs`
+  (`compress_writes_three_backticks_and_preserves_indent_and_language`,
+  `preserve_retains_the_original_marker_run`).
+
+  The contract's weaker half is `spec_delimiter_reads_back`: family, run and
+  depth preserved, with only a raised blank tag admitted. A `null` language
+  specifier is non-blank, so dropping it — which `src/fences.rs::is_null_lang`
+  does, and which
   `tests/fences.rs::preserves_null_language_during_interior_conflict` pins —
-  raises `trailing_blank` from false to true, and `spec_closes` consults
-  exactly that flag. So a `null`-tagged delimiter is a _non_-closer where the
-  emitted bare line is a closer, and the two readings genuinely classify
-  differently whenever a matching fence is open at the delimiter's own depth.
-  The clause is now stated over `spec_delimiter_reads_back`, which keeps
-  family, run, and depth and admits only the raised blank tag. That reduction,
-  and the necessity of its guard, are stated as
-  `lemma_delimiter_reads_back_preserves` and
-  `lemma_blank_tag_flip_needs_the_guard` — but neither is a load-bearing
-  obligation either: deleting the `spec_blank_tag_raised` disjunct also
-  verifies cleanly because the lemma's conclusion never mentions the relation
-  it assumes. The production behaviour is pinned by
-  `tests/fences.rs::dropped_null_specifier_raises_the_blank_tag`, which is the
-  evidence that does hold. **The counterexample reaches the main proof, not
-  just this contract.** The block lemma's hypotheses require full agreement at
-  a delimiter (`!compressible ==> spec_same_reading(source[0], emitted[0])`),
-  and `spec_same_reading` compares `trailing_blank`. A conflict-bearing block
-  whose delimiter carries a `null` tag takes the `Normalized` route _and_ drops
-  the specifier, so that hypothesis is unsatisfiable for a document the pinned
-  test proves is reachable through `compress_fences`. The composition theorems
-  therefore do not apply to that document, and the corpus sweep is what covers
-  it in fact. Closing this means restating the block lemma's non-compressible
-  hypotheses over `spec_delimiter_reads_back`, which is why that relation was
-  introduced.
-- **The driver instantiation is open.** The composition law itself is proved:
-  `lemma_spans_compose_regions` turns per-span `ends_at` obligations over a
-  chain of cuts into equality of the whole document's region sequence, and
-  `lemma_released_span_composes` names which obligation each release route
-  discharges. What is not proved is the induction over `spec_drive` that would
-  supply those cuts and states from the fold's own agenda, together with the
-  per-position facts that induction consumes. The gap is narrower than earlier
-  revisions of this section claimed, and it is not a well-foundedness problem:
-  a close step does grow the agenda by a whole release at once, but
-  `lemma_step_agenda_length` pins each step's contribution to exactly the span
-  of source lines that step accounts for, and `spec_balanced` (proved by
-  `lemma_drive_length`, and completed by `lemma_finish_total`) gives the
-  agenda's length as the whole document. The per-position facts are now stated
-  over the agendum alone. Nothing in the document theorem needs a `SpecLine`
-  built from the emitter's bytes because the emitted reading is a function of
-  the agendum and the source reading, and the three delivery flags are
-  conditions on the agendum the fold chose rather than facts about bytes no
-  specification computes. What remains is the per-index correspondence that
-  turns those equal lengths into the statement that agenda position `j` is the
-  emission of source line `j`.
+  makes the emitted line blank-tagged where the source was not, and
+  `spec_closes` reads exactly that flag. That is why the disjunction exists
+  rather than plain agreement. `lemma_witness_null_specifier_reads_back`
+  exhibits a real normalization that satisfies it, and
+  `lemma_witness_normalized_contract_refuses_a_wrong_respelling` exhibits one
+  the contract rejects, so the relation is neither vacuous nor satisfied by
+  every pair. `lemma_blank_tag_flip_needs_the_guard` is a concrete example of
+  the flip — it evaluates `spec_masked` and two region values on a
+  `null`-tagged line and its untagged emission — not a proof that the guard is
+  necessary. The production behaviour is pinned by
+  `tests/fences.rs::dropped_null_specifier_raises_the_blank_tag`.
 
-  No read-back specification stated over the agendum alone is consumed by
-  anything. `spec_emission_reads_back` is the only such contract, its sole
-  occurrence in the tree is its own definition, and its input type `SpecLine`
-  is never constructed, so there is no caller that could supply it a subject.
-  Seeding its `Normalized` arm to `true` verifies cleanly at 178 verified, 0
-  errors, byte-identical to the unmutated control. Its weaker companion,
-  `spec_delimiter_reads_back`, is not load-bearing either: the lemma that names
-  it concludes over `spec_fence_next` and `spec_fence_region` and never
-  mentions it, so deleting the `spec_blank_tag_raised` disjunct and reducing it
-  to plain agreement also verifies cleanly at 178, 0. Neither is evidence of
-  anything the document theorems reach.
-
-  The domain gap is the reason. `spec_line_agrees` is `spec_same_reading`,
-  which compares `trailing_blank`; the block lemma's non-compressible
-  hypotheses require it at a delimiter; and a conflict-bearing block whose
-  delimiter carries a `null` tag both takes that route and drops the specifier,
-  raising the tag. Those hypotheses are therefore unsatisfiable for a document
-  that `tests/fences.rs::preserves_null_language_during_interior_conflict`
-  proves is reachable through `compress_fences`. The document theorems do not
-  reach that case, and the corpus sweep is what covers it in fact. Restating
-  those hypotheses over `spec_delimiter_reads_back`, so that it acquires a real
-  consumer, is the concrete form of the remaining work. **This is the residual
-  gap; it is recorded here rather than presented as closed.**
+  Both halves now have negative controls. `make verus-emission-mutation`
+  replaces the `Normalized` arm's body with `true`; the block theorem can then
+  no longer derive its delimiter fact, and the witness above fails with it.
+  `make verus-blank-tag-mutation` deletes the `spec_blank_tag_raised` disjunct;
+  every theorem takes read-back as a hypothesis, so no theorem body breaks, and
+  what fails is the witness that the hypothesis is satisfiable by a real
+  normalization. A contract whose weakening left the tree verifying would be a
+  comment rather than a specification, which is why both gates exist.
 - **The classifier kernel's fence recognizer cannot currently disagree, but is
   not tied to the fence kernel by any proof.**
-  `src/classify_kernel_predicates.rs` implements `is_fence_marker` and
-  `is_closing_fence` independently of `FENCE_RE` and of `LineFeatures`;
-  `is_closing_fence` has no blockquote-depth rule, and `OpenFence` carries only
-  a marker and a run length. It cannot disagree with the shared kernel in
-  production today because `ClassifyCtxKernel::in_fence` is `#[cfg(test)]`-only
-  and `LineClass::FenceMarker` has no production consumer. It is a drift
-  hazard, not an active inconsistency.
-- **Two fence regexes exist.** `src/wrap/fence.rs` and `src/fences.rs` differ in
-  info-string grammar and in trailing-whitespace handling -- the second uses
-  Unicode-aware `\s`, while the first's `trailing_blank` is deliberately
-  ASCII-only. The second never decides literal-ness: it supplies delimiter
-  spelling and attachment eligibility, and its result is gated through the
-  planner and `compression_changes_region`. No reachable case was found where
-  it alone changes which lines are literal, but the asymmetry deserves a
+  `src/classify_kernel_predicates.rs:120` declares `is_fence_marker`, and the
+  same module's `is_closing_fence` implements the closing rule independently of
+  `FENCE_RE` and of `LineFeatures`; `is_closing_fence` has no blockquote-depth
+  rule, and `OpenFence` carries only a marker and a run length. It cannot
+  disagree with the shared kernel in production today because
+  `ClassifyCtxKernel::in_fence` is `#[cfg(test)]`-only and
+  `LineClass::FenceMarker` has no production consumer. It is a drift hazard,
+  not an active inconsistency, and it is tracked by issue #651.
+- **Two fence regexes exist.** The recognizers read a delimiter differently.
+  `src/fences.rs:30` uses a bounded info-string grammar and a Unicode-aware
+  `\s` tail:
+
+  ```text
+  ^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$
+  ```
+
+  `src/wrap/fence.rs:39` instead accepts any info string without a line
+  terminator:
+
+  ```text
+  ^(\s*)(`{3,}|~{3,})([^\r\n]*)$
+  ```
+
+  while the `trailing_blank` flag it derives (`src/wrap/fence.rs:115`) is
+  deliberately ASCII-only. That flag is load-bearing rather than decorative:
+  the kernel's single closing rule requires it
+  (`src/wrap/fence/kernel.rs:109`), so a same-marker line carrying an info
+  string is literal content and not a closer. The recognizer therefore does not
+  decide literal-ness by itself — it supplies delimiter spelling, depth, and
+  `trailing_blank`, and `closes_fence` consumes them — but its features do
+  reach that decision, which is why the two grammars have to agree about which
+  lines they accept as delimiters at all. No reachable case was found where the
+  disagreement changes which lines are literal, and the planner gates what it
+  attaches through `compression_changes_region`, but the asymmetry deserves a
   targeted test before the claim is relied on.
 
 The ledger check invoked by `make lint` rejects a claim whose executable
