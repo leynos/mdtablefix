@@ -146,6 +146,8 @@ fn publish_fixture_package(scratch: &Dir, name: &str) -> Result<()> {
     staging
         .write("rust-toolchain.toml", TOOLCHAIN)
         .context("write the fixture toolchain file")?;
+    // Windows refuses to rename a directory while a handle to it is open.
+    drop(staging);
     if let Err(error) = scratch.rename(&staging_name, scratch, name) {
         // A process that published first leaves the name taken; anything else
         // is a real failure.
