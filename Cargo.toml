@@ -76,7 +76,7 @@ unicode-width = "0.2"
 # `serde_json` providers, and the crate does not build without them
 # (leynos/ortho-config#627). It is reachable only from binary-only modules, so
 # `src/lib.rs` never sees it; see docs/adrs/0014-configuration-layering.md.
-ortho_config = { version = "0.10.0", optional = true }
+ortho_config = { version = "0.11.0", optional = true }
 # The derive emits code naming `serde::Serialize` and `serde::de::DeserializeOwned`,
 # so the traits must come from a crate this package names directly. Optional for
 # the same reason as `ortho_config`: the only code that needs it is the binary's.
