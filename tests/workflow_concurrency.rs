@@ -50,11 +50,7 @@ const PULL_REQUEST: &str = "pull_request";
 /// nothing and cancels nothing while reading exactly like a concurrency
 /// control. `github.run_id` is absent because it is the permitted fallback
 /// after the pull request number, which the next contract requires.
-const RUN_UNIQUE_EXPRESSIONS: [&str; 3] = [
-    "github.run_number",
-    "github.run_attempt",
-    "github.sha",
-];
+const RUN_UNIQUE_EXPRESSIONS: [&str; 3] = ["github.run_number", "github.run_attempt", "github.sha"];
 
 /// Expressions that differ between two pull requests.
 ///
