@@ -15,8 +15,11 @@
 //! fails on the literal.
 //!
 //! The group also has to distinguish one pull request from another. A group
-//! derived from `github.run_id` is unique per run and so cancels nothing,
-//! while a constant group would let one branch cancel another's gates.
+//! derived only from `github.run_id` is unique per run and so cancels nothing,
+//! while a constant group would let one branch cancel another's gates. The run
+//! identifier is allowed as the fallback after the pull request number, which
+//! gives each push, schedule and dispatch a group of its own, so GitHub never
+//! drops a pending run for an earlier push to `main`.
 //!
 //! Only `pull_request` is in scope. A `pull_request_target` workflow runs
 //! against the base repository to carry a token, and the one that uses it
@@ -45,9 +48,9 @@ const PULL_REQUEST: &str = "pull_request";
 ///
 /// A group built from one of these can never match another run, so it queues
 /// nothing and cancels nothing while reading exactly like a concurrency
-/// control.
-const RUN_UNIQUE_EXPRESSIONS: [&str; 4] = [
-    "github.run_id",
+/// control. `github.run_id` is absent because it is the permitted fallback
+/// after the pull request number, which the next contract requires.
+const RUN_UNIQUE_EXPRESSIONS: [&str; 3] = [
     "github.run_number",
     "github.run_attempt",
     "github.sha",
