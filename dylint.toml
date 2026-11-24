@@ -96,5 +96,4 @@ excluded_crates = [
     "in_place_atomic",
     "line_endings",
     "rewrite_atomic",
-    "workflow_concurrency",
 ]
