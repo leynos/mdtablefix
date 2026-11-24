@@ -1962,6 +1962,17 @@ repository to carry a token, and the ones here automate pull-request
 housekeeping rather than building, so cancelling one mid-flight is a hazard
 with no minutes to win.
 
+## Cognitive complexity gate
+
+Cognitive complexity is gated by Whitaker, not by Clippy. Clippy's
+`cognitive_complexity` scores code after macro expansion, so it counts
+branching a macro generated, and neither a manifest nor `clippy.toml` enables
+it. Whitaker's experimental `macro_aware_cognitive_complexity` gates it at
+`max_complexity = 9`, CodeScene's ceiling. `dylint.toml` opts in with
+`[whitaker] experimental = ["macro_aware_cognitive_complexity"]`, and
+`make lint-whitaker` runs the suite over the whole workspace. Fix a finding by
+extracting named helpers, never by raising the threshold.
+
 ## Environment access policy
 
 No production code in this repository reads or writes the process environment
