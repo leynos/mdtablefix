@@ -1,7 +1,17 @@
 # Whitaker lint configuration.
 #
-# Everything here is an exemption, and each one is scoped as narrowly as the
-# lint allows, so the capability policy still applies to production code.
+# `macro_aware_cognitive_complexity` gates cognitive complexity at CodeScene's
+# ceiling of 9. It skips branching a macro generated, and it is experimental,
+# so the suite loads it only on request. The tracker is
+# https://github.com/leynos/whitaker/issues/504.
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9
+
+# Every `no_std_fs_operations` entry is an exemption, and each one is scoped as
+# narrowly as the lint allows, so the capability policy still applies to production code.
 # In-source `#[allow]`/`#[expect]` cannot express these: the lint emits through
 # `LintContext::emit_span_lint`, which resolves the lint level at the visitor's
 # current lint node rather than at the node that owns the offending code, so an
