@@ -228,9 +228,14 @@ project:
     DYLINT_RUSTFLAGS="-D warnings" whitaker --all -- --workspace --all-targets --all-features
     ```
 
-    after `make check-static-regexes` and `make check-verification-ledger`,
-    which both need ripgrep (`rg`) on the `PATH`. Clippy lints every target with
-    all features enabled and denies all warnings. The Whitaker Dylint suite runs
+    after `make interrogate` (`interrogate --fail-under 100` over `scripts`,
+    through `uv`; add new Python directories to `INTERROGATE_TARGETS`;
+    interrogate rounds its percentage to one decimal, so check the missing
+    count directly if the Python estate ever passes about 2,000 definitions),
+    `make check-static-regexes` and
+    `make check-verification-ledger`, which both need ripgrep (`rg`) on the
+    `PATH`. Clippy lints every target with all features enabled and denies
+    all warnings. The Whitaker Dylint suite runs
     through its `whitaker` wrapper, which unsets the Cargo codegen-backend,
     target and linker overrides that would break the Dylint driver's own compile
     and assigns the literal `RUSTFLAGS="-D warnings"`, so Whitaker takes none
