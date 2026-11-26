@@ -1,4 +1,4 @@
-.PHONY: help all clean test bench build release lint lint-clippy lint-whitaker typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation verus-fence-mutation verus-compression-mutation markdownlint nixie mutants test-workflow-contracts
+.PHONY: help all clean test bench build release lint lint-clippy lint-whitaker typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation verus-fence-mutation verus-compression-mutation markdownlint nixie mutants test-workflow-contracts interrogate
 
 APP ?= mdtablefix
 WHITAKER ?= whitaker
@@ -77,7 +77,26 @@ target/%/$(APP): ## Build binary in debug or release mode
 # member, `test-macros` included, in its own right rather than as a capped
 # dependency. Issue #439 made the two packages one workspace and retired the
 # second, `--manifest-path` invocation this recipe used to carry.
-lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker suite with warnings denied
+# Interrogate measures docstring presence in the Python files under
+# INTERROGATE_TARGETS; add a new Python directory there. No `--python` pin: a
+# managed interpreter would be downloaded.
+INTERROGATE_VERSION ?= 1.7.0
+INTERROGATE_TARGETS ?= scripts
+INTERROGATE = $(UV) tool run --from 'interrogate==$(INTERROGATE_VERSION)' interrogate -vv --fail-under 100
+
+# Interrogate rounds its percentage to one decimal, so `--fail-under 100` alone
+# can pass a lone gap in a large repository; fail on any MISSED row as well.
+interrogate: ## Enforce complete Python docstring coverage
+	@report="$$($(INTERROGATE) $(INTERROGATE_TARGETS))"; \
+	  status=$$?; \
+	  printf '%s\n' "$$report"; \
+	  test "$$status" -eq 0 || exit "$$status"; \
+	  if printf '%s\n' "$$report" | grep '| *MISSED *|' >/dev/null; then \
+	    printf '%s\n' 'interrogate: undocumented definitions remain; see the MISSED rows above' >&2; \
+	    exit 1; \
+	  fi
+
+lint: interrogate lint-clippy lint-whitaker ## Run interrogate, Clippy and the Whitaker suite with warnings denied
 
 lint-clippy: check-static-regexes check-verification-ledger ## Run Clippy with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)

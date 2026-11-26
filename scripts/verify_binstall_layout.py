@@ -68,6 +68,7 @@ def render(template: str, values: dict[str, str]) -> str:
     """
 
     def substitute(match: re.Match[str]) -> str:
+        """Return the value for one placeholder, or fail on an unknown key."""
         key = match.group(1)
         if key not in values:
             raise LayoutError(f"unsupported binstall placeholder: {match.group(0)}")
