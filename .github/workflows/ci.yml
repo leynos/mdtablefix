@@ -76,6 +76,8 @@ jobs:
           # .cargo/config.toml still works for the Dylint driver. See
           # tests/build_standard_support/cranelift.rs.
           cranelift: 'true'
+      - name: Install the YAML lint tools
+        uses: leynos/shared-actions/.github/actions/install-yaml-lint@a108423efa7fb83565089449f2647d34286a48a4
       - name: Lint
         run: make lint
       - name: Fetch dependencies
@@ -225,10 +227,12 @@ jobs:
           RUSTFLAGS: -D warnings
         run: cargo build --release --bin mdtablefix --target ${{ matrix.target }}
       - name: Stage the release assets
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
           binary_ext=""
-          if [[ "${{ matrix.target }}" == *windows* ]]; then
+          if [[ "${TARGET}" == *windows* ]]; then
             binary_ext=".exe"
           fi
           python_bin=python3
@@ -248,10 +252,12 @@ jobs:
       - name: Run the packaged binary
         # Skipped where the target is not the runner's own architecture.
         if: ${{ !matrix.is-foreign }}
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
           binary_ext=""
-          if [[ "${{ matrix.target }}" == *windows* ]]; then
+          if [[ "${TARGET}" == *windows* ]]; then
             binary_ext=".exe"
           fi
           python_bin=python3
