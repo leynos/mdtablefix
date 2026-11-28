@@ -181,10 +181,12 @@ jobs:
             cargo build --release --target ${{ matrix.target }}
           fi
       - name: Prepare artifact
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
           binary_ext=""
-          if [[ "${{ matrix.target }}" == *windows* ]]; then
+          if [[ "${TARGET}" == *windows* ]]; then
             binary_ext=".exe"
           fi
           # The Windows image exposes the interpreter as `python`; the Linux and

@@ -89,7 +89,7 @@ INTERROGATE = $(UV) tool run --from 'interrogate==$(INTERROGATE_VERSION)' interr
 interrogate: ## Enforce complete Python docstring coverage
 	$(INTERROGATE) $(INTERROGATE_TARGETS)
 
-lint: interrogate lint-clippy lint-whitaker ## Run interrogate, Clippy and the Whitaker suite with warnings denied
+lint: interrogate lint-clippy lint-whitaker yamllint actionlint ## Run interrogate, Clippy and the Whitaker suite with warnings denied
 
 lint-clippy: check-static-regexes check-verification-ledger ## Run Clippy with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
@@ -192,3 +192,18 @@ mutants: ## Run mutation testing over the selection module
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
 	awk 'BEGIN {FS=":"; printf "Available targets:\n"} {printf "  %-20s %s\n", $$1, $$2}'
+
+YAMLLINT ?= yamllint
+ACTIONLINT ?= actionlint
+
+.PHONY: yamllint actionlint
+
+# yamllint reads `.yamllint.yml`, which extends `.yamllint-estate.yml`, and
+# resolves that path against the current directory, so run it from the root.
+yamllint: SHELL := bash
+yamllint: .SHELLFLAGS := -eo pipefail -c
+yamllint: ## Lint every tracked YAML file strictly
+	git ls-files -z '*.yml' '*.yaml' | xargs -0 -r $(YAMLLINT) --strict --
+
+actionlint: ## Lint the GitHub Actions workflows (and their shell scripts when ShellCheck is on PATH)
+	$(ACTIONLINT)
